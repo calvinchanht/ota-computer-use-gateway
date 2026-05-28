@@ -9,6 +9,7 @@ import { gitStatus, gitDiff } from './tools/git.js';
 import { memorySearch, memoryWrite, getProjectContext } from './tools/memory.js';
 import { proposePatch } from './tools/patch.js';
 import { buildWorkspaces, getWorkspace } from './core/workspaces.js';
+import { runWorkspaceTool } from './core/toolRunner.js';
 import { heartbeat } from './tools/heartbeat.js';
 import { workspacePolicy } from './tools/policy.js';
 
@@ -30,52 +31,43 @@ function registerBaseTools(server: McpServer, config: Awaited<ReturnType<typeof 
   server.registerTool('list_dir', {
     description: 'List files in a workspace directory.',
     inputSchema: { workspace_id: z.string(), path: z.string().default('.'), max_entries: z.number().optional() }
-  }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, (workspace) => listDir(config, workspace, args.path, args.max_entries)));
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'list_dir', (workspace) => listDir(config, workspace, args.path, args.max_entries)));
   server.registerTool('read_file', {
     description: 'Read a text file inside a workspace.',
     inputSchema: { workspace_id: z.string(), path: z.string(), start_line: z.number().optional(), max_lines: z.number().optional() }
-  }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, (workspace) => readFileTool(config, workspace, args.path, args.start_line, args.max_lines)));
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'read_file', (workspace) => readFileTool(config, workspace, args.path, args.start_line, args.max_lines)));
   server.registerTool('search_files', {
     description: 'Search text in workspace files.',
     inputSchema: { workspace_id: z.string(), query: z.string(), path: z.string().default('.') }
-  }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, (workspace) => searchFiles(config, workspace, args.query, args.path)));
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'search_files', (workspace) => searchFiles(config, workspace, args.query, args.path)));
   server.registerTool('git_status', {
     description: 'Return concise git status.',
     inputSchema: { workspace_id: z.string() }
-  }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, gitStatus));
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'git_status', gitStatus));
   server.registerTool('git_diff', {
     description: 'Return bounded git diff.',
     inputSchema: { workspace_id: z.string(), max_bytes: z.number().optional() }
-  }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, (workspace) => gitDiff(workspace, args.max_bytes)));
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'git_diff', (workspace) => gitDiff(workspace, args.max_bytes)));
 
   server.registerTool('memory_search', {
     description: 'Search project-local memory files.',
     inputSchema: { workspace_id: z.string(), query: z.string(), max_results: z.number().optional() }
-  }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, (workspace) => memorySearch(workspace, args.query, args.max_results)));
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'memory_search', (workspace) => memorySearch(workspace, args.query, args.max_results)));
   server.registerTool('memory_write', {
     description: 'Append a project-local memory entry after secret checks.',
     inputSchema: { workspace_id: z.string(), type: z.string(), title: z.string(), body: z.string(), tags: z.array(z.string()).optional() }
-  }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, (workspace) => memoryWrite(workspace, args.type, args.title, args.body, args.tags)));
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'memory_write', (workspace) => memoryWrite(workspace, args.type, args.title, args.body, args.tags)));
   server.registerTool('get_project_context', {
     description: 'Return compact project context files from .agent.',
     inputSchema: { workspace_id: z.string() }
-  }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, getProjectContext));
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'get_project_context', getProjectContext));
 
   server.registerTool('propose_patch', {
     description: 'Store a patch proposal without modifying project files.',
     inputSchema: { workspace_id: z.string(), reason: z.string(), changes: z.array(z.object({ path: z.string(), old_text: z.string(), new_text: z.string() })) }
-  }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, (workspace) => proposePatch(config, workspace, args.changes, args.reason)));
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'propose_patch', (workspace) => proposePatch(config, workspace, args.changes, args.reason)));
 }
 
-
-async function safeWorkspaceTool(workspaces: Awaited<ReturnType<typeof buildWorkspaces>>, workspaceId: string, fn: (workspace: ReturnType<typeof getWorkspace>) => Promise<unknown>) {
-  try {
-    const result = await fn(getWorkspace(workspaces, workspaceId));
-    return asText(result as never);
-  } catch (error) {
-    return asText(fail(error instanceof Error ? error.message : String(error)));
-  }
-}
 
 function safePolicy(workspaces: Awaited<ReturnType<typeof buildWorkspaces>>, workspaceId: string) {
   try {
