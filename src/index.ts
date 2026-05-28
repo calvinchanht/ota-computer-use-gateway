@@ -6,6 +6,7 @@ import { asText, fail } from './core/result.js';
 import { listDir, readFileTool } from './tools/files.js';
 import { searchFiles } from './tools/search.js';
 import { gitStatus, gitDiff } from './tools/git.js';
+import { memorySearch, memoryWrite, getProjectContext } from './tools/memory.js';
 import { buildWorkspaces, getWorkspace } from './core/workspaces.js';
 import { heartbeat } from './tools/heartbeat.js';
 import { workspacePolicy } from './tools/policy.js';
@@ -45,6 +46,19 @@ function registerBaseTools(server: McpServer, config: Awaited<ReturnType<typeof 
     description: 'Return bounded git diff.',
     inputSchema: { workspace_id: z.string(), max_bytes: z.number().optional() }
   }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, (workspace) => gitDiff(workspace, args.max_bytes)));
+
+  server.registerTool('memory_search', {
+    description: 'Search project-local memory files.',
+    inputSchema: { workspace_id: z.string(), query: z.string(), max_results: z.number().optional() }
+  }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, (workspace) => memorySearch(workspace, args.query, args.max_results)));
+  server.registerTool('memory_write', {
+    description: 'Append a project-local memory entry after secret checks.',
+    inputSchema: { workspace_id: z.string(), type: z.string(), title: z.string(), body: z.string(), tags: z.array(z.string()).optional() }
+  }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, (workspace) => memoryWrite(workspace, args.type, args.title, args.body, args.tags)));
+  server.registerTool('get_project_context', {
+    description: 'Return compact project context files from .agent.',
+    inputSchema: { workspace_id: z.string() }
+  }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, getProjectContext));
 }
 
 
