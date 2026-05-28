@@ -4,6 +4,7 @@ import type { AppConfig } from '../config/schema.js';
 import { asText, fail } from '../core/result.js';
 import { getWorkspace, type Workspace } from '../core/workspaces.js';
 import { runWorkspaceTool } from '../core/toolRunner.js';
+import { applyPatch } from '../tools/applyPatch.js';
 import { createLocalApproval, approvalStatus } from '../tools/approval.js';
 import { listDir, readFileTool } from '../tools/files.js';
 import { gitDiff, gitStatus } from '../tools/git.js';
@@ -50,7 +51,9 @@ function registerMemoryTools(server: McpServer, workspaces: WorkspaceMap): void 
 }
 
 function registerPatchTools(server: McpServer, config: AppConfig, workspaces: WorkspaceMap): void {
-  server.registerTool('propose_patch', { description: 'Store a patch proposal without modifying project files.', inputSchema: { workspace_id: z.string(), reason: z.string(), changes: z.array(z.object({ path: z.string(), old_text: z.string(), new_text: z.string() })) } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'propose_patch', (workspace) => proposePatch(config, workspace, args.changes, args.reason)));
+  const changes = z.array(z.object({ path: z.string(), old_text: z.string(), new_text: z.string() }));
+  server.registerTool('propose_patch', { description: 'Store a patch proposal without modifying project files.', inputSchema: { workspace_id: z.string(), reason: z.string(), changes } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'propose_patch', (workspace) => proposePatch(config, workspace, args.changes, args.reason)));
+  server.registerTool('apply_patch', { description: 'Apply exact-text replacements after local approval.', inputSchema: { workspace_id: z.string(), approval_action: z.string().default('apply_patch'), changes } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'apply_patch', (workspace) => applyPatch(config, workspace, args.changes, args.approval_action)));
 }
 
 
