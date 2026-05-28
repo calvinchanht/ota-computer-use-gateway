@@ -1,0 +1,32 @@
+server:
+  host: "127.0.0.1"
+  port: 8765
+
+workspaces:
+  - id: "mickey"
+    name: "Mickey"
+    root: "/absolute/path/to/ota-computer-use-gateway"
+    allow_read: true
+    allow_patch: true
+    allow_tests: true
+    allow_screen: false
+    allow_mouse_keyboard: false
+    commands:
+      check: "npm run check"
+      smoke: "npm run smoke:stdio"
+
+security:
+  max_file_bytes: 200000
+  max_response_bytes: 50000
+  max_search_results: 50
+  denied_globs:
+    - ".env"
+    - ".env.*"
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/id_rsa"
+    - "**/id_ed25519"
+    - "**/.ssh/**"
+    - "**/.gnupg/**"
+    - "**/.aws/**"
+    - "**/.kube/**"
