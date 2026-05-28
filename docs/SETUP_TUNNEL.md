@@ -108,7 +108,22 @@ Recommended order for MVP testing:
 2. Tailscale Funnel if enabled and reachable from the public internet.
 3. ngrok for temporary manual tests.
 
-Treat No Auth as a short-lived controlled test only. Add MCP-side auth before leaving any public endpoint running unattended.
+For any public HTTPS ingress, enable HTTP bearer auth and keep the token in the process environment, not in git:
+
+```yaml
+server:
+  auth:
+    enabled: true
+    bearer_token_env: "OTA_GATEWAY_BEARER_TOKEN"
+    allow_loopback_without_auth: true
+```
+
+```bash
+export OTA_GATEWAY_BEARER_TOKEN="use-a-long-random-secret"
+node dist/index.js --config config/mickey.local.yaml --transport http
+```
+
+Use No Auth only for a short-lived controlled connector test. Do not leave a public endpoint running unattended without bearer auth or stronger OAuth in front of it.
 
 ## ChatGPT connector setup
 

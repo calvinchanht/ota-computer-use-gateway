@@ -12,10 +12,17 @@ export const workspaceSchema = z.object({
   commands: z.record(z.string(), z.string()).default({})
 });
 
+export const authSchema = z.object({
+  enabled: z.boolean().default(false),
+  bearer_token_env: z.string().min(1).default('OTA_GATEWAY_BEARER_TOKEN'),
+  allow_loopback_without_auth: z.boolean().default(true)
+});
+
 export const configSchema = z.object({
   server: z.object({
     host: z.string().default('127.0.0.1'),
-    port: z.number().int().positive().default(8765)
+    port: z.number().int().positive().default(8765),
+    auth: authSchema.prefault({})
   }).prefault({}),
   workspaces: z.array(workspaceSchema).min(1),
   security: z.object({

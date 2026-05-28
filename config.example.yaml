@@ -1,6 +1,10 @@
 server:
   host: "127.0.0.1"
   port: 8765
+  auth:
+    enabled: false
+    bearer_token_env: "OTA_GATEWAY_BEARER_TOKEN"
+    allow_loopback_without_auth: true
 
 workspaces:
   - id: "example"

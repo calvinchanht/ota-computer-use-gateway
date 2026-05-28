@@ -20,4 +20,17 @@ node dist/index.js --config config/mickey.local.yaml --transport http
 
 The HTTP mode also exposes `GET /healthz` for local/tunnel health checks.
 
+For public HTTPS ingress, enable bearer auth and set the token only in the process environment:
+
+```yaml
+server:
+  auth:
+    enabled: true
+    bearer_token_env: "OTA_GATEWAY_BEARER_TOKEN"
+```
+
+```bash
+export OTA_GATEWAY_BEARER_TOKEN="use-a-long-random-secret"
+```
+
 See GitHub issue #1 for the source-of-truth implementation plan.
