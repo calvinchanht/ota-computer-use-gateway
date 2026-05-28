@@ -13,6 +13,7 @@ import { getProjectContext, memorySearch, memoryWrite } from '../tools/memory.js
 import { proposePatch } from '../tools/patch.js';
 import { workspacePolicy } from '../tools/policy.js';
 import { searchFiles } from '../tools/search.js';
+import { runConfiguredCommand } from '../tools/runCommand.js';
 
 export type WorkspaceMap = Map<string, Workspace>;
 
@@ -23,6 +24,7 @@ export function registerTools(server: McpServer, config: AppConfig, workspaces: 
   registerMemoryTools(server, workspaces);
   registerPatchTools(server, config, workspaces);
   registerApprovalTools(server, workspaces);
+  registerCommandTools(server, workspaces);
 }
 
 function registerBase(server: McpServer, workspaces: WorkspaceMap): void {
@@ -56,6 +58,14 @@ function registerPatchTools(server: McpServer, config: AppConfig, workspaces: Wo
   server.registerTool('apply_patch', { description: 'Apply exact-text replacements after local approval.', inputSchema: { workspace_id: z.string(), approval_action: z.string().default('apply_patch'), changes } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'apply_patch', (workspace) => applyPatch(config, workspace, args.changes, args.approval_action)));
 }
 
+
+
+function registerCommandTools(server: McpServer, workspaces: WorkspaceMap): void {
+  server.registerTool('run_command', {
+    description: 'Run an allowlisted workspace command after approval.',
+    inputSchema: { workspace_id: z.string(), command_id: z.string(), approval_action: z.string().optional() }
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'run_command', (workspace) => runConfiguredCommand(workspace, args.command_id, args.approval_action)));
+}
 
 function registerApprovalTools(server: McpServer, workspaces: WorkspaceMap): void {
   server.registerTool('approval_status', { description: 'List local workspace approvals.', inputSchema: { workspace_id: z.string() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'approval_status', approvalStatus));
