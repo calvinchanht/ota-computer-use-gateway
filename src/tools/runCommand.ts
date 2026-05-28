@@ -1,4 +1,5 @@
 import { requireApproval } from './approval.js';
+import { shellInvocation } from '../core/commandAdapter.js';
 import { runCommand } from '../core/process.js';
 import { ok } from '../core/result.js';
 import { truncateText } from '../core/text.js';
@@ -17,5 +18,6 @@ export async function runConfiguredCommand(workspace: Workspace, commandId: stri
 }
 
 async function runShellCommand(command: string, cwd: string) {
-  return runCommand('/bin/sh', ['-lc', command], cwd, 120000);
+  const invocation = shellInvocation(command);
+  return runCommand(invocation.command, invocation.args, cwd, 120000);
 }

@@ -1,0 +1,13 @@
+import { describe, expect, it } from 'vitest';
+import { shellInvocation } from '../src/core/commandAdapter.js';
+
+describe('shellInvocation', () => {
+  it('uses POSIX shell on linux and macOS', () => {
+    expect(shellInvocation('echo ok', 'linux')).toEqual({ command: '/bin/sh', args: ['-lc', 'echo ok'] });
+    expect(shellInvocation('echo ok', 'macos')).toEqual({ command: '/bin/sh', args: ['-lc', 'echo ok'] });
+  });
+
+  it('uses cmd on windows', () => {
+    expect(shellInvocation('echo ok', 'windows')).toEqual({ command: 'cmd.exe', args: ['/d', '/s', '/c', 'echo ok'] });
+  });
+});
