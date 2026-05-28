@@ -1,5 +1,4 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import { ensureAgentDir, agentPath } from '../core/agentDir.js';
 import { resolveInside } from '../core/paths.js';
 import { ok } from '../core/result.js';

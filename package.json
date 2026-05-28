@@ -11,7 +11,8 @@
     "test": "vitest run",
     "lint": "eslint .",
     "check": "npm run build && npm test",
-    "smoke:stdio": "npm run build && node scripts/smoke-stdio.mjs"
+    "smoke:stdio": "npm run build && node scripts/smoke-stdio.mjs",
+    "smoke:http": "npm run build && node scripts/smoke-http.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",

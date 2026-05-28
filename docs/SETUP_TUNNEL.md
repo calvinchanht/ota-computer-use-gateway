@@ -1,6 +1,8 @@
 # Secure MCP Tunnel Setup
 
-This project is designed for OpenAI Secure MCP Tunnel. The local MCP server runs as a stdio MCP command; `tunnel-client` runs beside it and connects outbound to OpenAI.
+This project supports OpenAI Secure MCP Tunnel via stdio MCP and can also run a Streamable HTTP MCP endpoint for non-OpenAI public ingress such as Cloudflare Tunnel, Tailscale Funnel, or ngrok.
+
+The preferred private path is still Secure MCP Tunnel when OpenAI Platform provisioning works. The HTTP mode keeps Mickey development moving while tunnel creation is blocked by account/org enablement.
 
 ## Current verified version
 
@@ -45,6 +47,26 @@ node /home/genesis/workspace/projects/ota-computer-use-gateway/dist/index.js \
   --config /home/genesis/workspace/projects/ota-computer-use-gateway/config/mickey.local.yaml
 ```
 
+The HTTP command for Mickey is:
+
+```bash
+node /home/genesis/workspace/projects/ota-computer-use-gateway/dist/index.js \
+  --config /home/genesis/workspace/projects/ota-computer-use-gateway/config/mickey.local.yaml \
+  --transport http
+```
+
+The HTTP MCP endpoint is:
+
+```text
+http://127.0.0.1:<configured-port>/mcp
+```
+
+Health check:
+
+```text
+http://127.0.0.1:<configured-port>/healthz
+```
+
 Build before starting the tunnel:
 
 ```bash
@@ -75,6 +97,18 @@ Validate and run:
 ```
 
 Keep `tunnel-client run` healthy while creating or testing the ChatGPT connector.
+
+## Public HTTPS fallback
+
+If Secure MCP Tunnel remains unavailable, expose the HTTP MCP endpoint through a public HTTPS ingress. Keep the local server bound to `127.0.0.1` unless the tunnel product explicitly requires otherwise.
+
+Recommended order for MVP testing:
+
+1. Cloudflare Tunnel to local `http://127.0.0.1:<port>/mcp`.
+2. Tailscale Funnel if enabled and reachable from the public internet.
+3. ngrok for temporary manual tests.
+
+Treat No Auth as a short-lived controlled test only. Add MCP-side auth before leaving any public endpoint running unattended.
 
 ## ChatGPT connector setup
 
