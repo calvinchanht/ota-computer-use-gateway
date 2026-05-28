@@ -1,0 +1,33 @@
+server:
+  host: "127.0.0.1"
+  port: 8765
+
+workspaces:
+  - id: "example"
+    name: "Example Project"
+    root: "/absolute/path/to/project"
+    allow_read: true
+    allow_patch: true
+    allow_tests: false
+    allow_screen: false
+    allow_mouse_keyboard: false
+    commands:
+      test: "npm test"
+      lint: "npm run lint"
+      build: "npm run build"
+
+security:
+  max_file_bytes: 200000
+  max_response_bytes: 50000
+  max_search_results: 50
+  denied_globs:
+    - ".env"
+    - ".env.*"
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/id_rsa"
+    - "**/id_ed25519"
+    - "**/.ssh/**"
+    - "**/.gnupg/**"
+    - "**/.aws/**"
+    - "**/.kube/**"

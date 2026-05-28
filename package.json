@@ -1,0 +1,31 @@
+{
+  "name": "gtp-local-mcp-agent",
+  "version": "0.1.0",
+  "description": "Private local MCP project agent for ChatGPT Business via Secure MCP Tunnel.",
+  "type": "module",
+  "bin": {
+    "gtp-local-mcp-agent": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "check": "npm run build && npm test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "zod": "latest",
+    "yaml": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@typescript-eslint/eslint-plugin": "latest",
+    "@typescript-eslint/parser": "latest",
+    "eslint": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
