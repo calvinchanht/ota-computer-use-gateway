@@ -4,6 +4,7 @@ import type { AppConfig } from '../config/schema.js';
 import { asText, fail } from '../core/result.js';
 import { getWorkspace, type Workspace } from '../core/workspaces.js';
 import { runWorkspaceTool } from '../core/toolRunner.js';
+import { createLocalApproval, approvalStatus } from '../tools/approval.js';
 import { listDir, readFileTool } from '../tools/files.js';
 import { gitDiff, gitStatus } from '../tools/git.js';
 import { heartbeat } from '../tools/heartbeat.js';
@@ -20,6 +21,7 @@ export function registerTools(server: McpServer, config: AppConfig, workspaces: 
   registerGitTools(server, workspaces);
   registerMemoryTools(server, workspaces);
   registerPatchTools(server, config, workspaces);
+  registerApprovalTools(server, workspaces);
 }
 
 function registerBase(server: McpServer, workspaces: WorkspaceMap): void {
@@ -49,6 +51,12 @@ function registerMemoryTools(server: McpServer, workspaces: WorkspaceMap): void 
 
 function registerPatchTools(server: McpServer, config: AppConfig, workspaces: WorkspaceMap): void {
   server.registerTool('propose_patch', { description: 'Store a patch proposal without modifying project files.', inputSchema: { workspace_id: z.string(), reason: z.string(), changes: z.array(z.object({ path: z.string(), old_text: z.string(), new_text: z.string() })) } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'propose_patch', (workspace) => proposePatch(config, workspace, args.changes, args.reason)));
+}
+
+
+function registerApprovalTools(server: McpServer, workspaces: WorkspaceMap): void {
+  server.registerTool('approval_status', { description: 'List local workspace approvals.', inputSchema: { workspace_id: z.string() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'approval_status', approvalStatus));
+  server.registerTool('create_local_approval', { description: 'Record a local approval marker for development/testing.', inputSchema: { workspace_id: z.string(), action: z.string(), approved_by: z.string().optional() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'create_local_approval', (workspace) => createLocalApproval(workspace, args.action, args.approved_by)));
 }
 
 function safePolicy(workspaces: WorkspaceMap, workspaceId: string) {
