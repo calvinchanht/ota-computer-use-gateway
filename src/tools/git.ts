@@ -1,5 +1,6 @@
 import { runCommand } from '../core/process.js';
 import { ok } from '../core/result.js';
+import { truncateText } from '../core/text.js';
 import type { Workspace } from '../core/workspaces.js';
 
 export async function gitStatus(workspace: Workspace) {
@@ -9,8 +10,8 @@ export async function gitStatus(workspace: Workspace) {
 
 export async function gitDiff(workspace: Workspace, maxBytes = 20000) {
   const result = await runCommand('git', ['diff', '--', '.'], workspace.realRoot);
-  const stdout = limit(result.stdout, Math.min(maxBytes, 50000));
-  return ok('git diff', { exit_code: result.code, stdout, stderr: limit(result.stderr), truncated: result.stdout.length > stdout.length });
+  const limited = truncateText(result.stdout, Math.min(maxBytes, 50000));
+  return ok('git diff', { exit_code: result.code, stdout: limited.text, stderr: limit(result.stderr), truncated: limited.truncated });
 }
 
 function limit(text: string, max = 20000): string {

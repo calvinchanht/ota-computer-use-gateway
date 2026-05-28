@@ -1,5 +1,6 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { truncateText } from './text.js';
 
 export type DirEntry = { name: string; type: 'file' | 'dir' | 'other' };
 
@@ -27,7 +28,9 @@ function sliceLines(text: string, startLine: number, maxLines: number) {
   const lines = text.split(/\r?\n/);
   const start = Math.max(1, startLine) - 1;
   const selected = lines.slice(start, start + maxLines);
-  return { start_line: start + 1, end_line: start + selected.length, text: selected.join('\n'), total_lines: lines.length };
+  const joined = selected.join('\n');
+  const limited = truncateText(joined, 50000);
+  return { start_line: start + 1, end_line: start + selected.length, text: limited.text, total_lines: lines.length, truncated: limited.truncated };
 }
 
 export function joinDisplay(base: string, name: string): string {
