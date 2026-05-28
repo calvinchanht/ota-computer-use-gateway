@@ -7,6 +7,7 @@ import { listDir, readFileTool } from './tools/files.js';
 import { searchFiles } from './tools/search.js';
 import { gitStatus, gitDiff } from './tools/git.js';
 import { memorySearch, memoryWrite, getProjectContext } from './tools/memory.js';
+import { proposePatch } from './tools/patch.js';
 import { buildWorkspaces, getWorkspace } from './core/workspaces.js';
 import { heartbeat } from './tools/heartbeat.js';
 import { workspacePolicy } from './tools/policy.js';
@@ -59,6 +60,11 @@ function registerBaseTools(server: McpServer, config: Awaited<ReturnType<typeof 
     description: 'Return compact project context files from .agent.',
     inputSchema: { workspace_id: z.string() }
   }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, getProjectContext));
+
+  server.registerTool('propose_patch', {
+    description: 'Store a patch proposal without modifying project files.',
+    inputSchema: { workspace_id: z.string(), reason: z.string(), changes: z.array(z.object({ path: z.string(), old_text: z.string(), new_text: z.string() })) }
+  }, async (args) => safeWorkspaceTool(workspaces, args.workspace_id, (workspace) => proposePatch(config, workspace, args.changes, args.reason)));
 }
 
 
