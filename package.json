@@ -1,10 +1,10 @@
 {
-  "name": "gtp-local-mcp-agent",
+  "name": "ota-computer-use-gateway",
   "version": "0.1.0",
-  "description": "Private local MCP project agent for ChatGPT Business via Secure MCP Tunnel.",
+  "description": "Provider-neutral local computer-use gateway for OTA/web-thread agents.",
   "type": "module",
   "bin": {
-    "gtp-local-mcp-agent": "dist/index.js"
+    "ota-computer-use-gateway": "dist/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

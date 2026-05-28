@@ -5,7 +5,7 @@ This is the first target-machine runbook for the Genesis VPS.
 ## Install
 
 ```bash
-cd /home/genesis/workspace/projects/gtp-local-mcp-agent
+cd /home/genesis/workspace/projects/ota-computer-use-gateway
 npm install
 npm run check
 npm run smoke:stdio

@@ -1,6 +1,6 @@
-# gtp-local-mcp-agent
+# ota-computer-use-gateway
 
-Private local MCP project agent for ChatGPT Business via OpenAI Secure MCP Tunnel.
+Provider-neutral local computer-use gateway for OTA/web-thread agents, exposed through MCP-style tools.
 
 Status: early MVP scaffold. The first target is the Genesis VPS, with Linux and macOS support planned from the start and Windows kept as a future platform.
 
