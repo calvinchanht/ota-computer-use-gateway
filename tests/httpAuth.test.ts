@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isAuthorized } from '../src/server/auth.js';
+import { assertSafeHttpBind, authStartupWarning, isAuthorized } from '../src/server/auth.js';
 import type { AppConfig } from '../src/config/schema.js';
 
 const config: AppConfig = {
@@ -22,6 +22,16 @@ describe('HTTP bearer auth', () => {
   it('allows loopback when configured', () => {
     const localConfig = { ...config, server: { ...config.server, auth: { ...config.server.auth, allow_loopback_without_auth: true } } };
     expect(isAuthorized(localConfig, request(undefined, '127.0.0.1'))).toBe(true);
+  });
+
+  it('refuses public binds without auth', () => {
+    const unsafe = { ...config, server: { ...config.server, host: '0.0.0.0', auth: { ...config.server.auth, enabled: false } } };
+    expect(() => assertSafeHttpBind(unsafe)).toThrow('refusing to bind');
+  });
+
+  it('warns when auth token env is missing', () => {
+    delete process.env.TEST_BEARER;
+    expect(authStartupWarning(config)).toContain('TEST_BEARER');
   });
 });
 

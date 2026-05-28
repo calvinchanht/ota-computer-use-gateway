@@ -100,7 +100,7 @@ Keep `tunnel-client run` healthy while creating or testing the ChatGPT connector
 
 ## Public HTTPS fallback
 
-If Secure MCP Tunnel remains unavailable, expose the HTTP MCP endpoint through a public HTTPS ingress. Keep the local server bound to `127.0.0.1` unless the tunnel product explicitly requires otherwise.
+If Secure MCP Tunnel remains unavailable, expose the HTTP MCP endpoint through a public HTTPS ingress. Keep the local server bound to `127.0.0.1` unless the tunnel product explicitly requires otherwise. The gateway refuses non-loopback HTTP binds unless bearer auth is enabled.
 
 Recommended order for MVP testing:
 

@@ -20,7 +20,7 @@ node dist/index.js --config config/mickey.local.yaml --transport http
 
 The HTTP mode also exposes `GET /healthz` for local/tunnel health checks.
 
-For public HTTPS ingress, enable bearer auth and set the token only in the process environment:
+For public HTTPS ingress, enable bearer auth and set the token only in the process environment. HTTP mode refuses to bind a non-loopback host without auth enabled:
 
 ```yaml
 server:

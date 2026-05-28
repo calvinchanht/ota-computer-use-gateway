@@ -3,11 +3,15 @@ import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { AppConfig } from '../config/schema.js';
 import { createServer } from './create.js';
-import { authError, isAuthorized } from './auth.js';
+import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
 
 const MCP_PATH = '/mcp';
 
 export async function listenHttp(config: AppConfig): Promise<void> {
+  assertSafeHttpBind(config);
+  const warning = authStartupWarning(config);
+  if (warning) console.error(warning);
+
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
   const mcpServer = await createServer(config);
   await mcpServer.connect(transport);
