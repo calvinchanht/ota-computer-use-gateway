@@ -10,7 +10,7 @@ const config: AppConfig = {
     rate_limit: { enabled: true, window_ms: 1000, max_requests: 2, trust_proxy_headers: false }
   },
   workspaces: [],
-  security: { max_file_bytes: 1000, max_response_bytes: 1000, max_request_bytes: 1000, max_search_results: 10, denied_globs: [] }
+  security: { max_file_bytes: 1000, max_response_bytes: 1000, max_request_bytes: 1000, max_search_results: 10, max_exec_ms: 120000, denied_globs: [] }
 };
 
 describe('HTTP rate limiter', () => {

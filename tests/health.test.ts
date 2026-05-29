@@ -9,8 +9,8 @@ const config: AppConfig = {
     auth: { enabled: true, bearer_token_env: 'TEST_BEARER', allow_loopback_without_auth: true },
     rate_limit: { enabled: true, window_ms: 60000, max_requests: 120, trust_proxy_headers: false }
   },
-  workspaces: [{ id: 'secret-id', name: 'Secret', root: '/secret/path', allow_read: true, allow_patch: false, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, commands: {} }],
-  security: { max_file_bytes: 1000, max_response_bytes: 1000, max_request_bytes: 12345, max_search_results: 10, denied_globs: ['secret/**'] }
+  workspaces: [{ id: 'secret-id', name: 'Secret', root: '/secret/path', allow_read: true, allow_write: false, allow_patch: false, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, commands: {} }],
+  security: { max_file_bytes: 1000, max_response_bytes: 1000, max_request_bytes: 12345, max_search_results: 10, max_exec_ms: 120000, denied_globs: ['secret/**'] }
 };
 
 describe('health payload', () => {

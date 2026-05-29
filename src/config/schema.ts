@@ -5,6 +5,7 @@ export const workspaceSchema = z.object({
   name: z.string().min(1),
   root: z.string().min(1),
   allow_read: z.boolean().default(true),
+  allow_write: z.boolean().default(false),
   allow_patch: z.boolean().default(false),
   allow_tests: z.boolean().default(false),
   allow_screen: z.boolean().default(false),
@@ -38,6 +39,7 @@ export const configSchema = z.object({
     max_response_bytes: z.number().int().positive().default(50000),
     max_request_bytes: z.number().int().positive().default(1000000),
     max_search_results: z.number().int().positive().default(50),
+    max_exec_ms: z.number().int().positive().default(120000),
     denied_globs: z.array(z.string()).default([])
   }).prefault({})
 });

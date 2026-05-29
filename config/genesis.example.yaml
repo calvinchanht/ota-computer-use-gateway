@@ -7,6 +7,7 @@ workspaces:
     name: "OTA Computer-Use Gateway"
     root: "/home/genesis/workspace/projects/ota-computer-use-gateway"
     allow_read: true
+    allow_write: true
     allow_patch: true
     allow_tests: false
     allow_screen: false
@@ -20,6 +21,7 @@ security:
   max_response_bytes: 50000
   max_request_bytes: 1000000
   max_search_results: 50
+  max_exec_ms: 120000
   denied_globs:
     - ".env"
     - ".env.*"

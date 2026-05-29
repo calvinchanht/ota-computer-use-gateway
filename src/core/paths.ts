@@ -1,4 +1,4 @@
-import { realpath } from 'node:fs/promises';
+import { mkdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { deniedPath } from './deny.js';
 import type { AppConfig } from '../config/schema.js';
@@ -15,6 +15,17 @@ export async function resolveInside(workspace: Workspace, requested: string, con
   const denied = deniedPath(relative, config.security.denied_globs);
   if (denied) throw new Error(denied);
   return { absolute: real, relative };
+}
+
+export async function resolveWritableInside(workspace: Workspace, requested: string, config: AppConfig): Promise<ResolvedPath> {
+  if (path.isAbsolute(requested)) throw new Error('absolute paths are not allowed');
+  const absolute = path.resolve(workspace.realRoot, requested);
+  assertInside(workspace.realRoot, absolute);
+  const relative = path.relative(workspace.realRoot, absolute) || '.';
+  const denied = deniedPath(relative, config.security.denied_globs);
+  if (denied) throw new Error(denied);
+  await mkdir(path.dirname(absolute), { recursive: true });
+  return { absolute, relative };
 }
 
 export function assertInside(root: string, candidate: string): void {

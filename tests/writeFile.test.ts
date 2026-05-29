@@ -1,0 +1,42 @@
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { writeFileTool } from '../src/tools/files.js';
+import type { AppConfig } from '../src/config/schema.js';
+import type { Workspace } from '../src/core/workspaces.js';
+
+const config: AppConfig = {
+  server: { host: '127.0.0.1', port: 8765 },
+  workspaces: [],
+  security: { max_file_bytes: 20, max_response_bytes: 1000, max_request_bytes: 1000, max_search_results: 10, max_exec_ms: 120000, denied_globs: ['secret/**'] }
+};
+
+describe('writeFileTool', () => {
+  it('requires write permission', async () => {
+    const workspace = await fixtureWorkspace(false);
+    await expect(writeFileTool(config, workspace, 'note.txt', 'hello')).rejects.toThrow('does not allow');
+  });
+
+  it('creates a new file inside the workspace', async () => {
+    const workspace = await fixtureWorkspace(true);
+    await writeFileTool(config, workspace, 'notes/one.txt', 'hello');
+    await expect(readFile(path.join(workspace.realRoot, 'notes/one.txt'), 'utf8')).resolves.toBe('hello');
+  });
+
+  it('requires overwrite for existing files', async () => {
+    const workspace = await fixtureWorkspace(true);
+    await writeFile(path.join(workspace.realRoot, 'note.txt'), 'old');
+    await expect(writeFileTool(config, workspace, 'note.txt', 'new')).rejects.toThrow('file exists');
+  });
+
+  it('rejects denied paths', async () => {
+    const workspace = await fixtureWorkspace(true);
+    await expect(writeFileTool(config, workspace, 'secret/token.txt', 'x')).rejects.toThrow('denied');
+  });
+});
+
+async function fixtureWorkspace(allowWrite: boolean): Promise<Workspace> {
+  const root = await mkdtemp(path.join(tmpdir(), 'gtp-write-'));
+  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: allowWrite, allow_patch: false, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, commands: {} };
+}

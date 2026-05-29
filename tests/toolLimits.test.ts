@@ -9,7 +9,7 @@ import type { Workspace } from '../src/core/workspaces.js';
 const config: AppConfig = {
   server: { host: '127.0.0.1', port: 8765 },
   workspaces: [],
-  security: { max_file_bytes: 20, max_response_bytes: 50, max_request_bytes: 1000, max_search_results: 10, denied_globs: [] }
+  security: { max_file_bytes: 20, max_response_bytes: 50, max_request_bytes: 1000, max_search_results: 10, max_exec_ms: 120000, denied_globs: [] }
 };
 
 describe('tool limits', () => {
@@ -28,5 +28,5 @@ describe('tool limits', () => {
 
 async function fixtureWorkspace(): Promise<Workspace> {
   const root = await mkdtemp(path.join(tmpdir(), 'gtp-limits-'));
-  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_patch: false, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, commands: {} };
+  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: false, allow_patch: false, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, commands: {} };
 }
