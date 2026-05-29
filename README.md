@@ -18,7 +18,7 @@ node dist/index.js --config config/mickey.local.yaml
 node dist/index.js --config config/mickey.local.yaml --transport http
 ```
 
-The HTTP mode also exposes `GET /healthz` for local/tunnel health checks. Requests with `Content-Length` above `security.max_request_bytes` are rejected before reaching MCP handling, and `/mcp` requests are rate-limited by `server.rate_limit`.
+The HTTP mode also exposes `GET /healthz` for local/tunnel health checks. Requests with `Content-Length` above `security.max_request_bytes` are rejected before reaching MCP handling, `/mcp` requests are rate-limited by `server.rate_limit`, and safe HTTP metadata is appended to `.agent/audit/http_requests.jsonl`.
 
 For public HTTPS ingress, enable bearer auth and set the token only in the process environment. HTTP mode refuses to bind a non-loopback host without auth enabled:
 

@@ -127,6 +127,8 @@ Use No Auth only for a short-lived controlled connector test. Do not leave a pub
 
 Keep `security.max_request_bytes` small enough for expected MCP calls. The server rejects oversized `Content-Length` values before MCP handling. Keep `server.rate_limit` enabled as a local backstop even when the public tunnel provider also has rate limits.
 
+HTTP mode writes safe request metadata for `/mcp` to `.agent/audit/http_requests.jsonl`. It records method, path, status, duration, client key, and content length; it does not record request bodies or authorization headers.
+
 ## ChatGPT connector setup
 
 In ChatGPT:

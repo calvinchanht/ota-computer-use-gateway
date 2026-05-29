@@ -2,8 +2,10 @@ import { createServer as createHttpServer, type IncomingMessage, type ServerResp
 import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { AppConfig } from '../config/schema.js';
+import { buildWorkspaces } from '../core/workspaces.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
+import { auditHttpRequest } from './httpAudit.js';
 import { RateLimiter } from './rateLimit.js';
 
 const MCP_PATH = '/mcp';
@@ -15,10 +17,12 @@ export async function listenHttp(config: AppConfig): Promise<void> {
 
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
   const rateLimiter = new RateLimiter();
+  const auditWorkspace = (await buildWorkspaces(config)).values().next().value ?? null;
   const mcpServer = await createServer(config);
   await mcpServer.connect(transport);
 
   const httpServer = createHttpServer((req, res) => {
+    auditHttpRequest(auditWorkspace, req, res);
     void handleRequest(config, transport, rateLimiter, req, res);
   });
 
