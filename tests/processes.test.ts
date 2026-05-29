@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { recordApproval } from '../src/core/approval.js';
-import { processKill, processList, processLog, processStart } from '../src/tools/processes.js';
+import { processKill, processList, processLog, processStart, processWrite } from '../src/tools/processes.js';
 import type { AppConfig } from '../src/config/schema.js';
 import type { Workspace } from '../src/core/workspaces.js';
 
@@ -27,6 +27,16 @@ describe('process tools', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(JSON.stringify(processList().data)).toContain(processId);
     expect(JSON.stringify(processLog(processId).data)).toContain('background-ok');
+  });
+
+  it('writes stdin to running processes', async () => {
+    const workspace = await fixtureWorkspace(true);
+    await recordApproval(workspace, { id: 'ok', action: 'start_process', created_at: new Date().toISOString() });
+    const started = await processStart(config, workspace, 'cat');
+    const processId = String(started.data?.process_id);
+    processWrite(processId, 'stdin-ok', true);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(JSON.stringify(processLog(processId).data)).toContain('stdin-ok');
   });
 
   it('kills running processes', async () => {

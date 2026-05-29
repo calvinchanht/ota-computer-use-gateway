@@ -17,6 +17,6 @@ function allowedTools(workspace: Workspace): string[] {
   if (workspace.allow_read) base.push('list_dir', 'stat_path', 'tree', 'read_file', 'search_files', 'git_status', 'git_diff');
   if (workspace.allow_write) base.push('write_file', 'edit_file');
   if (workspace.allow_patch) base.push('propose_patch', 'apply_patch');
-  if (workspace.allow_tests) base.push('run_command', 'run_configured_command', 'start_process', 'list_processes', 'read_process', 'stop_process');
+  if (workspace.allow_tests) base.push('run_command', 'run_configured_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process');
   return base;
 }

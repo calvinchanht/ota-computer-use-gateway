@@ -1,5 +1,5 @@
 import { requireApproval } from './approval.js';
-import { getManagedProcess, killManagedProcess, listManagedProcesses, startManagedProcess } from '../core/processManager.js';
+import { getManagedProcess, killManagedProcess, listManagedProcesses, startManagedProcess, writeManagedProcess } from '../core/processManager.js';
 import { ok } from '../core/result.js';
 import { truncateText } from '../core/text.js';
 import type { AppConfig } from '../config/schema.js';
@@ -27,6 +27,12 @@ export function processLog(processId: string, maxBytes = MAX_LOG_BYTES) {
 export function processKill(processId: string) {
   const killed = killManagedProcess(processId);
   return ok(killed ? 'process killed' : 'process already exited', { process_id: processId, killed });
+}
+
+export function processWrite(processId: string, input: string, closeStdin = false) {
+  if (Buffer.byteLength(input, 'utf8') > MAX_LOG_BYTES) throw new Error('input exceeds max process write bytes');
+  const bytes = writeManagedProcess(processId, input, closeStdin);
+  return ok('process input written', { process_id: processId, bytes, closed_stdin: closeStdin });
 }
 
 function describeProcess(item: ReturnType<typeof getManagedProcess>) {

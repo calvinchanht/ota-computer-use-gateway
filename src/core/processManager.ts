@@ -46,6 +46,14 @@ export function killManagedProcess(id: string): boolean {
   return item.child.kill('SIGTERM');
 }
 
+export function writeManagedProcess(id: string, input: string, closeStdin = false): number {
+  const item = getManagedProcess(id);
+  if (item.exit_code !== null) throw new Error('process already exited');
+  item.child.stdin.write(input);
+  if (closeStdin) item.child.stdin.end();
+  return Buffer.byteLength(input, 'utf8');
+}
+
 function newProcess(command: string, cwd: string, child: ChildProcessWithoutNullStreams): ManagedProcess {
   return { id: `proc_${randomUUID()}`, command, cwd, started_at: new Date().toISOString(), exit_code: null, killed: false, child, stdout: '', stderr: '' };
 }

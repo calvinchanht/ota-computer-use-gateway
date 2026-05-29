@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { asText } from '../../core/result.js';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
 import { READ_ONLY, RUN_LOCAL } from './annotations.js';
-import { processKill, processList, processLog, processStart } from '../../tools/processes.js';
+import { processKill, processList, processLog, processStart, processWrite } from '../../tools/processes.js';
 import { runConfiguredCommand, runShellTool } from '../../tools/runCommand.js';
 import type { RegisterContext } from './types.js';
 
@@ -36,6 +36,7 @@ function registerCanonicalProcessTools(context: RegisterContext): void {
   ));
   server.registerTool('list_processes', listProcessTool(false), async () => asText(processList()));
   server.registerTool('read_process', readProcessTool(false), async (args) => asText(processLog(args.process_id, args.max_bytes)));
+  server.registerTool('write_process', writeProcessTool(), async (args) => asText(processWrite(args.process_id, args.input, args.close_stdin)));
   server.registerTool('stop_process', stopProcessTool(false), async (args) => asText(processKill(args.process_id)));
 }
 
@@ -101,6 +102,15 @@ function readProcessTool(deprecated: boolean) {
     description: deprecated ? 'Deprecated alias for read_process.' : 'Read buffered output for a managed process.',
     inputSchema: { process_id: z.string(), max_bytes: z.number().optional() },
     annotations: READ_ONLY
+  };
+}
+
+function writeProcessTool() {
+  return {
+    title: 'Write process',
+    description: 'Write UTF-8 input to a managed background process stdin.',
+    inputSchema: { process_id: z.string(), input: z.string(), close_stdin: z.boolean().default(false) },
+    annotations: RUN_LOCAL
   };
 }
 
