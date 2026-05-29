@@ -131,6 +131,8 @@ Set `server.rate_limit.trust_proxy_headers: true` only when the gateway is behin
 
 HTTP mode writes safe request metadata for `/mcp` to `.agent/audit/http_requests.jsonl`. It records method, path, status, duration, client key, and content length; it does not record request bodies or authorization headers.
 
+Stop the gateway with `SIGINT`/`SIGTERM` so the HTTP listener and MCP transport close cleanly before restarting tunnel tests.
+
 ## ChatGPT connector setup
 
 In ChatGPT:

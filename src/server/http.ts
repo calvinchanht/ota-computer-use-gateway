@@ -7,6 +7,7 @@ import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
 import { auditHttpRequest } from './httpAudit.js';
 import { RateLimiter } from './rateLimit.js';
+import { installShutdownHooks } from './shutdown.js';
 
 const MCP_PATH = '/mcp';
 
@@ -26,6 +27,7 @@ export async function listenHttp(config: AppConfig): Promise<void> {
     void handleRequest(config, transport, rateLimiter, req, res);
   });
 
+  installShutdownHooks(httpServer, transport);
   httpServer.listen(config.server.port, config.server.host, () => {
     console.error(`Mickey MCP HTTP listening on http://${config.server.host}:${config.server.port}${MCP_PATH}`);
   });
