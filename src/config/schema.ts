@@ -21,7 +21,8 @@ export const authSchema = z.object({
 export const rateLimitSchema = z.object({
   enabled: z.boolean().default(true),
   window_ms: z.number().int().positive().default(60000),
-  max_requests: z.number().int().positive().default(120)
+  max_requests: z.number().int().positive().default(120),
+  trust_proxy_headers: z.boolean().default(false)
 });
 
 export const configSchema = z.object({

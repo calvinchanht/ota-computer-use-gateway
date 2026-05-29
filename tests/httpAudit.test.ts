@@ -17,7 +17,7 @@ describe('HTTP request audit', () => {
 
     const raw = await readFile(path.join(workspace.realRoot, '.agent/audit/http_requests.jsonl'), 'utf8');
     const entry = JSON.parse(raw.trim());
-    expect(entry).toMatchObject({ method: 'POST', path: '/mcp', status_code: 200, client: '203.0.113.8' });
+    expect(entry).toMatchObject({ method: 'POST', path: '/mcp', status_code: 200, client: '127.0.0.1' });
     expect(raw).not.toContain('secret');
     expect(raw).not.toContain('redacted');
   });

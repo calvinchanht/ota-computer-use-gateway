@@ -9,6 +9,7 @@ server:
     enabled: true
     window_ms: 60000
     max_requests: 120
+    trust_proxy_headers: false
 
 workspaces:
   - id: "example"
