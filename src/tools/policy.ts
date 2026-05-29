@@ -8,7 +8,7 @@ export function workspacePolicy(workspace: Workspace) {
     root_label: 'configured workspace root',
     allowed_tools: allowedTools(workspace),
     blocked_tools: ['delete_file', 'mouse_click', 'keyboard_type'],
-    requires_approval: ['apply_patch', 'run_command', 'exec', 'process_start', 'capture_screen']
+    requires_approval: ['apply_patch', 'run_command', 'start_process', 'capture_screen']
   });
 }
 
@@ -17,6 +17,6 @@ function allowedTools(workspace: Workspace): string[] {
   if (workspace.allow_read) base.push('list_dir', 'stat_path', 'tree', 'read_file', 'search_files', 'git_status', 'git_diff');
   if (workspace.allow_write) base.push('write_file', 'edit_file');
   if (workspace.allow_patch) base.push('propose_patch', 'apply_patch');
-  if (workspace.allow_tests) base.push('run_command', 'exec', 'process_start', 'process_list', 'process_log', 'process_kill');
+  if (workspace.allow_tests) base.push('run_command', 'run_configured_command', 'start_process', 'list_processes', 'read_process', 'stop_process');
   return base;
 }

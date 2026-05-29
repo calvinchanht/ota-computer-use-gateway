@@ -33,7 +33,7 @@ describe('runConfiguredCommand', () => {
 
   it('runs approved shell commands', async () => {
     const workspace = await fixtureWorkspace(true);
-    await recordApproval(workspace, { id: 'ok', action: 'exec', created_at: new Date().toISOString() });
+    await recordApproval(workspace, { id: 'ok', action: 'run_command', created_at: new Date().toISOString() });
     const result = await runShellTool(config, workspace, 'printf shell-ok');
     expect(JSON.stringify(result.data)).toContain('shell-ok');
   });

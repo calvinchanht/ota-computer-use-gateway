@@ -18,7 +18,7 @@ export async function runConfiguredCommand(workspace: Workspace, commandId: stri
   return ok('configured command finished', { command_id: commandId, exit_code: result.code, output: output.text, truncated: output.truncated });
 }
 
-export async function runShellTool(config: AppConfig, workspace: Workspace, command: string, approvalAction = 'exec') {
+export async function runShellTool(config: AppConfig, workspace: Workspace, command: string, approvalAction = 'run_command') {
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   await requireApproval(workspace, approvalAction);
   const result = await runShellCommand(command, workspace.realRoot, config.security.max_exec_ms);
