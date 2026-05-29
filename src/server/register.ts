@@ -13,6 +13,7 @@ import { getProjectContext, memorySearch, memoryWrite } from '../tools/memory.js
 import { proposePatch } from '../tools/patch.js';
 import { workspacePolicy } from '../tools/policy.js';
 import { searchFiles } from '../tools/search.js';
+import { processKill, processList, processLog, processStart } from '../tools/processes.js';
 import { runConfiguredCommand, runShellTool } from '../tools/runCommand.js';
 import { workspaceStatus } from '../tools/workspace.js';
 
@@ -83,6 +84,14 @@ function registerCommandTools(server: McpServer, config: AppConfig, workspaces: 
     description: 'Run an approved shell command in the workspace root.',
     inputSchema: { workspace_id: z.string(), command: z.string(), approval_action: z.string().default('exec') }
   }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'exec', (workspace) => runShellTool(config, workspace, args.command, args.approval_action)));
+  server.registerTool('process_start', {
+    title: 'Process start',
+    description: 'Start an approved background shell command in the workspace root.',
+    inputSchema: { workspace_id: z.string(), command: z.string(), approval_action: z.string().default('process_start') }
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'process_start', (workspace) => processStart(config, workspace, args.command, args.approval_action)));
+  server.registerTool('process_list', { title: 'Process list', description: 'List managed background processes.', inputSchema: {} }, async () => asText(processList()));
+  server.registerTool('process_log', { title: 'Process log', description: 'Read buffered output for a managed background process.', inputSchema: { process_id: z.string(), max_bytes: z.number().optional() } }, async (args) => asText(processLog(args.process_id, args.max_bytes)));
+  server.registerTool('process_kill', { title: 'Process kill', description: 'Terminate a managed background process.', inputSchema: { process_id: z.string() } }, async (args) => asText(processKill(args.process_id)));
 }
 
 function registerApprovalTools(server: McpServer, workspaces: WorkspaceMap): void {
