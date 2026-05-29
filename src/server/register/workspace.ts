@@ -3,8 +3,9 @@ import { asText, fail } from '../../core/result.js';
 import { getWorkspace } from '../../core/workspaces.js';
 import { heartbeat } from '../../tools/heartbeat.js';
 import { workspacePolicy } from '../../tools/policy.js';
+import { toolProfile } from '../../tools/toolProfile.js';
 import { workspaceStatus } from '../../tools/workspace.js';
-import { READ_ONLY, WRITE_FILE, RUN_LOCAL } from './annotations.js';
+import { READ_ONLY } from './annotations.js';
 import type { RegisterContext, WorkspaceMap } from './types.js';
 
 export function registerWorkspaceTools({ server, workspaces }: RegisterContext): void {
@@ -27,6 +28,13 @@ export function registerWorkspaceTools({ server, workspaces }: RegisterContext):
     inputSchema: { workspace_id: z.string() },
     annotations: READ_ONLY
   }, async ({ workspace_id }) => safePolicy(workspaces, workspace_id));
+
+  server.registerTool('get_tool_profile', {
+    title: 'Get tool profile',
+    description: 'Return canonical tool naming, aliases, deprecated names, and context conventions.',
+    inputSchema: {},
+    annotations: READ_ONLY
+  }, async () => asText(toolProfile()));
 }
 
 function safePolicy(workspaces: WorkspaceMap, workspaceId: string) {

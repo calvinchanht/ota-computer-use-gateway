@@ -13,7 +13,7 @@ export function workspacePolicy(workspace: Workspace) {
 }
 
 function allowedTools(workspace: Workspace): string[] {
-  const base = ['heartbeat', 'workspace_status', 'get_workspace_policy'];
+  const base = ['heartbeat', 'workspace_status', 'get_workspace_policy', 'get_tool_profile'];
   if (workspace.allow_read) base.push('list_dir', 'stat_path', 'tree', 'read_file', 'search_files', 'git_status', 'git_diff');
   if (workspace.allow_write) base.push('write_file', 'edit_file');
   if (workspace.allow_patch) base.push('propose_patch', 'apply_patch');
