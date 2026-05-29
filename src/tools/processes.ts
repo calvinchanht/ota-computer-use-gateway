@@ -7,7 +7,7 @@ import type { Workspace } from '../core/workspaces.js';
 
 const MAX_LOG_BYTES = 50000;
 
-export async function processStart(config: AppConfig, workspace: Workspace, command: string, approvalAction = 'process_start') {
+export async function processStart(config: AppConfig, workspace: Workspace, command: string, approvalAction = 'start_process') {
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   await requireApproval(workspace, approvalAction);
   const item = startManagedProcess(command, workspace.realRoot, config.security.max_exec_ms);

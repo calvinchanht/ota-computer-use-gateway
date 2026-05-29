@@ -21,7 +21,7 @@ describe('process tools', () => {
 
   it('captures background process output', async () => {
     const workspace = await fixtureWorkspace(true);
-    await recordApproval(workspace, { id: 'ok', action: 'process_start', created_at: new Date().toISOString() });
+    await recordApproval(workspace, { id: 'ok', action: 'start_process', created_at: new Date().toISOString() });
     const started = await processStart(config, workspace, 'printf background-ok');
     const processId = String(started.data?.process_id);
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -31,7 +31,7 @@ describe('process tools', () => {
 
   it('kills running processes', async () => {
     const workspace = await fixtureWorkspace(true);
-    await recordApproval(workspace, { id: 'ok', action: 'process_start', created_at: new Date().toISOString() });
+    await recordApproval(workspace, { id: 'ok', action: 'start_process', created_at: new Date().toISOString() });
     const started = await processStart(config, workspace, 'sleep 30');
     const processId = String(started.data?.process_id);
     expect(processKill(processId).data).toMatchObject({ killed: true });
