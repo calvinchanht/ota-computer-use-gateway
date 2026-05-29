@@ -1,4 +1,4 @@
-import { access, writeFile } from 'node:fs/promises';
+import { access, readFile, writeFile } from 'node:fs/promises';
 import { fileInfo, listEntries, readTextRange, treeEntries } from '../core/files.js';
 import { ok } from '../core/result.js';
 import { resolveInside, resolveWritableInside } from '../core/paths.js';
@@ -29,12 +29,34 @@ export async function readFileTool(config: AppConfig, workspace: Workspace, requ
 }
 
 export async function writeFileTool(config: AppConfig, workspace: Workspace, requestedPath: string, content: string, overwrite = false) {
-  if (!workspace.allow_write) throw new Error('workspace does not allow file writes');
-  if (Buffer.byteLength(content, 'utf8') > config.security.max_file_bytes) throw new Error('content exceeds max_file_bytes');
+  assertWriteAllowed(config, workspace, content);
   const resolved = await resolveWritableInside(workspace, requestedPath, config);
   if (!overwrite) await assertNewFile(resolved.absolute);
   await writeFile(resolved.absolute, content, 'utf8');
   return ok(`wrote ${resolved.relative}`, { path: resolved.relative, bytes: Buffer.byteLength(content, 'utf8') });
+}
+
+export async function editFileTool(config: AppConfig, workspace: Workspace, requestedPath: string, oldText: string, newText: string) {
+  assertWriteAllowed(config, workspace, newText);
+  const resolved = await resolveInside(workspace, requestedPath, config);
+  const current = await readFile(resolved.absolute, 'utf8');
+  const next = replaceExactlyOnce(current, oldText, newText, resolved.relative);
+  if (Buffer.byteLength(next, 'utf8') > config.security.max_file_bytes) throw new Error('edited file exceeds max_file_bytes');
+  await writeFile(resolved.absolute, next, 'utf8');
+  return ok(`edited ${resolved.relative}`, { path: resolved.relative, bytes: Buffer.byteLength(next, 'utf8') });
+}
+
+function assertWriteAllowed(config: AppConfig, workspace: Workspace, content: string): void {
+  if (!workspace.allow_write) throw new Error('workspace does not allow file writes');
+  if (Buffer.byteLength(content, 'utf8') > config.security.max_file_bytes) throw new Error('content exceeds max_file_bytes');
+}
+
+function replaceExactlyOnce(current: string, oldText: string, newText: string, filePath: string): string {
+  if (!oldText) throw new Error('old_text must not be empty');
+  const first = current.indexOf(oldText);
+  if (first === -1) throw new Error(`old_text not found in ${filePath}`);
+  if (current.indexOf(oldText, first + oldText.length) !== -1) throw new Error(`old_text is not unique in ${filePath}`);
+  return current.slice(0, first) + newText + current.slice(first + oldText.length);
 }
 
 async function assertNewFile(absolutePath: string): Promise<void> {

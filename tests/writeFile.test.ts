@@ -2,7 +2,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { writeFileTool } from '../src/tools/files.js';
+import { editFileTool, writeFileTool } from '../src/tools/files.js';
 import type { AppConfig } from '../src/config/schema.js';
 import type { Workspace } from '../src/core/workspaces.js';
 
@@ -33,6 +33,19 @@ describe('writeFileTool', () => {
   it('rejects denied paths', async () => {
     const workspace = await fixtureWorkspace(true);
     await expect(writeFileTool(config, workspace, 'secret/token.txt', 'x')).rejects.toThrow('denied');
+  });
+
+  it('edits exactly one matching text region', async () => {
+    const workspace = await fixtureWorkspace(true);
+    await writeFile(path.join(workspace.realRoot, 'note.txt'), 'alpha beta gamma');
+    await editFileTool(config, workspace, 'note.txt', 'beta', 'BETA');
+    await expect(readFile(path.join(workspace.realRoot, 'note.txt'), 'utf8')).resolves.toBe('alpha BETA gamma');
+  });
+
+  it('rejects ambiguous edits', async () => {
+    const workspace = await fixtureWorkspace(true);
+    await writeFile(path.join(workspace.realRoot, 'note.txt'), 'same same');
+    await expect(editFileTool(config, workspace, 'note.txt', 'same', 'one')).rejects.toThrow('not unique');
   });
 });
 
