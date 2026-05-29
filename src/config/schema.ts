@@ -28,6 +28,7 @@ export const configSchema = z.object({
   security: z.object({
     max_file_bytes: z.number().int().positive().default(200000),
     max_response_bytes: z.number().int().positive().default(50000),
+    max_request_bytes: z.number().int().positive().default(1000000),
     max_search_results: z.number().int().positive().default(50),
     denied_globs: z.array(z.string()).default([])
   }).prefault({})

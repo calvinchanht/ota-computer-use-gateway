@@ -125,6 +125,8 @@ node dist/index.js --config config/mickey.local.yaml --transport http
 
 Use No Auth only for a short-lived controlled connector test. Do not leave a public endpoint running unattended without bearer auth or stronger OAuth in front of it.
 
+Keep `security.max_request_bytes` small enough for expected MCP calls. The server rejects oversized `Content-Length` values before MCP handling.
+
 ## ChatGPT connector setup
 
 In ChatGPT:

@@ -30,6 +30,7 @@ async function handleRequest(config: AppConfig, transport: StreamableHTTPServerT
   if (!isMcp(req)) return sendJson(res, 404, { error: 'not_found' });
   if (req.method === 'OPTIONS') return sendCors(res);
   if (!allowedMethod(req.method)) return sendJson(res, 405, { error: 'method_not_allowed' });
+  if (requestTooLarge(config, req)) return sendJson(res, 413, { error: 'payload_too_large' });
   if (!isAuthorized(config, req)) return sendAuthError(config, res);
 
   applyCors(res);
@@ -46,6 +47,15 @@ function isMcp(req: IncomingMessage): boolean {
 
 function allowedMethod(method: string | undefined): boolean {
   return method === 'GET' || method === 'POST' || method === 'DELETE';
+}
+
+export function requestTooLarge(config: AppConfig, req: IncomingMessage): boolean {
+  const raw = req.headers['content-length'];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) return false;
+
+  const size = Number.parseInt(value, 10);
+  return Number.isFinite(size) && size > config.security.max_request_bytes;
 }
 
 function sendCors(res: ServerResponse): void {
