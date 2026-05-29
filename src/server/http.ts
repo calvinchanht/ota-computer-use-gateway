@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { AppConfig } from '../config/schema.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
+import { RateLimiter } from './rateLimit.js';
 
 const MCP_PATH = '/mcp';
 
@@ -13,11 +14,12 @@ export async function listenHttp(config: AppConfig): Promise<void> {
   if (warning) console.error(warning);
 
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
+  const rateLimiter = new RateLimiter();
   const mcpServer = await createServer(config);
   await mcpServer.connect(transport);
 
   const httpServer = createHttpServer((req, res) => {
-    void handleRequest(config, transport, req, res);
+    void handleRequest(config, transport, rateLimiter, req, res);
   });
 
   httpServer.listen(config.server.port, config.server.host, () => {
@@ -25,11 +27,12 @@ export async function listenHttp(config: AppConfig): Promise<void> {
   });
 }
 
-async function handleRequest(config: AppConfig, transport: StreamableHTTPServerTransport, req: IncomingMessage, res: ServerResponse) {
+async function handleRequest(config: AppConfig, transport: StreamableHTTPServerTransport, rateLimiter: RateLimiter, req: IncomingMessage, res: ServerResponse) {
   if (isHealth(req)) return sendJson(res, 200, { ok: true });
   if (!isMcp(req)) return sendJson(res, 404, { error: 'not_found' });
   if (req.method === 'OPTIONS') return sendCors(res);
   if (!allowedMethod(req.method)) return sendJson(res, 405, { error: 'method_not_allowed' });
+  if (!rateLimiter.check(config, req)) return sendJson(res, 429, { error: 'rate_limited' });
   if (requestTooLarge(config, req)) return sendJson(res, 413, { error: 'payload_too_large' });
   if (!isAuthorized(config, req)) return sendAuthError(config, res);
 

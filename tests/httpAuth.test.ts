@@ -3,7 +3,7 @@ import { assertSafeHttpBind, authStartupWarning, isAuthorized } from '../src/ser
 import type { AppConfig } from '../src/config/schema.js';
 
 const config: AppConfig = {
-  server: { host: '127.0.0.1', port: 8765, auth: { enabled: true, bearer_token_env: 'TEST_BEARER', allow_loopback_without_auth: false } },
+  server: { host: '127.0.0.1', port: 8765, rate_limit: { enabled: true, window_ms: 60000, max_requests: 120 }, auth: { enabled: true, bearer_token_env: 'TEST_BEARER', allow_loopback_without_auth: false } },
   workspaces: [],
   security: { max_file_bytes: 1000, max_response_bytes: 1000, max_request_bytes: 1000, max_search_results: 10, denied_globs: [] }
 };

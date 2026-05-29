@@ -18,11 +18,18 @@ export const authSchema = z.object({
   allow_loopback_without_auth: z.boolean().default(true)
 });
 
+export const rateLimitSchema = z.object({
+  enabled: z.boolean().default(true),
+  window_ms: z.number().int().positive().default(60000),
+  max_requests: z.number().int().positive().default(120)
+});
+
 export const configSchema = z.object({
   server: z.object({
     host: z.string().default('127.0.0.1'),
     port: z.number().int().positive().default(8765),
-    auth: authSchema.prefault({})
+    auth: authSchema.prefault({}),
+    rate_limit: rateLimitSchema.prefault({})
   }).prefault({}),
   workspaces: z.array(workspaceSchema).min(1),
   security: z.object({
