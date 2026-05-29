@@ -5,6 +5,7 @@ import type { AppConfig } from '../config/schema.js';
 import { buildWorkspaces } from '../core/workspaces.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
+import { healthPayload } from './health.js';
 import { auditHttpRequest } from './httpAudit.js';
 import { RateLimiter } from './rateLimit.js';
 import { installShutdownHooks } from './shutdown.js';
@@ -16,6 +17,7 @@ export async function listenHttp(config: AppConfig): Promise<void> {
   const warning = authStartupWarning(config);
   if (warning) console.error(warning);
 
+  const startedAt = Date.now();
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
   const rateLimiter = new RateLimiter();
   const auditWorkspace = (await buildWorkspaces(config)).values().next().value ?? null;
@@ -24,7 +26,7 @@ export async function listenHttp(config: AppConfig): Promise<void> {
 
   const httpServer = createHttpServer((req, res) => {
     auditHttpRequest(auditWorkspace, req, res);
-    void handleRequest(config, transport, rateLimiter, req, res);
+    void handleRequest(config, transport, rateLimiter, startedAt, req, res);
   });
 
   installShutdownHooks(httpServer, transport);
@@ -33,8 +35,8 @@ export async function listenHttp(config: AppConfig): Promise<void> {
   });
 }
 
-async function handleRequest(config: AppConfig, transport: StreamableHTTPServerTransport, rateLimiter: RateLimiter, req: IncomingMessage, res: ServerResponse) {
-  if (isHealth(req)) return sendJson(res, 200, { ok: true });
+async function handleRequest(config: AppConfig, transport: StreamableHTTPServerTransport, rateLimiter: RateLimiter, startedAt: number, req: IncomingMessage, res: ServerResponse) {
+  if (isHealth(req)) return sendJson(res, 200, healthPayload(config, startedAt));
   if (!isMcp(req)) return sendJson(res, 404, { error: 'not_found' });
   if (req.method === 'OPTIONS') return sendCors(res);
   if (!allowedMethod(req.method)) return sendJson(res, 405, { error: 'method_not_allowed' });

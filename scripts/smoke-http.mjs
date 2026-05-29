@@ -54,7 +54,10 @@ function parseResponse(text) {
 
 async function waitForHealth(port) {
   for (let i = 0; i < 50; i += 1) {
-    try { if ((await fetch(`http://127.0.0.1:${port}/healthz`)).ok) return; } catch {}
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/healthz`);
+      if (res.ok && (await res.text()).includes('ota-computer-use-gateway')) return;
+    } catch {}
     await delay(100);
   }
   throw new Error('http server did not become healthy');
