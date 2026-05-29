@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
+import { READ_ONLY, WRITE_FILE } from './annotations.js';
 import { editFileTool, listDir, readFileTool, statPath, treeTool, writeFileTool } from '../../tools/files.js';
 import { searchFiles } from '../../tools/search.js';
 import type { RegisterContext } from './types.js';
@@ -51,7 +52,8 @@ function listDirTool() {
   return {
     title: 'List directory',
     description: 'List files in a workspace directory.',
-    inputSchema: { workspace_id: z.string(), path: z.string().default('.'), max_entries: z.number().optional() }
+    inputSchema: { workspace_id: z.string(), path: z.string().default('.'), max_entries: z.number().optional() },
+    annotations: READ_ONLY
   };
 }
 
@@ -59,7 +61,8 @@ function statPathTool() {
   return {
     title: 'Stat path',
     description: 'Return file metadata for a workspace path.',
-    inputSchema: { workspace_id: z.string(), path: z.string() }
+    inputSchema: { workspace_id: z.string(), path: z.string() },
+    annotations: READ_ONLY
   };
 }
 
@@ -67,7 +70,8 @@ function treeToolSpec() {
   return {
     title: 'Tree',
     description: 'Return a bounded recursive tree for a workspace directory.',
-    inputSchema: { workspace_id: z.string(), path: z.string().default('.'), max_entries: z.number().optional() }
+    inputSchema: { workspace_id: z.string(), path: z.string().default('.'), max_entries: z.number().optional() },
+    annotations: READ_ONLY
   };
 }
 
@@ -75,7 +79,8 @@ function readFileSpec() {
   return {
     title: 'Read file',
     description: 'Read a text file inside a workspace.',
-    inputSchema: { workspace_id: z.string(), path: z.string(), start_line: z.number().optional(), max_lines: z.number().optional() }
+    inputSchema: { workspace_id: z.string(), path: z.string(), start_line: z.number().optional(), max_lines: z.number().optional() },
+    annotations: READ_ONLY
   };
 }
 
@@ -83,7 +88,8 @@ function writeFileSpec() {
   return {
     title: 'Write file',
     description: 'Create or overwrite a UTF-8 text file inside a workspace.',
-    inputSchema: { workspace_id: z.string(), path: z.string(), content: z.string(), overwrite: z.boolean().default(false) }
+    inputSchema: { workspace_id: z.string(), path: z.string(), content: z.string(), overwrite: z.boolean().default(false) },
+    annotations: WRITE_FILE
   };
 }
 
@@ -91,7 +97,8 @@ function editFileSpec() {
   return {
     title: 'Edit file',
     description: 'Replace one exact text occurrence inside a UTF-8 workspace file.',
-    inputSchema: { workspace_id: z.string(), path: z.string(), old_text: z.string(), new_text: z.string() }
+    inputSchema: { workspace_id: z.string(), path: z.string(), old_text: z.string(), new_text: z.string() },
+    annotations: WRITE_FILE
   };
 }
 
@@ -99,6 +106,7 @@ function searchFilesSpec() {
   return {
     title: 'Search files',
     description: 'Search text in workspace files.',
-    inputSchema: { workspace_id: z.string(), query: z.string(), path: z.string().default('.') }
+    inputSchema: { workspace_id: z.string(), query: z.string(), path: z.string().default('.') },
+    annotations: READ_ONLY
   };
 }
