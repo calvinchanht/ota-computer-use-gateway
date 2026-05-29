@@ -28,48 +28,50 @@ export function registerTools(server: McpServer, config: AppConfig, workspaces: 
 }
 
 function registerBase(server: McpServer, workspaces: WorkspaceMap): void {
-  server.registerTool('heartbeat', { description: 'Report local agent availability.' }, async () => asText(heartbeat(workspaces)));
+  server.registerTool('heartbeat', { title: 'Heartbeat', description: 'Report local agent availability.' }, async () => asText(heartbeat(workspaces)));
   server.registerTool('get_workspace_policy', {
+    title: 'Get workspace policy',
     description: 'Return allowed tools and policy for a workspace.',
     inputSchema: { workspace_id: z.string() }
   }, async ({ workspace_id }) => safePolicy(workspaces, workspace_id));
 }
 
 function registerFileTools(server: McpServer, config: AppConfig, workspaces: WorkspaceMap): void {
-  server.registerTool('list_dir', { description: 'List files in a workspace directory.', inputSchema: { workspace_id: z.string(), path: z.string().default('.'), max_entries: z.number().optional() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'list_dir', (workspace) => listDir(config, workspace, args.path, args.max_entries)));
-  server.registerTool('read_file', { description: 'Read a text file inside a workspace.', inputSchema: { workspace_id: z.string(), path: z.string(), start_line: z.number().optional(), max_lines: z.number().optional() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'read_file', (workspace) => readFileTool(config, workspace, args.path, args.start_line, args.max_lines)));
-  server.registerTool('search_files', { description: 'Search text in workspace files.', inputSchema: { workspace_id: z.string(), query: z.string(), path: z.string().default('.') } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'search_files', (workspace) => searchFiles(config, workspace, args.query, args.path)));
+  server.registerTool('list_dir', { title: 'List directory', description: 'List files in a workspace directory.', inputSchema: { workspace_id: z.string(), path: z.string().default('.'), max_entries: z.number().optional() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'list_dir', (workspace) => listDir(config, workspace, args.path, args.max_entries)));
+  server.registerTool('read_file', { title: 'Read file', description: 'Read a text file inside a workspace.', inputSchema: { workspace_id: z.string(), path: z.string(), start_line: z.number().optional(), max_lines: z.number().optional() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'read_file', (workspace) => readFileTool(config, workspace, args.path, args.start_line, args.max_lines)));
+  server.registerTool('search_files', { title: 'Search files', description: 'Search text in workspace files.', inputSchema: { workspace_id: z.string(), query: z.string(), path: z.string().default('.') } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'search_files', (workspace) => searchFiles(config, workspace, args.query, args.path)));
 }
 
 function registerGitTools(server: McpServer, workspaces: WorkspaceMap): void {
-  server.registerTool('git_status', { description: 'Return concise git status.', inputSchema: { workspace_id: z.string() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'git_status', gitStatus));
-  server.registerTool('git_diff', { description: 'Return bounded git diff.', inputSchema: { workspace_id: z.string(), max_bytes: z.number().optional() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'git_diff', (workspace) => gitDiff(workspace, args.max_bytes)));
+  server.registerTool('git_status', { title: 'Git status', description: 'Return concise git status.', inputSchema: { workspace_id: z.string() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'git_status', gitStatus));
+  server.registerTool('git_diff', { title: 'Git diff', description: 'Return bounded git diff.', inputSchema: { workspace_id: z.string(), max_bytes: z.number().optional() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'git_diff', (workspace) => gitDiff(workspace, args.max_bytes)));
 }
 
 function registerMemoryTools(server: McpServer, workspaces: WorkspaceMap): void {
-  server.registerTool('memory_search', { description: 'Search project-local memory files.', inputSchema: { workspace_id: z.string(), query: z.string(), max_results: z.number().optional() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'memory_search', (workspace) => memorySearch(workspace, args.query, args.max_results)));
-  server.registerTool('memory_write', { description: 'Append a project-local memory entry after secret checks.', inputSchema: { workspace_id: z.string(), type: z.string(), title: z.string(), body: z.string(), tags: z.array(z.string()).optional() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'memory_write', (workspace) => memoryWrite(workspace, args.type, args.title, args.body, args.tags)));
-  server.registerTool('get_project_context', { description: 'Return compact project context files from .agent.', inputSchema: { workspace_id: z.string() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'get_project_context', getProjectContext));
+  server.registerTool('memory_search', { title: 'Memory search', description: 'Search project-local memory files.', inputSchema: { workspace_id: z.string(), query: z.string(), max_results: z.number().optional() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'memory_search', (workspace) => memorySearch(workspace, args.query, args.max_results)));
+  server.registerTool('memory_write', { title: 'Memory write', description: 'Append a project-local memory entry after secret checks.', inputSchema: { workspace_id: z.string(), type: z.string(), title: z.string(), body: z.string(), tags: z.array(z.string()).optional() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'memory_write', (workspace) => memoryWrite(workspace, args.type, args.title, args.body, args.tags)));
+  server.registerTool('get_project_context', { title: 'Get project context', description: 'Return compact project context files from .agent.', inputSchema: { workspace_id: z.string() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'get_project_context', getProjectContext));
 }
 
 function registerPatchTools(server: McpServer, config: AppConfig, workspaces: WorkspaceMap): void {
   const changes = z.array(z.object({ path: z.string(), old_text: z.string(), new_text: z.string() }));
-  server.registerTool('propose_patch', { description: 'Store a patch proposal without modifying project files.', inputSchema: { workspace_id: z.string(), reason: z.string(), changes } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'propose_patch', (workspace) => proposePatch(config, workspace, args.changes, args.reason)));
-  server.registerTool('apply_patch', { description: 'Apply exact-text replacements after local approval.', inputSchema: { workspace_id: z.string(), approval_action: z.string().default('apply_patch'), changes } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'apply_patch', (workspace) => applyPatch(config, workspace, args.changes, args.approval_action)));
+  server.registerTool('propose_patch', { title: 'Propose patch', description: 'Store a patch proposal without modifying project files.', inputSchema: { workspace_id: z.string(), reason: z.string(), changes } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'propose_patch', (workspace) => proposePatch(config, workspace, args.changes, args.reason)));
+  server.registerTool('apply_patch', { title: 'Apply patch', description: 'Apply exact-text replacements after local approval.', inputSchema: { workspace_id: z.string(), approval_action: z.string().default('apply_patch'), changes } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'apply_patch', (workspace) => applyPatch(config, workspace, args.changes, args.approval_action)));
 }
 
 
 
 function registerCommandTools(server: McpServer, workspaces: WorkspaceMap): void {
   server.registerTool('run_command', {
+    title: 'Run command',
     description: 'Run an allowlisted workspace command after approval.',
     inputSchema: { workspace_id: z.string(), command_id: z.string(), approval_action: z.string().optional() }
   }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'run_command', (workspace) => runConfiguredCommand(workspace, args.command_id, args.approval_action)));
 }
 
 function registerApprovalTools(server: McpServer, workspaces: WorkspaceMap): void {
-  server.registerTool('approval_status', { description: 'List local workspace approvals.', inputSchema: { workspace_id: z.string() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'approval_status', approvalStatus));
-  server.registerTool('create_local_approval', { description: 'Record a local approval marker for development/testing.', inputSchema: { workspace_id: z.string(), action: z.string(), approved_by: z.string().optional() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'create_local_approval', (workspace) => createLocalApproval(workspace, args.action, args.approved_by)));
+  server.registerTool('approval_status', { title: 'Approval status', description: 'List local workspace approvals.', inputSchema: { workspace_id: z.string() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'approval_status', approvalStatus));
+  server.registerTool('create_local_approval', { title: 'Create local approval', description: 'Record a local approval marker for development/testing.', inputSchema: { workspace_id: z.string(), action: z.string(), approved_by: z.string().optional() } }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'create_local_approval', (workspace) => createLocalApproval(workspace, args.action, args.approved_by)));
 }
 
 function safePolicy(workspaces: WorkspaceMap, workspaceId: string) {

@@ -18,24 +18,21 @@ export async function listenHttp(config: AppConfig): Promise<void> {
   if (warning) console.error(warning);
 
   const startedAt = Date.now();
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
   const rateLimiter = new RateLimiter();
   const auditWorkspace = (await buildWorkspaces(config)).values().next().value ?? null;
-  const mcpServer = await createServer(config);
-  await mcpServer.connect(transport);
 
   const httpServer = createHttpServer((req, res) => {
     auditHttpRequest(auditWorkspace, req, res);
-    void handleRequest(config, transport, rateLimiter, startedAt, req, res);
+    void handleRequest(config, rateLimiter, startedAt, req, res);
   });
 
-  installShutdownHooks(httpServer, transport);
+  installShutdownHooks(httpServer);
   httpServer.listen(config.server.port, config.server.host, () => {
     console.error(`Mickey MCP HTTP listening on http://${config.server.host}:${config.server.port}${MCP_PATH}`);
   });
 }
 
-async function handleRequest(config: AppConfig, transport: StreamableHTTPServerTransport, rateLimiter: RateLimiter, startedAt: number, req: IncomingMessage, res: ServerResponse) {
+async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, startedAt: number, req: IncomingMessage, res: ServerResponse) {
   if (isHealth(req)) return sendJson(res, 200, healthPayload(config, startedAt));
   if (!isMcp(req)) return sendJson(res, 404, { error: 'not_found' });
   if (req.method === 'OPTIONS') return sendCors(res);
@@ -45,7 +42,21 @@ async function handleRequest(config: AppConfig, transport: StreamableHTTPServerT
   if (!isAuthorized(config, req)) return sendAuthError(config, res);
 
   applyCors(res);
-  await transport.handleRequest(req, res);
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  const mcpServer = await createServer(config);
+  await mcpServer.connect(transport);
+
+  try {
+    const parsedBody = req.method === 'POST' ? await readJsonBody(req) : undefined;
+    if (parsedBody) logMcpMethods(parsedBody);
+    await transport.handleRequest(req, res, parsedBody);
+  } catch (error) {
+    console.error('MCP HTTP request failed', error);
+    if (!res.headersSent) sendJson(res, 500, { error: 'mcp_request_failed' });
+    else res.end();
+  } finally {
+    await transport.close().catch(() => undefined);
+  }
 }
 
 function isHealth(req: IncomingMessage): boolean {
@@ -67,6 +78,22 @@ export function requestTooLarge(config: AppConfig, req: IncomingMessage): boolea
 
   const size = Number.parseInt(value, 10);
   return Number.isFinite(size) && size > config.security.max_request_bytes;
+}
+
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  const raw = Buffer.concat(chunks).toString('utf8');
+  if (!raw) return undefined;
+  return JSON.parse(raw);
+}
+
+function logMcpMethods(body: unknown): void {
+  const messages = Array.isArray(body) ? body : [body];
+  const methods = messages
+    .map((message) => (message && typeof message === 'object' && 'method' in message ? String((message as { method?: unknown }).method) : null))
+    .filter(Boolean);
+  if (methods.length > 0) console.error(`MCP HTTP methods: ${methods.join(',')}`);
 }
 
 function sendCors(res: ServerResponse): void {
