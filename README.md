@@ -34,3 +34,25 @@ export OTA_GATEWAY_BEARER_TOKEN="use-a-long-random-secret"
 ```
 
 See GitHub issue #1 for the source-of-truth implementation plan.
+
+## Primitive runtime
+
+The gateway exposes explicit snake_case MCP primitives for agent runtime work:
+
+- discovery and policy: `heartbeat`, `workspace_status`, `get_workspace_policy`, `get_tool_profile`
+- filesystem: `list_dir`, `stat_path`, `tree`, `read_file`, `write_file`, `edit_file`, `search_files`
+- patches: `propose_patch`, `apply_patch`
+- commands: `run_command`, `run_configured_command`
+- processes: `start_process`, `list_processes`, `read_process`, `write_process`, `stop_process`
+
+`exec` and old `process_*` names exist only as deprecated compatibility aliases. Use `get_tool_profile` for machine-readable canonical names and aliases.
+
+See `docs/PRIMITIVE_RUNTIME.md` for the runtime surface, safety model, and validation gate.
+
+Validation:
+
+```bash
+npm test
+npm run build
+npm run smoke:primitives
+```
