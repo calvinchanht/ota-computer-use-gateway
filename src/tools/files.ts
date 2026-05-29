@@ -1,5 +1,5 @@
 import { access, writeFile } from 'node:fs/promises';
-import { listEntries, readTextRange } from '../core/files.js';
+import { fileInfo, listEntries, readTextRange, treeEntries } from '../core/files.js';
 import { ok } from '../core/result.js';
 import { resolveInside, resolveWritableInside } from '../core/paths.js';
 import type { AppConfig } from '../config/schema.js';
@@ -9,6 +9,17 @@ export async function listDir(config: AppConfig, workspace: Workspace, requested
   const resolved = await resolveInside(workspace, requestedPath, config);
   const entries = await listEntries(resolved.absolute, Math.min(maxEntries, 500));
   return ok(`listed ${entries.length} entries`, { path: resolved.relative, entries });
+}
+
+export async function statPath(config: AppConfig, workspace: Workspace, requestedPath: string) {
+  const resolved = await resolveInside(workspace, requestedPath, config);
+  return ok(`stat ${resolved.relative}`, { path: resolved.relative, ...(await fileInfo(resolved.absolute)) });
+}
+
+export async function treeTool(config: AppConfig, workspace: Workspace, requestedPath = '.', maxEntries = 200) {
+  const resolved = await resolveInside(workspace, requestedPath, config);
+  const entries = await treeEntries(resolved.absolute, Math.min(maxEntries, 500));
+  return ok(`tree ${resolved.relative}`, { path: resolved.relative, entries, truncated: entries.length >= Math.min(maxEntries, 500) });
 }
 
 export async function readFileTool(config: AppConfig, workspace: Workspace, requestedPath: string, startLine = 1, maxLines = 250) {

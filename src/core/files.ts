@@ -3,16 +3,51 @@ import path from 'node:path';
 import { truncateText } from './text.js';
 
 export type DirEntry = { name: string; type: 'file' | 'dir' | 'other' };
+export type FileInfo = { type: DirEntry['type']; size: number; modified_at: string };
+export type TreeEntry = DirEntry & { path: string; size?: number };
 
 export async function listEntries(dir: string, maxEntries: number): Promise<DirEntry[]> {
   const entries = await readdir(dir, { withFileTypes: true });
   return entries.slice(0, maxEntries).map((entry) => ({ name: entry.name, type: entryType(entry) }));
 }
 
+function statType(info: { isDirectory(): boolean; isFile(): boolean }): DirEntry['type'] {
+  if (info.isDirectory()) return 'dir';
+  if (info.isFile()) return 'file';
+  return 'other';
+}
+
+async function walkTree(root: string, relative: string, output: TreeEntry[], maxEntries: number): Promise<void> {
+  if (output.length >= maxEntries) return;
+  const absolute = relative === '.' ? root : path.join(root, relative);
+  const entries = await readdir(absolute, { withFileTypes: true });
+  for (const entry of entries) await visitTreeEntry(root, relative, entry, output, maxEntries);
+}
+
+async function visitTreeEntry(root: string, base: string, entry: DirEntrySource, output: TreeEntry[], maxEntries: number): Promise<void> {
+  if (output.length >= maxEntries) return;
+  const entryPath = joinDisplay(base, entry.name);
+  output.push({ path: entryPath, name: entry.name, type: entryType(entry) });
+  if (entry.isDirectory()) await walkTree(root, entryPath, output, maxEntries);
+}
+
+type DirEntrySource = { name: string; isDirectory(): boolean; isFile(): boolean };
+
 function entryType(entry: { isDirectory(): boolean; isFile(): boolean }): DirEntry['type'] {
   if (entry.isDirectory()) return 'dir';
   if (entry.isFile()) return 'file';
   return 'other';
+}
+
+export async function fileInfo(filePath: string): Promise<FileInfo> {
+  const info = await stat(filePath);
+  return { type: statType(info), size: info.size, modified_at: info.mtime.toISOString() };
+}
+
+export async function treeEntries(root: string, maxEntries: number): Promise<TreeEntry[]> {
+  const output: TreeEntry[] = [];
+  await walkTree(root, '.', output, maxEntries);
+  return output;
 }
 
 export async function readTextRange(file: string, startLine: number, maxLines: number, maxBytes: number) {
