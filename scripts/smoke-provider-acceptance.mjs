@@ -37,8 +37,22 @@ async function expectToolSurface(sessionId) {
 
 async function expectBrowserCdp(sessionId) {
   const policy = await call('get_workspace_policy', { workspace_id: workspaceId }, sessionId);
-  if (!JSON.stringify(policy).includes('browser_cdp_browser_call')) return;
+  const policyText = JSON.stringify(policy);
+  if (!policyText.includes('browser_cdp_browser_call')) return;
   await expectText('browser_cdp_browser_call', { workspace_id: workspaceId, method: 'Browser.getVersion' }, 'Browser.getVersion', sessionId);
+  if (!policyText.includes('open_browser_tab') || !policyText.includes('browser_cdp_call')) return;
+  const tabKey = `${workspaceId}-acceptance-cdp-${Date.now()}`;
+  try {
+    await call('open_browser_tab', { workspace_id: workspaceId, url: 'about:blank', tab_key: tabKey }, sessionId);
+    await expectText('browser_cdp_call', {
+      workspace_id: workspaceId,
+      target_id: tabKey,
+      method: 'Runtime.evaluate',
+      params: { expression: '1 + 1', returnByValue: true }
+    }, '2', sessionId);
+  } finally {
+    await call('close_browser_tab', { workspace_id: workspaceId, target_id: tabKey }, sessionId).catch(() => undefined);
+  }
 }
 
 async function checkpointAcceptance(sessionId) {
