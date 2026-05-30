@@ -7,6 +7,7 @@ import { registerGitTools } from './register/git.js';
 import { registerMemoryTools } from './register/memory.js';
 import { registerPatchTools } from './register/patch.js';
 import { registerProcessTools } from './register/processes.js';
+import { registerSkillTools } from './register/skills.js';
 import { registerWorkspaceTools } from './register/workspace.js';
 import type { RegisterContext } from './register/types.js';
 
@@ -18,6 +19,7 @@ export function registerTools(server: McpServer, config: AppConfig, workspaces: 
   registerFileTools(context);
   registerGitTools(context);
   registerMemoryTools(context);
+  registerSkillTools(context);
   registerPatchTools(context);
   registerApprovalTools(context);
   registerProcessTools(context);

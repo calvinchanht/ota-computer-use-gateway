@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -18,6 +18,7 @@ try {
   await call(port, sessionId, 'get_tool_profile', {});
   await exerciseFiles(port, sessionId);
   await exerciseContext(port, sessionId);
+  await exerciseSkills(port, sessionId);
   await exerciseCommand(port, sessionId);
   await exerciseProcess(port, sessionId);
   console.log('primitive smoke ok');
@@ -27,6 +28,8 @@ try {
 
 async function seedWorkspace(rootDir) {
   await writeFile(path.join(rootDir, 'README.md'), '# Primitive Smoke\nhello primitive mcp\n');
+  await mkdir(path.join(rootDir, '.agent/skills/smoke-skill'), { recursive: true });
+  await writeFile(path.join(rootDir, '.agent/skills/smoke-skill/SKILL.md'), '# Smoke Skill\n\ndescription: Smoke skill metadata.\n\nUse smoke skills.\n');
 }
 
 async function exerciseFiles(port, sessionId) {
@@ -47,6 +50,11 @@ async function exerciseContext(port, sessionId) {
   await call(port, sessionId, 'update_current_task', { workspace_id: 'smoke', title: 'Smoke task', body: 'task smoke' });
   await call(port, sessionId, 'checkpoint_thread', { workspace_id: 'smoke', title: 'Smoke checkpoint', summary: 'checkpoint smoke', next_steps: ['ship it'] });
   await expectText(port, sessionId, 'get_context_snapshot', { workspace_id: 'smoke' }, 'checkpoint smoke');
+}
+
+async function exerciseSkills(port, sessionId) {
+  await expectText(port, sessionId, 'list_skills', { workspace_id: 'smoke' }, 'smoke-skill');
+  await expectText(port, sessionId, 'read_skill', { workspace_id: 'smoke', name: 'smoke-skill' }, 'Use smoke skills');
 }
 
 async function exerciseCommand(port, sessionId) {

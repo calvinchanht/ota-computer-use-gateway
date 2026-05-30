@@ -44,11 +44,13 @@ The gateway exposes explicit snake_case MCP primitives for agent runtime work:
 - patches: `propose_patch`, `apply_patch`
 - commands: `run_command`, `run_configured_command`
 - processes: `start_process`, `list_processes`, `read_process`, `write_process`, `stop_process`
+- skills/runbooks: `list_skills`, `read_skill`
 
 `exec` and old `process_*` names exist only as deprecated compatibility aliases. Use `get_tool_profile` for machine-readable canonical names and aliases.
 
 See `docs/PRIMITIVE_RUNTIME.md` for the runtime surface, safety model, and validation gate.
 See `docs/CONTEXT_PICKUP.md` for the chat-thread bootstrap/checkpoint model used by issue #4.
+See `docs/SKILLS.md` for the progressive skill/runbook discovery model used by issue #5.
 
 Validation:
 
