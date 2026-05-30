@@ -55,6 +55,7 @@ See `docs/SKILLS.md` for the progressive skill/runbook discovery model used by i
 See `docs/COMPUTER_USE.md` for the observe/act and `observe_after` foundation used by issue #6.
 See `docs/CATALYST_ADAPTER.md` for the Catalyst adapter MVP plan and setup template used by issue #7.
 See `docs/CATALYST_CONNECTOR.md` for the Catalyst provider connector setup handoff.
+See `docs/CATALYST_PUBLIC_INGRESS.md` for the Catalyst public HTTPS ingress relay and recovery notes.
 
 ## Mickey provider-thread proof
 
