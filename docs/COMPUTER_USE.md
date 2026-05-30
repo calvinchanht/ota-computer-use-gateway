@@ -8,6 +8,7 @@ Issue #6 adds provider-neutral browser/computer-use primitives in small, safe la
 - `browser_status` — returns selected profile metadata, CDP endpoint/reachability, and tab hygiene reminder.
 - `list_browser_tabs` — proxies Chrome CDP `/json/list` and returns page targets/tabs.
 - `browser_tab_info` — returns metadata for one Chrome target/tab by id.
+- `browser_tab_screenshot` — captures a bounded base64 screenshot from one Chrome target/tab through its CDP websocket; gated by `allow_screen`.
 - `open_browser_tab` — opens a URL through Chrome CDP `/json/new`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback.
 - `activate_browser_tab` — focuses an existing Chrome target through CDP `/json/activate/<target_id>`.
 - `close_browser_tab` — closes an existing Chrome target through CDP `/json/close/<target_id>`.

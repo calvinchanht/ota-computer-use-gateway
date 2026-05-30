@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { activateBrowserTab, browserStatus, browserTabInfo, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../../tools/browser.js';
+import { activateBrowserTab, browserStatus, browserTabInfo, browserTabScreenshot, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../../tools/browser.js';
 import { READ_ONLY, RUN_LOCAL } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -9,6 +9,7 @@ export function registerBrowserTools(context: RegisterContext): void {
   registerBrowserStatus(context);
   registerListBrowserTabs(context);
   registerBrowserTabInfo(context);
+  registerBrowserTabScreenshot(context);
   registerOpenBrowserTab(context);
   registerActivateBrowserTab(context);
   registerCloseBrowserTab(context);
@@ -30,6 +31,10 @@ function registerBrowserTabInfo({ server, workspaces }: RegisterContext): void {
   server.registerTool('browser_tab_info', { title: 'Browser tab info', description: 'Return metadata for one Chrome target/tab by id.', inputSchema: targetInfoSchema(), annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_tab_info', (workspace) => browserTabInfo(workspace, args.target_id, args.profile_label)));
 }
 
+function registerBrowserTabScreenshot({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_tab_screenshot', { title: 'Browser tab screenshot', description: 'Capture a screenshot from one Chrome target/tab through CDP.', inputSchema: screenshotSchema(), annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_tab_screenshot', (workspace) => browserTabScreenshot(workspace, args.target_id, args.profile_label, args.format)));
+}
+
 function registerOpenBrowserTab({ server, workspaces }: RegisterContext): void {
   server.registerTool('open_browser_tab', { title: 'Open browser tab', description: 'Open a URL in a new headed Chrome tab through CDP.', inputSchema: { ...profileSchema(), url: z.string(), observe_after: observeAfterSchema().optional() }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'open_browser_tab', (workspace) => openBrowserTab(workspace, args.url, args.profile_label, args.observe_after)));
 }
@@ -48,6 +53,10 @@ function profileSchema() {
 
 function targetInfoSchema() {
   return { ...profileSchema(), target_id: z.string() };
+}
+
+function screenshotSchema() {
+  return { ...targetInfoSchema(), format: z.enum(['png', 'jpeg', 'webp']).optional() };
 }
 
 function targetActionSchema() {

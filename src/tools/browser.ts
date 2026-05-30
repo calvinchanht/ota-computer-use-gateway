@@ -32,15 +32,17 @@ export async function listBrowserTabs(workspace: Workspace, label?: string) {
 
 export async function browserTabInfo(workspace: Workspace, targetId: string, label?: string) {
   const profile = selectedBrowserProfile(workspace, label);
-  const tabs = await fetchCdpJson<ChromeTarget[]>(profile, '/json/list');
-  const tab = tabs.find((target) => target.id === targetId);
-  if (!tab) throw new Error(`browser tab not found: ${targetId}`);
-  return ok('browser tab info', {
-    workspace_id: workspace.id,
-    reminder: REMINDER,
-    profile_label: profile.label,
-    tab: tabSummary(tab)
-  });
+  const tab = await findBrowserTarget(profile, targetId);
+  return ok('browser tab info', tabInfoPayload(workspace, profile, tab));
+}
+
+export async function browserTabScreenshot(workspace: Workspace, targetId: string, label?: string, format: ScreenshotFormat = 'png') {
+  assertScreenAllowed(workspace);
+  const profile = selectedBrowserProfile(workspace, label);
+  const tab = await findBrowserTarget(profile, targetId);
+  if (!tab.webSocketDebuggerUrl) throw new Error(`browser tab has no websocket debugger url: ${targetId}`);
+  const result = await cdpCommand<{ data: string }>(tab.webSocketDebuggerUrl, 'Page.captureScreenshot', { format });
+  return ok('browser tab screenshot captured', { ...tabInfoPayload(workspace, profile, tab), screenshot: screenshotPayload(result.data, format) });
 }
 
 export async function openBrowserTab(workspace: Workspace, url: string, label?: string, observeAfter?: ObserveAfter) {
@@ -72,6 +74,13 @@ async function actionPayload(workspace: Workspace, profile: ReturnType<typeof br
     ...data,
     observation: await observeBrowserAfter(workspace, profile, observeAfter)
   };
+}
+
+async function findBrowserTarget(profile: ReturnType<typeof browserProfile>, targetId: string) {
+  const tabs = await fetchCdpJson<ChromeTarget[]>(profile, '/json/list');
+  const tab = tabs.find((target) => target.id === targetId);
+  if (!tab) throw new Error(`browser tab not found: ${targetId}`);
+  return tab;
 }
 
 async function observeBrowserAfter(workspace: Workspace, profile: ReturnType<typeof browserProfile>, options?: ObserveAfter) {
@@ -118,12 +127,20 @@ function browserTabPayload(workspace: Workspace, profile: ReturnType<typeof brow
   return { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, tabs: tabs.filter(isPageTarget).map(tabSummary) };
 }
 
+function tabInfoPayload(workspace: Workspace, profile: ReturnType<typeof browserProfile>, tab: ChromeTarget) {
+  return { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, tab: tabSummary(tab) };
+}
+
 function tabSummary(target: ChromeTarget) {
   return { id: target.id, title: target.title ?? '', url: target.url ?? '', type: target.type, attached: target.attached ?? false };
 }
 
 function assertBrowserControl(workspace: Workspace) {
   if (!workspace.allow_mouse_keyboard) throw new Error('browser control is not enabled for this workspace');
+}
+
+function assertScreenAllowed(workspace: Workspace) {
+  if (!workspace.allow_screen) throw new Error('screen observation is not enabled for this workspace');
 }
 
 function selectedBrowserProfile(workspace: Workspace, label?: string) {
@@ -157,13 +174,41 @@ type ObserveAfter = {
   tabs?: boolean;
 };
 
+type ScreenshotFormat = 'png' | 'jpeg' | 'webp';
+
 type ChromeTarget = {
   id: string;
   type?: string;
   title?: string;
   url?: string;
   attached?: boolean;
+  webSocketDebuggerUrl?: string;
 };
+
+function screenshotPayload(base64: string, format: ScreenshotFormat) {
+  const bytes = Buffer.from(base64, 'base64').length;
+  if (bytes > 5 * 1024 * 1024) throw new Error('browser screenshot exceeds 5 MiB limit');
+  return { media_type: `image/${format}`, base64, bytes };
+}
+
+async function cdpCommand<T>(url: string, method: string, params: Record<string, unknown>) {
+  return await new Promise<T>((resolve, reject) => {
+    const ws = new WebSocket(url);
+    const timer = setTimeout(() => reject(new Error('CDP command timed out')), 10000);
+    ws.addEventListener('open', () => ws.send(JSON.stringify({ id: 1, method, params })));
+    ws.addEventListener('error', () => reject(new Error('CDP websocket error')));
+    ws.addEventListener('message', (event) => handleCdpMessage(event.data, resolve, reject, timer, ws));
+  });
+}
+
+function handleCdpMessage<T>(data: unknown, resolve: (value: T) => void, reject: (error: Error) => void, timer: NodeJS.Timeout, ws: WebSocket) {
+  const message = JSON.parse(String(data));
+  if (message.id !== 1) return;
+  clearTimeout(timer);
+  ws.close();
+  if (message.error) reject(new Error(message.error.message ?? 'CDP command failed'));
+  else resolve(message.result as T);
+}
 
 function clampDelay(value: number) {
   return Math.min(Math.max(Math.trunc(value), 0), 5000);

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { activateBrowserTab, browserStatus, browserTabInfo, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../src/tools/browser.js';
+import { activateBrowserTab, browserStatus, browserTabInfo, browserTabScreenshot, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../src/tools/browser.js';
 
 describe('browser profile tools', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -39,6 +39,19 @@ describe('browser profile tools', () => {
     mockFetch([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com', attached: true }]);
     const data = (await browserTabInfo(fixtureWorkspace(), '1')).data as any;
     expect(data.tab.url).toBe('https://example.com');
+  });
+
+  it('captures a screenshot from one tab through CDP websocket', async () => {
+    mockFetch([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com', webSocketDebuggerUrl: 'ws://cdp/1' }]);
+    mockWebSocket({ data: Buffer.from('png').toString('base64') });
+    const data = (await browserTabScreenshot(fixtureWorkspace(), '1')).data as any;
+    expect(data.screenshot.media_type).toBe('image/png');
+    expect(data.screenshot.bytes).toBe(3);
+    expect(data.tab.id).toBe('1');
+  });
+
+  it('requires screen permission for browser screenshots', async () => {
+    await expect(browserTabScreenshot(fixtureWorkspace({ allow_screen: false }), '1')).rejects.toThrow('screen observation is not enabled');
   });
 
   it('opens a new tab through CDP with observe_after tabs', async () => {
@@ -82,6 +95,21 @@ function mockFetchSequence(bodies: unknown[]) {
 
 function response(body: unknown) {
   return { ok: true, json: async () => body, text: async () => String(body) };
+}
+
+function mockWebSocket(result: unknown) {
+  class MockWebSocket extends EventTarget {
+    close = vi.fn();
+    constructor(public url: string) {
+      super();
+      setTimeout(() => this.dispatchEvent(new Event('open')), 0);
+    }
+    send = vi.fn(() => {
+      const event = new MessageEvent('message', { data: JSON.stringify({ id: 1, result }) });
+      setTimeout(() => this.dispatchEvent(event), 0);
+    });
+  }
+  vi.stubGlobal('WebSocket', MockWebSocket);
 }
 
 function fixtureWorkspace(overrides: Partial<Workspace> = {}): Workspace {
