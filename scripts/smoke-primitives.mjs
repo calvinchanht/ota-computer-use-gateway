@@ -32,6 +32,11 @@ try {
 async function seedWorkspace(rootDir) {
   await writeFile(path.join(rootDir, 'README.md'), '# Primitive Smoke\nhello primitive mcp\n');
   await mkdir(path.join(rootDir, '.agent/skills/smoke-skill'), { recursive: true });
+  await writeFile(path.join(rootDir, '.agent/AGENT_START_HERE.md'), 'Smoke agent start here: call bootstrap first.\n');
+  await writeFile(path.join(rootDir, '.agent/SOUL.md'), 'Smoke soul: act like an OpenClaw-style workspace agent.\n');
+  await writeFile(path.join(rootDir, '.agent/USER.md'), 'Smoke user context.\n');
+  await writeFile(path.join(rootDir, '.agent/TOOLS.md'), 'Smoke tools context.\n');
+  await writeFile(path.join(rootDir, '.agent/ESTATE_CONTEXT.md'), 'Smoke estate context.\n');
   await writeFile(path.join(rootDir, '.agent/skills/smoke-skill/SKILL.md'), '# Smoke Skill\n\ndescription: Smoke skill metadata.\n\nUse smoke skills.\n');
 }
 
@@ -47,7 +52,8 @@ async function exerciseFiles(port, sessionId) {
 }
 
 async function exerciseContext(port, sessionId) {
-  await expectText(port, sessionId, 'get_agent_bootstrap', { workspace_id: 'smoke' }, 'Checkpoint');
+  await expectText(port, sessionId, 'get_agent_bootstrap', { workspace_id: 'smoke' }, 'agent_start_here');
+  await expectText(port, sessionId, 'get_agent_bootstrap', { workspace_id: 'smoke' }, 'OpenClaw-style workspace agent');
   await call(port, sessionId, 'record_progress', { workspace_id: 'smoke', title: 'Smoke progress', body: 'progress smoke' });
   await call(port, sessionId, 'record_decision', { workspace_id: 'smoke', title: 'Smoke decision', body: 'decision smoke' });
   await call(port, sessionId, 'update_current_task', { workspace_id: 'smoke', title: 'Smoke task', body: 'task smoke' });

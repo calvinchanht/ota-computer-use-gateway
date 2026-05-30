@@ -8,7 +8,9 @@ await expectText('get_tool_profile', {}, 'mcp_explicit', sessionId);
 await expectText('workspace_status', {}, workspaceId, sessionId);
 await call('list_dir', { workspace_id: workspaceId, path: '.' }, sessionId);
 await call('get_workspace_policy', { workspace_id: workspaceId }, sessionId);
-await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'Checkpoint');
+await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'agent_start_here');
+await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'OpenClaw-style workspace agent');
+await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'agent_profile');
 await call('get_context_snapshot', { workspace_id: workspaceId }, sessionId);
 await call('list_skills', { workspace_id: workspaceId }, sessionId);
 
