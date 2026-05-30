@@ -1,0 +1,47 @@
+server:
+  host: "127.0.0.1"
+  port: 8768
+  auth:
+    enabled: false
+    bearer_token_env: "OTA_GATEWAY_BEARER_TOKEN"
+    allow_loopback_without_auth: true
+  rate_limit:
+    enabled: true
+    window_ms: 60000
+    max_requests: 120
+    trust_proxy_headers: false
+
+workspaces:
+  - id: "boba"
+    name: "Boba"
+    root: "/Users/calvinc/.openclaw/workspace"
+    allow_read: true
+    allow_write: true
+    allow_patch: true
+    allow_tests: true
+    allow_screen: true
+    allow_mouse_keyboard: true
+    commands:
+      openclaw-status: "openclaw status"
+      cua-permissions: "cua-driver call check_permissions"
+      cua-windows: "cua-driver call list_windows"
+
+security:
+  max_file_bytes: 200000
+  max_response_bytes: 70000
+  max_request_bytes: 1000000
+  max_search_results: 50
+  max_exec_ms: 120000
+  denied_globs:
+    - ".env"
+    - ".env.*"
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/id_rsa"
+    - "**/id_ed25519"
+    - "**/.ssh/**"
+    - "**/.gnupg/**"
+    - "**/.aws/**"
+    - "**/.kube/**"
+    - "**/*token*"
+    - "**/*secret*"
