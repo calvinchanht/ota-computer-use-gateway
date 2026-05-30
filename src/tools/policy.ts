@@ -19,6 +19,6 @@ function allowedTools(workspace: Workspace): string[] {
   if (workspace.allow_patch) base.push('propose_patch', 'apply_patch');
   if (workspace.allow_tests) base.push('run_command', 'run_configured_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process');
   if (workspace.allow_screen) base.push('observe_screen', 'browser_tab_screenshot', 'browser_tab_snapshot');
-  if (workspace.allow_mouse_keyboard) base.push('open_browser_tab', 'navigate_browser_tab', 'click_browser_tab', 'type_browser_tab', 'browser_cdp_call', 'browser_cdp_batch', 'activate_browser_tab', 'close_browser_tab');
+  if (workspace.allow_mouse_keyboard) base.push('open_browser_tab', 'navigate_browser_tab', 'click_browser_tab', 'type_browser_tab', 'fill_browser_tab_field', 'select_browser_tab_option', 'submit_browser_tab_form', 'press_browser_tab_key', 'scroll_browser_tab', 'browser_cdp_call', 'browser_cdp_batch', 'activate_browser_tab', 'close_browser_tab');
   return base;
 }
