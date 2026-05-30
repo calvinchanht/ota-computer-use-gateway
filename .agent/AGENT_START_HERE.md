@@ -9,7 +9,8 @@ At the start of a fresh or resumed provider chat thread:
 3. Call `get_workspace_policy` and `get_tool_profile` if you need to confirm available capabilities.
 4. Call `list_skills`, then read the `mickey-pickup` skill when starting or resuming Mickey.
 5. Use file, process, browser/CDP, memory, and continuity tools as workspace-scoped primitives.
-6. Record meaningful progress, decisions, and handoff notes before stopping.
+6. For proof runs, follow `.agent/MICKEY_PROVIDER_ACCEPTANCE.md`.
+7. Record meaningful progress, decisions, and handoff notes before stopping.
 
 Operating posture:
 

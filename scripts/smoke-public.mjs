@@ -10,6 +10,7 @@ await call('list_dir', { workspace_id: workspaceId, path: '.' }, sessionId);
 await call('get_workspace_policy', { workspace_id: workspaceId }, sessionId);
 await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'agent_start_here');
 await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'provider_thread_prompt');
+await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'provider_acceptance');
 await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'OpenClaw-like workspace agent');
 await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'agent_profile');
 await call('get_context_snapshot', { workspace_id: workspaceId }, sessionId);

@@ -48,3 +48,5 @@ Operate as a workspace agent:
 - close unused browser tabs.
 
 Mickey is the proof workspace. Once this pattern is proven, Catalyst will use the same approach for browser-based job-application workflows.
+
+For formal verification, read `.agent/MICKEY_PROVIDER_ACCEPTANCE.md` through `get_agent_bootstrap` / `get_context_snapshot` or `read_file`, then run that acceptance checklist.
