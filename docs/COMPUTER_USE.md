@@ -5,7 +5,8 @@ Issue #6 adds provider-neutral browser/computer-use primitives in small, safe la
 ## Current tools
 
 - `list_browser_profiles` — lists configured headed Chrome/CDP profiles for a workspace.
-- `browser_status` — returns selected profile metadata, CDP endpoint, and tab hygiene reminder.
+- `browser_status` — returns selected profile metadata, CDP endpoint/reachability, and tab hygiene reminder.
+- `list_browser_tabs` — proxies Chrome CDP `/json/list` and returns page targets/tabs.
 - `computer_status` — returns workspace computer-use capability posture and adapter status.
 - `observe_screen` — returns the screen observation shape when `allow_screen` is enabled. Platform adapters will fill screenshot/window-tree data in later slices.
 

@@ -17,10 +17,47 @@ export async function browserStatus(workspace: Workspace, label?: string) {
     reminder: REMINDER,
     profile,
     cdp: {
-      endpoint: `http://${profile.cdp_host}:${profile.cdp_port}`,
+      endpoint: cdpEndpoint(profile),
+      reachable: await cdpReachable(profile),
       note: 'Browser tools use Chrome DevTools Protocol against a headed Chrome profile.'
     }
   });
+}
+
+export async function listBrowserTabs(workspace: Workspace, label?: string) {
+  const profile = selectedBrowserProfile(workspace, label);
+  const tabs = await fetchCdpJson<ChromeTarget[]>(profile, '/json/list');
+  return ok(`listed ${tabs.length} browser tabs`, {
+    workspace_id: workspace.id,
+    reminder: REMINDER,
+    profile_label: profile.label,
+    tabs: tabs.filter(isPageTarget).map(tabSummary)
+  });
+}
+
+async function cdpReachable(profile: ReturnType<typeof browserProfile>) {
+  try {
+    await fetchCdpJson(profile, '/json/version');
+    return true;
+  } catch { return false; }
+}
+
+async function fetchCdpJson<T>(profile: ReturnType<typeof browserProfile>, path: string): Promise<T> {
+  const res = await fetch(`${cdpEndpoint(profile)}${path}`);
+  if (!res.ok) throw new Error(`CDP request failed: ${res.status}`);
+  return await res.json() as T;
+}
+
+function cdpEndpoint(profile: ReturnType<typeof browserProfile>) {
+  return `http://${profile.cdp_host}:${profile.cdp_port}`;
+}
+
+function isPageTarget(target: ChromeTarget) {
+  return target.type === 'page';
+}
+
+function tabSummary(target: ChromeTarget) {
+  return { id: target.id, title: target.title ?? '', url: target.url ?? '', type: target.type, attached: target.attached ?? false };
 }
 
 function selectedBrowserProfile(workspace: Workspace, label?: string) {
@@ -48,6 +85,14 @@ function browserProfile(workspace: Workspace, profile: BrowserProfile, index: nu
     launch: profile.launch ?? false
   };
 }
+
+type ChromeTarget = {
+  id: string;
+  type?: string;
+  title?: string;
+  url?: string;
+  attached?: boolean;
+};
 
 function defaultProfile(workspace: Workspace): BrowserProfile {
   return {

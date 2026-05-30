@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { browserStatus, listBrowserProfiles } from '../src/tools/browser.js';
+import { browserStatus, listBrowserProfiles, listBrowserTabs } from '../src/tools/browser.js';
 
 describe('browser profile tools', () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it('defaults browser profile label to workspace id', async () => {
     const result = await listBrowserProfiles(fixtureWorkspace());
     const data = result.data as any;
@@ -23,6 +25,7 @@ describe('browser profile tools', () => {
   });
 
   it('returns selected browser status with CDP endpoint', async () => {
+    mockFetch({ Browser: 'Chrome' });
     const workspace = fixtureWorkspace({
       browser: { profiles: [{ label: 'work', cdp_host: '127.0.0.1', cdp_port: 9444, headed: true, default: true, launch: false }] }
     });
@@ -30,12 +33,25 @@ describe('browser profile tools', () => {
     const data = (await browserStatus(workspace, 'work')).data as any;
     expect(data.profile.label).toBe('work');
     expect(data.cdp.endpoint).toBe('http://127.0.0.1:9444');
+    expect(data.cdp.reachable).toBe(true);
+  });
+
+  it('lists page targets from Chrome CDP', async () => {
+    mockFetch([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com', attached: true }, { id: '2', type: 'service_worker' }]);
+
+    const data = (await listBrowserTabs(fixtureWorkspace())).data as any;
+    expect(data.reminder).toBe('Close unused tabs.');
+    expect(data.tabs).toEqual([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com', attached: true }]);
   });
 
   it('rejects unknown profile labels', async () => {
     await expect(browserStatus(fixtureWorkspace(), 'missing')).rejects.toThrow('unknown browser profile');
   });
 });
+
+function mockFetch(body: unknown) {
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => body })));
+}
 
 function fixtureWorkspace(overrides: Partial<Workspace> = {}): Workspace {
   return {
