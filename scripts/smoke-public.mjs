@@ -10,6 +10,7 @@ await call('list_dir', { workspace_id: workspaceId, path: '.' }, sessionId);
 await call('get_workspace_policy', { workspace_id: workspaceId }, sessionId);
 await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'Checkpoint');
 await call('get_context_snapshot', { workspace_id: workspaceId }, sessionId);
+await call('list_skills', { workspace_id: workspaceId }, sessionId);
 
 if (allowWrite) await writeSmoke(sessionId);
 console.log(`public smoke ok (${allowWrite ? 'read/write' : 'read-only'})`);
@@ -21,6 +22,7 @@ async function writeSmoke(sessionId) {
   await call('edit_file', { workspace_id: workspaceId, path, old_text: 'before', new_text: 'after' }, sessionId);
   await expectText('read_file', { workspace_id: workspaceId, path }, `after ${stamp}`, sessionId);
   await contextWriteSmoke(sessionId, stamp);
+  await skillWriteSmoke(sessionId, stamp);
   await call('create_local_approval', { workspace_id: workspaceId, action: 'run_command', approved_by: 'public-smoke' }, sessionId);
   await expectText('run_command', { workspace_id: workspaceId, command: 'printf public-command-smoke' }, 'public-command-smoke', sessionId);
 }
@@ -33,6 +35,15 @@ async function contextWriteSmoke(sessionId, stamp) {
   await call('checkpoint_thread', { workspace_id: workspaceId, title: 'Public smoke checkpoint', summary: `checkpoint ${stamp}`, next_steps: ['continue'] }, sessionId);
   await expectText('get_context_snapshot', { workspace_id: workspaceId }, `checkpoint ${stamp}`, sessionId);
   await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, `handoff ${stamp}`, sessionId);
+}
+
+async function skillWriteSmoke(sessionId, stamp) {
+  const name = 'public-smoke-skill';
+  const skillPath = `.agent/skills/${name}/SKILL.md`;
+  const text = `# Public Smoke Skill\n\ndescription: Public smoke skill ${stamp}.\n\nUse public smoke skills.\n`;
+  await call('write_file', { workspace_id: workspaceId, path: skillPath, content: text, overwrite: true }, sessionId);
+  await expectText('list_skills', { workspace_id: workspaceId }, name, sessionId);
+  await expectText('read_skill', { workspace_id: workspaceId, name }, `Public smoke skill ${stamp}`, sessionId);
 }
 
 async function initialize() {
