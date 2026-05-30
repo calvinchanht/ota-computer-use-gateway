@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { activateBrowserTab, browserStatus, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../../tools/browser.js';
+import { activateBrowserTab, browserStatus, browserTabInfo, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../../tools/browser.js';
 import { READ_ONLY, RUN_LOCAL } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -8,6 +8,7 @@ export function registerBrowserTools(context: RegisterContext): void {
   registerListBrowserProfiles(context);
   registerBrowserStatus(context);
   registerListBrowserTabs(context);
+  registerBrowserTabInfo(context);
   registerOpenBrowserTab(context);
   registerActivateBrowserTab(context);
   registerCloseBrowserTab(context);
@@ -25,24 +26,32 @@ function registerListBrowserTabs({ server, workspaces }: RegisterContext): void 
   server.registerTool('list_browser_tabs', { title: 'List browser tabs', description: 'List Chrome page targets through the configured CDP debug port.', inputSchema: profileSchema(), annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'list_browser_tabs', (workspace) => listBrowserTabs(workspace, args.profile_label)));
 }
 
+function registerBrowserTabInfo({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_tab_info', { title: 'Browser tab info', description: 'Return metadata for one Chrome target/tab by id.', inputSchema: targetInfoSchema(), annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_tab_info', (workspace) => browserTabInfo(workspace, args.target_id, args.profile_label)));
+}
+
 function registerOpenBrowserTab({ server, workspaces }: RegisterContext): void {
   server.registerTool('open_browser_tab', { title: 'Open browser tab', description: 'Open a URL in a new headed Chrome tab through CDP.', inputSchema: { ...profileSchema(), url: z.string(), observe_after: observeAfterSchema().optional() }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'open_browser_tab', (workspace) => openBrowserTab(workspace, args.url, args.profile_label, args.observe_after)));
 }
 
 function registerActivateBrowserTab({ server, workspaces }: RegisterContext): void {
-  server.registerTool('activate_browser_tab', { title: 'Activate browser tab', description: 'Focus a Chrome target/tab through CDP.', inputSchema: targetSchema(), annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'activate_browser_tab', (workspace) => activateBrowserTab(workspace, args.target_id, args.profile_label, args.observe_after)));
+  server.registerTool('activate_browser_tab', { title: 'Activate browser tab', description: 'Focus a Chrome target/tab through CDP.', inputSchema: targetActionSchema(), annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'activate_browser_tab', (workspace) => activateBrowserTab(workspace, args.target_id, args.profile_label, args.observe_after)));
 }
 
 function registerCloseBrowserTab({ server, workspaces }: RegisterContext): void {
-  server.registerTool('close_browser_tab', { title: 'Close browser tab', description: 'Close a Chrome target/tab through CDP.', inputSchema: targetSchema(), annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'close_browser_tab', (workspace) => closeBrowserTab(workspace, args.target_id, args.profile_label, args.observe_after)));
+  server.registerTool('close_browser_tab', { title: 'Close browser tab', description: 'Close a Chrome target/tab through CDP.', inputSchema: targetActionSchema(), annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'close_browser_tab', (workspace) => closeBrowserTab(workspace, args.target_id, args.profile_label, args.observe_after)));
 }
 
 function profileSchema() {
   return { workspace_id: z.string(), profile_label: z.string().optional() };
 }
 
-function targetSchema() {
-  return { ...profileSchema(), target_id: z.string(), observe_after: observeAfterSchema().optional() };
+function targetInfoSchema() {
+  return { ...profileSchema(), target_id: z.string() };
+}
+
+function targetActionSchema() {
+  return { ...targetInfoSchema(), observe_after: observeAfterSchema().optional() };
 }
 
 function observeAfterSchema() {

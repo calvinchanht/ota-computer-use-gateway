@@ -30,6 +30,19 @@ export async function listBrowserTabs(workspace: Workspace, label?: string) {
   return ok(`listed ${tabs.length} browser tabs`, browserTabPayload(workspace, profile, tabs));
 }
 
+export async function browserTabInfo(workspace: Workspace, targetId: string, label?: string) {
+  const profile = selectedBrowserProfile(workspace, label);
+  const tabs = await fetchCdpJson<ChromeTarget[]>(profile, '/json/list');
+  const tab = tabs.find((target) => target.id === targetId);
+  if (!tab) throw new Error(`browser tab not found: ${targetId}`);
+  return ok('browser tab info', {
+    workspace_id: workspace.id,
+    reminder: REMINDER,
+    profile_label: profile.label,
+    tab: tabSummary(tab)
+  });
+}
+
 export async function openBrowserTab(workspace: Workspace, url: string, label?: string, observeAfter?: ObserveAfter) {
   assertBrowserControl(workspace);
   const profile = selectedBrowserProfile(workspace, label);

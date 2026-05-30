@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { activateBrowserTab, browserStatus, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../src/tools/browser.js';
+import { activateBrowserTab, browserStatus, browserTabInfo, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../src/tools/browser.js';
 
 describe('browser profile tools', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -33,6 +33,12 @@ describe('browser profile tools', () => {
     mockFetch([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com', attached: true }, { id: '2', type: 'service_worker' }]);
     const data = (await listBrowserTabs(fixtureWorkspace())).data as any;
     expect(data.tabs).toEqual([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com', attached: true }]);
+  });
+
+  it('returns metadata for one tab by id', async () => {
+    mockFetch([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com', attached: true }]);
+    const data = (await browserTabInfo(fixtureWorkspace(), '1')).data as any;
+    expect(data.tab.url).toBe('https://example.com');
   });
 
   it('opens a new tab through CDP with observe_after tabs', async () => {
