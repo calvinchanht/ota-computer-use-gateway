@@ -21,9 +21,10 @@ function canonicalTools(): string[] {
     'browser_cdp_call', 'browser_cdp_batch', 'activate_browser_tab', 'close_browser_tab',
     'computer_status', 'observe_screen',
     'read_file', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
-    'run_command', 'run_configured_command', 'list_dir', 'search_files',
-    'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',
-    'get_context_snapshot', 'get_agent_bootstrap', 'list_skills', 'read_skill',
+    'run_command', 'run_configured_command', 'list_dir', 'stat_path', 'tree', 'search_files',
+    'git_status', 'git_diff', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',
+    'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'memory_search', 'memory_write',
+    'list_skills', 'read_skill', 'approval_status',
     'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread'
   ];
 }

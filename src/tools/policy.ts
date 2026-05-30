@@ -14,8 +14,8 @@ export function workspacePolicy(workspace: Workspace) {
 
 function allowedTools(workspace: Workspace): string[] {
   const base = ['heartbeat', 'workspace_status', 'get_workspace_policy', 'get_tool_profile', 'list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_tab_info', 'computer_status'];
-  if (workspace.allow_read) base.push('list_dir', 'stat_path', 'tree', 'read_file', 'read_binary_file', 'search_files', 'git_status', 'git_diff', 'get_context_snapshot', 'get_agent_bootstrap', 'list_skills', 'read_skill');
-  if (workspace.allow_write) base.push('write_file', 'write_binary_file', 'edit_file', 'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread');
+  if (workspace.allow_read) base.push('list_dir', 'stat_path', 'tree', 'read_file', 'read_binary_file', 'search_files', 'git_status', 'git_diff', 'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'memory_search', 'list_skills', 'read_skill', 'approval_status');
+  if (workspace.allow_write) base.push('write_file', 'write_binary_file', 'edit_file', 'memory_write', 'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread');
   if (workspace.allow_patch) base.push('propose_patch', 'apply_patch');
   if (workspace.allow_tests) base.push('run_command', 'run_configured_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process');
   if (workspace.allow_screen) base.push('observe_screen', 'browser_tab_screenshot', 'browser_tab_snapshot');
