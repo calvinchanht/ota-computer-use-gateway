@@ -46,7 +46,7 @@ function registerBrowserTabSnapshot({ server, workspaces }: RegisterContext): vo
 }
 
 function registerOpenBrowserTab({ server, workspaces }: RegisterContext): void {
-  server.registerTool('open_browser_tab', { title: 'Open browser tab', description: 'Open a URL in a new headed Chrome tab through CDP.', inputSchema: { ...profileSchema(), url: z.string(), observe_after: observeAfterSchema().optional() }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'open_browser_tab', (workspace) => openBrowserTab(workspace, args.url, args.profile_label, args.observe_after)));
+  server.registerTool('open_browser_tab', { title: 'Open browser tab', description: 'Open a URL in a new headed Chrome tab through CDP. Optionally assign a stable tab_key that can be used anywhere target_id is accepted.', inputSchema: { ...profileSchema(), url: z.string(), tab_key: tabKeySchema().optional(), observe_after: observeAfterSchema().optional() }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'open_browser_tab', (workspace) => openBrowserTab(workspace, args.url, args.profile_label, args.observe_after, args.tab_key)));
 }
 
 function registerNavigateBrowserTab({ server, workspaces }: RegisterContext): void {
@@ -82,7 +82,7 @@ function profileSchema() {
 }
 
 function targetInfoSchema() {
-  return { ...profileSchema(), target_id: z.string() };
+  return { ...profileSchema(), target_id: z.string().describe('Raw Chrome target id or stable tab_key assigned by open_browser_tab.') };
 }
 
 function screenshotSchema() {
@@ -107,4 +107,8 @@ function targetActionSchema() {
 
 function observeAfterSchema() {
   return z.object({ delay_ms: z.number().int().min(0).max(5000).optional(), tabs: z.boolean().optional() });
+}
+
+function tabKeySchema() {
+  return z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,63}$/);
 }

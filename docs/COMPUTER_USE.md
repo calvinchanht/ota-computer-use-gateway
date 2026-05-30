@@ -6,18 +6,18 @@ Issue #6 adds provider-neutral browser/computer-use primitives in small, safe la
 
 - `list_browser_profiles` — lists configured headed Chrome/CDP profiles for a workspace.
 - `browser_status` — returns selected profile metadata, CDP endpoint/reachability, and tab hygiene reminder.
-- `list_browser_tabs` — proxies Chrome CDP `/json/list` and returns page targets/tabs.
-- `browser_tab_info` — returns metadata for one Chrome target/tab by id.
+- `list_browser_tabs` — proxies Chrome CDP `/json/list` and returns page targets/tabs, including stable `key` values when assigned.
+- `browser_tab_info` — returns metadata for one Chrome target/tab by raw id or stable tab key.
 - `browser_tab_screenshot` — captures a bounded base64 screenshot from one Chrome target/tab through its CDP websocket; gated by `allow_screen`.
 - `browser_tab_snapshot` — captures a bounded JSON DOM snapshot from one Chrome target/tab through `DOMSnapshot.captureSnapshot`; gated by `allow_screen`.
-- `open_browser_tab` — opens a URL through Chrome CDP `/json/new`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback.
-- `navigate_browser_tab` — navigates an existing Chrome target/tab through `Page.navigate`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback.
-- `click_browser_tab` — dispatches a left mouse click at viewport coordinates through `Input.dispatchMouseEvent`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback.
-- `type_browser_tab` — inserts bounded text into the focused element through `Input.insertText`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback.
-- `browser_cdp_call` — proxies one Chrome DevTools Protocol method through a scoped target websocket; gated by `allow_mouse_keyboard`.
-- `browser_cdp_batch` — proxies up to 20 Chrome DevTools Protocol calls through a scoped target websocket; gated by `allow_mouse_keyboard`.
-- `activate_browser_tab` — focuses an existing Chrome target through CDP `/json/activate/<target_id>`.
-- `close_browser_tab` — closes an existing Chrome target through CDP `/json/close/<target_id>`.
+- `open_browser_tab` — opens a URL through Chrome CDP `/json/new`, gated by `allow_mouse_keyboard`, with optional `tab_key` assignment and `observe_after.tabs` feedback.
+- `navigate_browser_tab` — navigates an existing Chrome target/tab through `Page.navigate`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback. `target_id` may be a raw Chrome target id or assigned stable tab key.
+- `click_browser_tab` — dispatches a left mouse click at viewport coordinates through `Input.dispatchMouseEvent`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback. `target_id` may be a raw id or stable key.
+- `type_browser_tab` — inserts bounded text into the focused element through `Input.insertText`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback. `target_id` may be a raw id or stable key.
+- `browser_cdp_call` — proxies one Chrome DevTools Protocol method through a scoped target websocket; gated by `allow_mouse_keyboard`. `target_id` may be a raw id or stable key.
+- `browser_cdp_batch` — proxies up to 20 Chrome DevTools Protocol calls through a scoped target websocket; gated by `allow_mouse_keyboard`. `target_id` may be a raw id or stable key.
+- `activate_browser_tab` — focuses an existing Chrome target through CDP `/json/activate/<target_id>`. `target_id` may be a raw id or stable key.
+- `close_browser_tab` — closes an existing Chrome target through CDP `/json/close/<target_id>`. `target_id` may be a raw id or stable key.
 - `computer_status` — returns workspace computer-use capability posture and adapter status.
 - `observe_screen` — returns the screen observation shape when `allow_screen` is enabled. Platform adapters will fill screenshot/window-tree data in later slices.
 
@@ -47,6 +47,30 @@ Browser status/profile responses include:
 ```json
 { "reminder": "Close unused tabs." }
 ```
+
+## Stable browser tab keys
+
+Provider chat threads can assign a durable, human-readable `tab_key` when opening a tab:
+
+```json
+{
+  "workspace_id": "catalyst",
+  "url": "https://example.com/jobs",
+  "tab_key": "job-search-main"
+}
+```
+
+The gateway stores key bindings under the workspace `.agent/browser-tabs.json`. Later browser tools may pass that stable key anywhere `target_id` is accepted:
+
+```json
+{
+  "workspace_id": "catalyst",
+  "target_id": "job-search-main",
+  "url": "https://example.com/jobs?q=designer"
+}
+```
+
+Responses still expose the raw Chrome target id for debugging and CDP-level work, but stable keys are preferred for long-running provider-thread workflows.
 
 ## `observe_after` convention
 

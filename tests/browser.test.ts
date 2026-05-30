@@ -32,7 +32,7 @@ describe('browser profile tools', () => {
   it('lists page targets from Chrome CDP', async () => {
     mockFetch([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com', attached: true }, { id: '2', type: 'service_worker' }]);
     const data = (await listBrowserTabs(fixtureWorkspace())).data as any;
-    expect(data.tabs).toEqual([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com', attached: true }]);
+    expect(data.tabs).toEqual([{ id: '1', key: null, type: 'page', title: 'Home', url: 'https://example.com', attached: true }]);
   });
 
   it('returns metadata for one tab by id', async () => {
@@ -68,6 +68,21 @@ describe('browser profile tools', () => {
     const data = (await openBrowserTab(controlWorkspace(), 'https://example.com', undefined, { tabs: true })).data as any;
     expect(data.opened.id).toBe('new');
     expect(data.observation.tabs[0].url).toBe('https://example.com');
+  });
+
+  it('assigns stable tab keys and resolves them as target ids', async () => {
+    const workspace = controlWorkspace({ root: '/tmp/stable-tabs', realRoot: '/tmp/stable-tabs' });
+    mockFetchSequence([
+      { id: 'new', type: 'page', title: 'New', url: 'https://example.com' },
+      [{ id: 'new', type: 'page', title: 'New', url: 'https://example.com', webSocketDebuggerUrl: 'ws://cdp/new' }],
+      [{ id: 'new', type: 'page', title: 'Jobs', url: 'https://example.com/jobs', webSocketDebuggerUrl: 'ws://cdp/new' }]
+    ]);
+    const opened = (await openBrowserTab(workspace, 'https://example.com', undefined, undefined, 'job-search-main')).data as any;
+    mockWebSocket({ frameId: 'frame-1' });
+    const nav = (await navigateBrowserTab(workspace, 'job-search-main', 'https://example.com/jobs')).data as any;
+    expect(opened.opened.key).toBe('job-search-main');
+    expect(nav.target_id).toBe('new');
+    expect(nav.target_ref).toBe('job-search-main');
   });
 
   it('navigates an existing tab through CDP websocket', async () => {
@@ -126,7 +141,7 @@ describe('browser profile tools', () => {
   });
 
   it('activates and closes tabs through CDP', async () => {
-    mockFetchSequence(['Target activated', [{ id: '1', type: 'page' }], 'Target is closing']);
+    mockFetchSequence([[{ id: '1', type: 'page' }], 'Target activated', [{ id: '1', type: 'page' }], [{ id: '1', type: 'page' }], 'Target is closing']);
     const active = (await activateBrowserTab(controlWorkspace(), '1', undefined, { tabs: true })).data as any;
     const closed = (await closeBrowserTab(controlWorkspace(), '1')).data as any;
     expect(active.target_id).toBe('1');
@@ -148,8 +163,8 @@ describe('browser profile tools', () => {
   });
 });
 
-function controlWorkspace() {
-  return fixtureWorkspace({ allow_mouse_keyboard: true });
+function controlWorkspace(overrides: Partial<Workspace> = {}) {
+  return fixtureWorkspace({ allow_mouse_keyboard: true, ...overrides });
 }
 
 function mockFetch(body: unknown) {
