@@ -14,7 +14,8 @@
     "smoke:stdio": "npm run build && node scripts/smoke-stdio.mjs",
     "smoke:http": "npm run build && node scripts/smoke-http.mjs",
     "smoke:primitives": "npm run build && node scripts/smoke-primitives.mjs",
-    "smoke:public": "node scripts/smoke-public.mjs"
+    "smoke:public": "node scripts/smoke-public.mjs",
+    "smoke:mickey-acceptance": "node scripts/smoke-mickey-acceptance.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
