@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { activateBrowserTab, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, closeBrowserTab, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab } from '../src/tools/browser.js';
+import { activateBrowserTab, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab } from '../src/tools/browser.js';
 
 describe('browser profile tools', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -81,6 +81,19 @@ describe('browser profile tools', () => {
     expect(data.observation.tabs[0].url).toBe('https://example.com/next');
   });
 
+  it('clicks viewport coordinates through CDP websocket', async () => {
+    mockFetchSequence([
+      [{ id: '1', type: 'page', webSocketDebuggerUrl: 'ws://cdp/1' }],
+      [{ id: '1', type: 'page', title: 'Clicked', url: 'https://example.com' }]
+    ]);
+    const sends = mockWebSocket({});
+    const data = (await clickBrowserTab(controlWorkspace(), '1', 12.9, 34.2, undefined, { tabs: true })).data as any;
+    expect(data.click).toEqual({ x: 12, y: 34 });
+    expect(data.observation.tabs[0].title).toBe('Clicked');
+    expect(sends[0]).toContain('mousePressed');
+    expect(sends[1]).toContain('mouseReleased');
+  });
+
   it('activates and closes tabs through CDP', async () => {
     mockFetchSequence(['Target activated', [{ id: '1', type: 'page' }], 'Target is closing']);
     const active = (await activateBrowserTab(controlWorkspace(), '1', undefined, { tabs: true })).data as any;
@@ -93,6 +106,7 @@ describe('browser profile tools', () => {
   it('requires browser control for tab mutations', async () => {
     await expect(openBrowserTab(fixtureWorkspace(), 'https://example.com')).rejects.toThrow('browser control is not enabled');
     await expect(navigateBrowserTab(fixtureWorkspace(), '1', 'https://example.com')).rejects.toThrow('browser control is not enabled');
+    await expect(clickBrowserTab(fixtureWorkspace(), '1', 1, 1)).rejects.toThrow('browser control is not enabled');
     await expect(closeBrowserTab(fixtureWorkspace(), '1')).rejects.toThrow('browser control is not enabled');
   });
 
@@ -119,18 +133,22 @@ function response(body: unknown) {
 }
 
 function mockWebSocket(result: unknown) {
+  const sends: string[] = [];
   class MockWebSocket extends EventTarget {
     close = vi.fn();
     constructor(public url: string) {
       super();
       setTimeout(() => this.dispatchEvent(new Event('open')), 0);
     }
-    send = vi.fn(() => {
-      const event = new MessageEvent('message', { data: JSON.stringify({ id: 1, result }) });
+    send = vi.fn((message: string) => {
+      sends.push(message);
+      const id = JSON.parse(message).id;
+      const event = new MessageEvent('message', { data: JSON.stringify({ id, result }) });
       setTimeout(() => this.dispatchEvent(event), 0);
     });
   }
   vi.stubGlobal('WebSocket', MockWebSocket);
+  return sends;
 }
 
 function fixtureWorkspace(overrides: Partial<Workspace> = {}): Workspace {

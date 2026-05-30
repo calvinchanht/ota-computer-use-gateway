@@ -64,6 +64,14 @@ export async function navigateBrowserTab(workspace: Workspace, targetId: string,
   return ok('browser tab navigated', await actionPayload(workspace, profile, { target_id: targetId, navigation: result }, observeAfter));
 }
 
+export async function clickBrowserTab(workspace: Workspace, targetId: string, x: number, y: number, label?: string, observeAfter?: ObserveAfter) {
+  assertBrowserControl(workspace);
+  const { profile, tab } = await websocketTarget(workspace, targetId, label);
+  const point = { x: boundedCoordinate(x), y: boundedCoordinate(y) };
+  await dispatchMouseClick(tab.webSocketDebuggerUrl, point);
+  return ok('browser tab clicked', await actionPayload(workspace, profile, { target_id: targetId, click: point }, observeAfter));
+}
+
 export async function activateBrowserTab(workspace: Workspace, targetId: string, label?: string, observeAfter?: ObserveAfter) {
   assertBrowserControl(workspace);
   const profile = selectedBrowserProfile(workspace, label);
@@ -219,6 +227,16 @@ function boundedJson(value: unknown) {
   const json = JSON.stringify(value);
   const limit = 200_000;
   return { truncated: json.length > limit, chars: Math.min(json.length, limit), json: json.slice(0, limit) };
+}
+
+async function dispatchMouseClick(url: string, point: { x: number; y: number }) {
+  await cdpCommand(url, 'Input.dispatchMouseEvent', { type: 'mousePressed', ...point, button: 'left', clickCount: 1 });
+  await cdpCommand(url, 'Input.dispatchMouseEvent', { type: 'mouseReleased', ...point, button: 'left', clickCount: 1 });
+}
+
+function boundedCoordinate(value: number) {
+  if (!Number.isFinite(value)) throw new Error('browser click coordinates must be finite numbers');
+  return Math.min(Math.max(Math.trunc(value), 0), 100_000);
 }
 
 async function cdpCommand<T>(url: string, method: string, params: Record<string, unknown>) {
