@@ -53,6 +53,7 @@ See `docs/PRIMITIVE_RUNTIME.md` for the runtime surface, safety model, and valid
 See `docs/CONTEXT_PICKUP.md` for the chat-thread bootstrap/checkpoint model used by issue #4 and the Mickey provider-thread proof used by issue #11.
 See `docs/SKILLS.md` for the progressive skill/runbook discovery model used by issue #5.
 See `docs/COMPUTER_USE.md` for the observe/act and `observe_after` foundation used by issue #6.
+See `docs/CATALYST_ADAPTER.md` for the Catalyst adapter MVP plan and setup template used by issue #7.
 
 ## Mickey provider-thread proof
 
