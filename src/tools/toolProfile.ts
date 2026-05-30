@@ -16,7 +16,8 @@ function canonicalTools(): string[] {
   return [
     'read_file', 'write_file', 'edit_file', 'apply_patch',
     'run_command', 'run_configured_command', 'list_dir', 'search_files',
-    'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process'
+    'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',
+    'get_context_snapshot', 'record_progress'
   ];
 }
 
