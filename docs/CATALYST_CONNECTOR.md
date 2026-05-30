@@ -53,7 +53,17 @@ Start by calling:
 
 get_agent_bootstrap({ "workspace_id": "catalyst" })
 
-Then orient from agent_start_here, agent_profile, current_task, recent_handoff, recent_progress, recent_checkpoints, and next_actions.
+Then orient from operating_model, capability_discovery, agent_start_here, agent_profile, current_task, recent_handoff, recent_progress, recent_checkpoints, and next_actions.
+
+Immediately inspect your available MCP tool catalog and policy before saying a capability is unavailable:
+
+get_workspace_policy({ "workspace_id": "catalyst" })
+get_tool_profile({})
+list_dir({ "workspace_id": "catalyst", "path": "." })
+tree({ "workspace_id": "catalyst", "path": ".", "max_depth": 2 })
+read_file({ "workspace_id": "catalyst", "path": ".agent/AGENT_START_HERE.md" })
+
+Important: you do not have raw SSH by default, but you do have scoped Catalyst VPS workspace access through MCP file/process/browser/memory/skill/artifact tools when policy exposes them.
 
 For the startup/resume runbook, call:
 
@@ -66,7 +76,7 @@ list_browser_profiles({ "workspace_id": "catalyst" })
 browser_status({ "workspace_id": "catalyst" })
 list_browser_tabs({ "workspace_id": "catalyst" })
 
-Operate as a workspace agent: inspect context, use scoped browser/CDP tools, record continuity, and stop for Calvin before CAPTCHA/human verification, submissions, account creation, uploads, credentials, or irreversible external actions.
+Operate as a workspace agent: inspect context, use scoped file/process/browser/CDP/memory/skill/artifact tools, record continuity, and stop for Calvin before CAPTCHA/human verification, submissions, account creation, uploads, credentials, or irreversible external actions.
 
 Close unused browser tabs.
 ```
@@ -84,13 +94,16 @@ A fresh provider thread should be able to run:
 1. `get_agent_bootstrap({ "workspace_id": "catalyst" })`
 2. `get_workspace_policy({ "workspace_id": "catalyst" })`
 3. `get_tool_profile({})`
-4. `list_skills({ "workspace_id": "catalyst" })`
-5. `read_skill({ "workspace_id": "catalyst", "name": "catalyst-pickup" })`
-6. `list_browser_profiles({ "workspace_id": "catalyst" })`
-7. `browser_status({ "workspace_id": "catalyst" })`
-8. `list_browser_tabs({ "workspace_id": "catalyst" })`
-9. `checkpoint_thread(...)`
-10. `get_agent_bootstrap({ "workspace_id": "catalyst" })` and verify the checkpoint appears.
+4. `list_dir({ "workspace_id": "catalyst", "path": "." })`
+5. `tree({ "workspace_id": "catalyst", "path": ".", "max_depth": 2 })`
+6. `read_file({ "workspace_id": "catalyst", "path": ".agent/AGENT_START_HERE.md" })`
+7. `list_skills({ "workspace_id": "catalyst" })`
+8. `read_skill({ "workspace_id": "catalyst", "name": "catalyst-pickup" })`
+9. `list_browser_profiles({ "workspace_id": "catalyst" })`
+10. `browser_status({ "workspace_id": "catalyst" })`
+11. `list_browser_tabs({ "workspace_id": "catalyst" })`
+12. `checkpoint_thread(...)`
+13. `get_agent_bootstrap({ "workspace_id": "catalyst" })` and verify the checkpoint appears.
 
 ## Safety boundaries
 

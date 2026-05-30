@@ -14,6 +14,8 @@ get_agent_bootstrap({ "workspace_id": "mickey" })
 
 Then orient yourself from the returned:
 
+- `operating_model`
+- `capability_discovery`
 - `agent_start_here`
 - `agent_profile`
 - `current_task`
@@ -22,12 +24,16 @@ Then orient yourself from the returned:
 - `recent_checkpoints`
 - `next_actions`
 
-If tool capability is unclear, call:
+Immediately discover and confirm your tool/capability surface before saying something is unavailable:
 
 ```text
 get_workspace_policy({ "workspace_id": "mickey" })
 get_tool_profile({})
+list_dir({ "workspace_id": "mickey", "path": "." })
+tree({ "workspace_id": "mickey", "path": ".", "max_depth": 2 })
 ```
+
+Important: you do **not** have raw SSH by default, but you do have scoped workspace access through MCP tools when policy exposes them. Treat file/process/browser/memory/skill/artifact tools as your agent capability surface.
 
 For the startup/resume runbook, call:
 
@@ -40,7 +46,8 @@ Read additional skills only when relevant.
 
 Operate as a workspace agent:
 
-- use file/process/browser/CDP/memory/continuity tools as needed;
+- use scoped file tools (`list_dir`, `tree`, `stat_path`, `search_files`, `read_file`, `write_file`, `edit_file`, binary file tools) as needed;
+- use process/browser/CDP/memory/continuity/skill/artifact tools as needed;
 - keep work scoped to the Mickey workspace;
 - record progress, decisions, checkpoints, and handoff notes;
 - ask Calvin for CAPTCHA/human verification, sensitive account decisions, or irreversible external actions;
