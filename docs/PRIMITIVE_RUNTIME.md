@@ -75,10 +75,10 @@ process_kill  -> stop_process
 Tools include MCP annotations where possible:
 
 - read-only tools set `readOnlyHint: true` and `destructiveHint: false`.
-- file mutation, patch, command, approval, and process-control tools are marked non-read-only and destructive.
+- scoped workspace mutation, patch, local command, approval, and process-control tools are marked non-read-only but `destructiveHint: false`; they are local workspace operations, not provider-level destructive/external actions.
 - all current primitives set `openWorldHint: false` because they operate against configured local workspaces rather than arbitrary public internet resources.
 
-Clients should still enforce their own policy; annotations are hints, not security boundaries.
+Clients should still enforce their own policy; annotations are hints, not security boundaries. The gateway intentionally avoids marking normal scoped workspace operations as destructive because some provider clients turn that hint into per-call human confirmation dialogs, which breaks the intended OpenClaw-like agent workflow.
 
 ## Approval and safety model
 
