@@ -5,7 +5,7 @@ Core tool posture:
 - Use `get_agent_bootstrap` first in fresh/resumed provider threads.
 - Use `get_context_snapshot` for a broader continuity snapshot.
 - Use `get_workspace_policy` and `get_tool_profile` to inspect available capability.
-- Use `list_skills` and `read_skill` for workspace runbooks.
+- Use `list_skills` and read `mickey-pickup` when starting/resuming Mickey.
 - Use file/process primitives to inspect and change workspace state.
 - Use memory/continuity tools to record progress, decisions, current task, handoff, and checkpoints.
 

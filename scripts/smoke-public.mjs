@@ -13,7 +13,8 @@ await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'provider
 await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'OpenClaw-like workspace agent');
 await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'agent_profile');
 await call('get_context_snapshot', { workspace_id: workspaceId }, sessionId);
-await call('list_skills', { workspace_id: workspaceId }, sessionId);
+await expectText('list_skills', { workspace_id: workspaceId }, 'mickey-pickup', sessionId);
+await expectText('read_skill', { workspace_id: workspaceId, name: 'mickey-pickup' }, 'OpenClaw-like provider chat-thread agent', sessionId);
 
 if (allowWrite) await writeSmoke(sessionId);
 console.log(`public smoke ok (${allowWrite ? 'read/write' : 'read-only'})`);

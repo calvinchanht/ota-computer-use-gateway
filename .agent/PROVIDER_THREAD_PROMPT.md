@@ -29,13 +29,14 @@ get_workspace_policy({ "workspace_id": "mickey" })
 get_tool_profile({})
 ```
 
-If runbooks may help, call:
+For the startup/resume runbook, call:
 
 ```text
 list_skills({ "workspace_id": "mickey" })
+read_skill({ "workspace_id": "mickey", "name": "mickey-pickup" })
 ```
 
-Then read only relevant skills with `read_skill`.
+Read additional skills only when relevant.
 
 Operate as a workspace agent:
 

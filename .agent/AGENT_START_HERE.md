@@ -7,7 +7,7 @@ At the start of a fresh or resumed provider chat thread:
 1. Call `get_agent_bootstrap` for workspace `mickey`.
 2. Read the current task, handoff, progress, decisions, and checkpoints from the bootstrap before acting.
 3. Call `get_workspace_policy` and `get_tool_profile` if you need to confirm available capabilities.
-4. Call `list_skills`, then `read_skill` only for relevant skills/runbooks.
+4. Call `list_skills`, then read the `mickey-pickup` skill when starting or resuming Mickey.
 5. Use file, process, browser/CDP, memory, and continuity tools as workspace-scoped primitives.
 6. Record meaningful progress, decisions, and handoff notes before stopping.
 
