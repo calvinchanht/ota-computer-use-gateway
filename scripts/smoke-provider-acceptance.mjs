@@ -16,6 +16,7 @@ await expectText('read_skill', { workspace_id: workspaceId, name: pickupSkill },
 await expectText('list_browser_profiles', { workspace_id: workspaceId }, 'Close unused tabs.', sessionId);
 await expectText('browser_status', { workspace_id: workspaceId }, 'Close unused tabs.', sessionId);
 await expectText('list_browser_tabs', { workspace_id: workspaceId }, 'Close unused tabs.', sessionId);
+await expectBrowserCdp(sessionId);
 
 if (writeProof) await checkpointAcceptance(sessionId);
 
@@ -32,6 +33,12 @@ async function expectToolSurface(sessionId) {
   for (const tool of registeredRuntimeTools) {
     if (!listedText.includes(tool)) throw new Error(`tools/list missing ${tool}: ${listedText}`);
   }
+}
+
+async function expectBrowserCdp(sessionId) {
+  const policy = await call('get_workspace_policy', { workspace_id: workspaceId }, sessionId);
+  if (!JSON.stringify(policy).includes('browser_cdp_browser_call')) return;
+  await expectText('browser_cdp_browser_call', { workspace_id: workspaceId, method: 'Browser.getVersion' }, 'Browser.getVersion', sessionId);
 }
 
 async function checkpointAcceptance(sessionId) {
