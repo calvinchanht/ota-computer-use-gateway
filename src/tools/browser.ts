@@ -110,6 +110,17 @@ export async function selectBrowserTabOption(workspace: Workspace, targetId: str
   return ok('browser tab option selected', await actionPayload(workspace, profile, { target_id: tab.id, target_ref: targetId, selector: boundedSelectorValue, value: selected.selected ?? boundedValue }, observeAfter));
 }
 
+export async function submitBrowserTabForm(workspace: Workspace, targetId: string, selector: string, label?: string, observeAfter?: ObserveAfter) {
+  assertBrowserControl(workspace);
+  const { profile, tab } = await websocketTarget(workspace, targetId, label);
+  const boundedSelectorValue = boundedSelector(selector);
+  const expression = submitFormExpression(boundedSelectorValue);
+  const result = await cdpCommand<{ result?: { value?: unknown } }>(tab.webSocketDebuggerUrl, 'Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+  const submitted = result.result?.value as { ok?: boolean; reason?: string; tag?: string } | undefined;
+  if (!submitted?.ok) throw new Error(`browser form submit failed: ${submitted?.reason ?? 'unknown'}`);
+  return ok('browser tab form submitted', await actionPayload(workspace, profile, { target_id: tab.id, target_ref: targetId, selector: boundedSelectorValue, element: submitted.tag ?? null }, observeAfter));
+}
+
 export async function pressBrowserTabKey(workspace: Workspace, targetId: string, key: string, label?: string, observeAfter?: ObserveAfter) {
   assertBrowserControl(workspace);
   const { profile, tab } = await websocketTarget(workspace, targetId, label);
@@ -489,6 +500,19 @@ function selectOptionExpression(selector: string, value: string) {
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
     return { ok: true, selected: option.value };
+  })()`;
+}
+
+function submitFormExpression(selector: string) {
+  return `(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return { ok: false, reason: 'not_found' };
+    const form = el instanceof HTMLFormElement ? el : el.closest('form');
+    if (!form) return { ok: false, reason: 'form_not_found' };
+    const event = new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: el instanceof HTMLElement ? el : null });
+    const allowed = form.dispatchEvent(event);
+    if (allowed && typeof form.requestSubmit === 'function') form.requestSubmit();
+    return { ok: true, tag: String(form.tagName || '').toLowerCase(), default_allowed: allowed };
   })()`;
 }
 

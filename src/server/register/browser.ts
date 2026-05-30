@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { activateBrowserTab, browserCdpBatch, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, fillBrowserTabField, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, pressBrowserTabKey, scrollBrowserTab, selectBrowserTabOption, typeBrowserTab } from '../../tools/browser.js';
+import { activateBrowserTab, browserCdpBatch, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, fillBrowserTabField, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, pressBrowserTabKey, scrollBrowserTab, selectBrowserTabOption, submitBrowserTabForm, typeBrowserTab } from '../../tools/browser.js';
 import { READ_ONLY, RUN_LOCAL } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -17,6 +17,7 @@ export function registerBrowserTools(context: RegisterContext): void {
   registerTypeBrowserTab(context);
   registerFillBrowserTabField(context);
   registerSelectBrowserTabOption(context);
+  registerSubmitBrowserTabForm(context);
   registerPressBrowserTabKey(context);
   registerScrollBrowserTab(context);
   registerBrowserCdpCall(context);
@@ -71,6 +72,10 @@ function registerFillBrowserTabField({ server, workspaces }: RegisterContext): v
 
 function registerSelectBrowserTabOption({ server, workspaces }: RegisterContext): void {
   server.registerTool('select_browser_tab_option', { title: 'Select browser tab option', description: 'Select a native <select> option by value or exact visible text through scoped CDP Runtime.evaluate.', inputSchema: { ...targetActionSchema(), selector: z.string().min(1).max(1000), value: z.string().max(10000) }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'select_browser_tab_option', (workspace) => selectBrowserTabOption(workspace, args.target_id, args.selector, args.value, args.profile_label, args.observe_after)));
+}
+
+function registerSubmitBrowserTabForm({ server, workspaces }: RegisterContext): void {
+  server.registerTool('submit_browser_tab_form', { title: 'Submit browser tab form', description: 'Submit a form selected by CSS selector, or the closest parent form for a selected element, through scoped CDP Runtime.evaluate. External submissions still require user approval by policy.', inputSchema: { ...targetActionSchema(), selector: z.string().min(1).max(1000) }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'submit_browser_tab_form', (workspace) => submitBrowserTabForm(workspace, args.target_id, args.selector, args.profile_label, args.observe_after)));
 }
 
 function registerPressBrowserTabKey({ server, workspaces }: RegisterContext): void {
