@@ -8,6 +8,7 @@ The browser layer is Chrome/CDP-first. The core capability is the scoped debuggi
 
 - profile/target discovery through the configured Chrome debugging port;
 - target operations such as open, activate, close, and list through Chrome `/json/*` endpoints;
+- browser-level websocket control through `browser_cdp_browser_call` and `browser_cdp_browser_batch`;
 - page-target websocket control through `browser_cdp_call` and `browser_cdp_batch`.
 
 Provider-thread agents can use `Runtime.evaluate`, `DOMSnapshot.captureSnapshot`, `Input.dispatchMouseEvent`, `Input.dispatchKeyEvent`, `Page.navigate`, and other CDP methods through that scoped proxy. That is enough for DOM inspection, page scripting, button clicks, keyboard input, navigation, and custom browser automation inside the selected page target.
@@ -31,6 +32,8 @@ The explicit action/form tools below are convenience wrappers only. They are not
 - `submit_browser_tab_form` — submits a native form selected by CSS selector, or the closest parent form for a selected element, through scoped `Runtime.evaluate`; gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback. External job submissions and irreversible actions still require Calvin approval by policy.
 - `press_browser_tab_key` — dispatches a bounded keyboard key press/release through `Input.dispatchKeyEvent`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback. `target_id` may be a raw id or stable key.
 - `scroll_browser_tab` — dispatches a bounded mouse-wheel scroll through `Input.dispatchMouseEvent`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback. `target_id` may be a raw id or stable key.
+- `browser_cdp_browser_call` — proxies one Chrome DevTools Protocol method through the scoped browser websocket for a configured profile; gated by `allow_mouse_keyboard`.
+- `browser_cdp_browser_batch` — proxies up to 20 Chrome DevTools Protocol calls through the scoped browser websocket for a configured profile; gated by `allow_mouse_keyboard`.
 - `browser_cdp_call` — proxies one Chrome DevTools Protocol method through a scoped target websocket; gated by `allow_mouse_keyboard`. `target_id` may be a raw id or stable key.
 - `browser_cdp_batch` — proxies up to 20 Chrome DevTools Protocol calls through a scoped target websocket; gated by `allow_mouse_keyboard`. `target_id` may be a raw id or stable key.
 - `activate_browser_tab` — focuses an existing Chrome target through CDP `/json/activate/<target_id>`. `target_id` may be a raw id or stable key.

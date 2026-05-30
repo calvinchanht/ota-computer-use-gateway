@@ -21,6 +21,7 @@ export async function browserStatus(workspace: Workspace, label?: string) {
     profile,
     cdp: {
       endpoint: cdpEndpoint(profile),
+      browser_websocket_url: await browserWebSocketUrl(profile).catch(() => null),
       reachable: await cdpReachable(profile),
       note: 'Browser tools use Chrome DevTools Protocol against a headed Chrome profile.'
     }
@@ -154,6 +155,23 @@ export async function closeBrowserTab(workspace: Workspace, targetId: string, la
   return ok('browser tab closed', await actionPayload(workspace, profile, { target_id: tab.id, target_ref: targetId }, observeAfter));
 }
 
+export async function browserCdpBrowserCall(workspace: Workspace, method: string, params: Record<string, unknown> = {}, label?: string) {
+  assertBrowserControl(workspace);
+  const profile = selectedBrowserProfile(workspace, label);
+  const result = await cdpCommand(await browserWebSocketUrl(profile), boundedCdpMethod(method), boundedCdpParams(params));
+  return ok('browser-level CDP call completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, method, result: boundedJson(result) });
+}
+
+export async function browserCdpBrowserBatch(workspace: Workspace, calls: CdpBatchCall[], label?: string) {
+  assertBrowserControl(workspace);
+  const profile = selectedBrowserProfile(workspace, label);
+  const url = await browserWebSocketUrl(profile);
+  const boundedCalls = calls.slice(0, 20);
+  const results = [];
+  for (const call of boundedCalls) results.push(await oneCdpBatchCall(url, call));
+  return ok('browser-level CDP batch completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, results });
+}
+
 export async function browserCdpCall(workspace: Workspace, targetId: string, method: string, params: Record<string, unknown> = {}, label?: string) {
   assertBrowserControl(workspace);
   const { profile, tab } = await websocketTarget(workspace, targetId, label);
@@ -209,6 +227,12 @@ async function cdpReachable(profile: ReturnType<typeof browserProfile>) {
     await fetchCdpJson(profile, '/json/version');
     return true;
   } catch { return false; }
+}
+
+async function browserWebSocketUrl(profile: ReturnType<typeof browserProfile>) {
+  const version = await fetchCdpJson<{ webSocketDebuggerUrl?: string }>(profile, '/json/version');
+  if (!version.webSocketDebuggerUrl) throw new Error('Chrome browser websocket debugger url is unavailable');
+  return version.webSocketDebuggerUrl;
 }
 
 async function fetchCdpJson<T>(profile: ReturnType<typeof browserProfile>, path: string, method = 'GET'): Promise<T> {

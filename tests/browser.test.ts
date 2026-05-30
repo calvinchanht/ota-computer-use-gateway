@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { activateBrowserTab, browserCdpBatch, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, fillBrowserTabField, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, pressBrowserTabKey, scrollBrowserTab, selectBrowserTabOption, submitBrowserTabForm, typeBrowserTab } from '../src/tools/browser.js';
+import { activateBrowserTab, browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, fillBrowserTabField, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, pressBrowserTabKey, scrollBrowserTab, selectBrowserTabOption, submitBrowserTabForm, typeBrowserTab } from '../src/tools/browser.js';
 
 describe('browser profile tools', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -182,6 +182,23 @@ describe('browser profile tools', () => {
     expect(sends[0]).toContain('1200');
   });
 
+  it('proxies a browser-level CDP call through the scoped browser websocket', async () => {
+    mockFetch({ webSocketDebuggerUrl: 'ws://cdp/browser' });
+    const sends = mockWebSocket({ product: 'Chrome/test' });
+    const data = (await browserCdpBrowserCall(controlWorkspace(), 'Browser.getVersion')).data as any;
+    expect(data.method).toBe('Browser.getVersion');
+    expect(data.result.json).toContain('Chrome/test');
+    expect(sends[0]).toContain('Browser.getVersion');
+  });
+
+  it('proxies browser-level CDP batches through the scoped browser websocket', async () => {
+    mockFetch({ webSocketDebuggerUrl: 'ws://cdp/browser' });
+    const sends = mockWebSocket({ ok: true });
+    const data = (await browserCdpBrowserBatch(controlWorkspace(), [{ method: 'Target.getTargets' }])).data as any;
+    expect(data.results).toHaveLength(1);
+    expect(sends[0]).toContain('Target.getTargets');
+  });
+
   it('proxies a generic CDP call through the scoped target websocket', async () => {
     mockFetch([{ id: '1', type: 'page', webSocketDebuggerUrl: 'ws://cdp/1' }]);
     const sends = mockWebSocket({ value: 42 });
@@ -219,6 +236,7 @@ describe('browser profile tools', () => {
     await expect(submitBrowserTabForm(fixtureWorkspace(), '1', 'form')).rejects.toThrow('browser control is not enabled');
     await expect(pressBrowserTabKey(fixtureWorkspace(), '1', 'Enter')).rejects.toThrow('browser control is not enabled');
     await expect(scrollBrowserTab(fixtureWorkspace(), '1', 0, 100)).rejects.toThrow('browser control is not enabled');
+    await expect(browserCdpBrowserCall(fixtureWorkspace(), 'Browser.getVersion')).rejects.toThrow('browser control is not enabled');
     await expect(browserCdpCall(fixtureWorkspace(), '1', 'Runtime.evaluate')).rejects.toThrow('browser control is not enabled');
     await expect(closeBrowserTab(fixtureWorkspace(), '1')).rejects.toThrow('browser control is not enabled');
   });

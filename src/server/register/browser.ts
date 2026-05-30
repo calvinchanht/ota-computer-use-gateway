@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { activateBrowserTab, browserCdpBatch, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, fillBrowserTabField, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, pressBrowserTabKey, scrollBrowserTab, selectBrowserTabOption, submitBrowserTabForm, typeBrowserTab } from '../../tools/browser.js';
+import { activateBrowserTab, browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, fillBrowserTabField, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, pressBrowserTabKey, scrollBrowserTab, selectBrowserTabOption, submitBrowserTabForm, typeBrowserTab } from '../../tools/browser.js';
 import { READ_ONLY, RUN_LOCAL } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -20,6 +20,8 @@ export function registerBrowserTools(context: RegisterContext): void {
   registerSubmitBrowserTabForm(context);
   registerPressBrowserTabKey(context);
   registerScrollBrowserTab(context);
+  registerBrowserCdpBrowserCall(context);
+  registerBrowserCdpBrowserBatch(context);
   registerBrowserCdpCall(context);
   registerBrowserCdpBatch(context);
   registerActivateBrowserTab(context);
@@ -86,6 +88,14 @@ function registerScrollBrowserTab({ server, workspaces }: RegisterContext): void
   server.registerTool('scroll_browser_tab', { title: 'Scroll browser tab', description: 'Dispatch a bounded mouse-wheel scroll in an existing Chrome target/tab through CDP.', inputSchema: { ...targetActionSchema(), delta_x: z.number().optional(), delta_y: z.number().optional() }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'scroll_browser_tab', (workspace) => scrollBrowserTab(workspace, args.target_id, args.delta_x ?? 0, args.delta_y ?? 0, args.profile_label, args.observe_after)));
 }
 
+function registerBrowserCdpBrowserCall({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_cdp_browser_call', { title: 'Browser-level CDP call', description: 'Call one Chrome DevTools Protocol method on the scoped browser websocket for a configured profile.', inputSchema: browserCdpCallSchema(), annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_cdp_browser_call', (workspace) => browserCdpBrowserCall(workspace, args.method, args.params ?? {}, args.profile_label)));
+}
+
+function registerBrowserCdpBrowserBatch({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_cdp_browser_batch', { title: 'Browser-level CDP batch', description: 'Call multiple Chrome DevTools Protocol methods on the scoped browser websocket for a configured profile.', inputSchema: { ...profileSchema(), calls: z.array(cdpCallItemSchema()).min(1).max(20) }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_cdp_browser_batch', (workspace) => browserCdpBrowserBatch(workspace, args.calls, args.profile_label)));
+}
+
 function registerBrowserCdpCall({ server, workspaces }: RegisterContext): void {
   server.registerTool('browser_cdp_call', { title: 'Browser CDP call', description: 'Call one Chrome DevTools Protocol method on a scoped target/tab.', inputSchema: cdpCallSchema(), annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_cdp_call', (workspace) => browserCdpCall(workspace, args.target_id, args.method, args.params ?? {}, args.profile_label)));
 }
@@ -112,6 +122,10 @@ function targetInfoSchema() {
 
 function screenshotSchema() {
   return { ...targetInfoSchema(), format: z.enum(['png', 'jpeg', 'webp']).optional() };
+}
+
+function browserCdpCallSchema() {
+  return { ...profileSchema(), method: cdpMethodSchema(), params: z.record(z.string(), z.unknown()).optional() };
 }
 
 function cdpCallSchema() {
