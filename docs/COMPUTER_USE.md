@@ -48,6 +48,27 @@ Browser status/profile responses include:
 { "reminder": "Close unused tabs." }
 ```
 
+## Browser attention states
+
+Browser tab summaries include an `attention` object so provider-thread agents have a standard readiness signal:
+
+```json
+{
+  "attention": {
+    "state": "ready",
+    "guidance": "No obvious login, CAPTCHA, or verification blocker detected from tab metadata."
+  }
+}
+```
+
+Current states:
+
+- `ready` — no obvious blocker was detected from tab metadata.
+- `needs_login` — title/URL suggests login, SSO, OAuth, or authentication. Stop if credentials, account selection, 2FA, or secret use is required.
+- `needs_captcha` — title/URL suggests CAPTCHA, Turnstile, Cloudflare challenge, or human verification. Stop and ask Calvin; do not bypass or automate it.
+
+This is intentionally conservative and metadata-based for now. Later slices can add DOM/modal detection, explicit approval states, and richer recovery hints.
+
 ## Stable browser tab keys
 
 Provider chat threads can assign a durable, human-readable `tab_key` when opening a tab:

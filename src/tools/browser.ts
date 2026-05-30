@@ -201,7 +201,34 @@ async function tabSummary(workspace: Workspace, profile: ReturnType<typeof brows
 
 function tabSummaryWithKey(target: ChromeTarget, profile: ReturnType<typeof browserProfile>, keys: BrowserTabKeys) {
   const entry = Object.entries(keys.tabs).find(([, item]) => item.profile_label === profile.label && item.target_id === target.id);
-  return { id: target.id, key: entry?.[0] ?? null, title: target.title ?? '', url: target.url ?? '', type: target.type, attached: target.attached ?? false };
+  return {
+    id: target.id,
+    key: entry?.[0] ?? null,
+    title: target.title ?? '',
+    url: target.url ?? '',
+    type: target.type,
+    attached: target.attached ?? false,
+    attention: browserAttention(target)
+  };
+}
+
+function browserAttention(target: ChromeTarget): BrowserAttention {
+  const haystack = `${target.title ?? ''}\n${target.url ?? ''}`.toLowerCase();
+  if (hasAny(haystack, ['captcha', 'turnstile', 'human verification', 'verify you are human', 'just a moment', 'checking your browser'])) {
+    return attention('needs_captcha', 'Human verification detected. Stop and ask Calvin to complete it; do not bypass or automate it.');
+  }
+  if (hasAny(haystack, ['login', 'log in', 'signin', 'sign in', 'auth', 'sso', 'oauth'])) {
+    return attention('needs_login', 'Login or authentication page detected. Stop if credentials, SSO, 2FA, or account selection is required.');
+  }
+  return attention('ready', 'No obvious login, CAPTCHA, or verification blocker detected from tab metadata.');
+}
+
+function attention(state: AttentionState, guidance: string): BrowserAttention {
+  return { state, guidance };
+}
+
+function hasAny(value: string, needles: string[]) {
+  return needles.some((needle) => value.includes(needle));
 }
 
 async function resolveTabRef(workspace: Workspace, profile: ReturnType<typeof browserProfile>, targetId: string) {
@@ -336,6 +363,13 @@ type BrowserTabKeyEntry = {
 
 type BrowserTabKeys = {
   tabs: Record<string, BrowserTabKeyEntry>;
+};
+
+type AttentionState = 'ready' | 'needs_login' | 'needs_captcha';
+
+type BrowserAttention = {
+  state: AttentionState;
+  guidance: string;
 };
 
 type ChromeTarget = {

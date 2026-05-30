@@ -32,13 +32,24 @@ describe('browser profile tools', () => {
   it('lists page targets from Chrome CDP', async () => {
     mockFetch([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com', attached: true }, { id: '2', type: 'service_worker' }]);
     const data = (await listBrowserTabs(fixtureWorkspace())).data as any;
-    expect(data.tabs).toEqual([{ id: '1', key: null, type: 'page', title: 'Home', url: 'https://example.com', attached: true }]);
+    expect(data.tabs).toEqual([{ id: '1', key: null, type: 'page', title: 'Home', url: 'https://example.com', attached: true, attention: { state: 'ready', guidance: 'No obvious login, CAPTCHA, or verification blocker detected from tab metadata.' } }]);
   });
 
   it('returns metadata for one tab by id', async () => {
     mockFetch([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com', attached: true }]);
     const data = (await browserTabInfo(fixtureWorkspace(), '1')).data as any;
     expect(data.tab.url).toBe('https://example.com');
+    expect(data.tab.attention.state).toBe('ready');
+  });
+
+  it('flags login and human-verification tabs as needing attention', async () => {
+    mockFetch([
+      { id: '1', type: 'page', title: 'Sign in', url: 'https://example.com/login' },
+      { id: '2', type: 'page', title: 'Just a moment...', url: 'https://example.com/cdn-cgi/challenge-platform' }
+    ]);
+    const data = (await listBrowserTabs(fixtureWorkspace())).data as any;
+    expect(data.tabs[0].attention.state).toBe('needs_login');
+    expect(data.tabs[1].attention.state).toBe('needs_captcha');
   });
 
   it('captures a screenshot from one tab through CDP websocket', async () => {
