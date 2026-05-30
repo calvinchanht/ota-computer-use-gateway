@@ -13,7 +13,8 @@
     "check": "npm run build && npm test",
     "smoke:stdio": "npm run build && node scripts/smoke-stdio.mjs",
     "smoke:http": "npm run build && node scripts/smoke-http.mjs",
-    "smoke:primitives": "npm run build && node scripts/smoke-primitives.mjs"
+    "smoke:primitives": "npm run build && node scripts/smoke-primitives.mjs",
+    "smoke:public": "node scripts/smoke-public.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",

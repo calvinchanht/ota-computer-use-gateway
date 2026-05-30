@@ -103,6 +103,21 @@ npm run build
 npm run smoke:primitives
 ```
 
+To check a deployed public HTTPS MCP endpoint, set the endpoint and bearer token outside git:
+
+```bash
+export OTA_GATEWAY_SMOKE_URL="https://mickey-mcp.example.com/mcp"
+export OTA_GATEWAY_SMOKE_TOKEN="..."
+npm run smoke:public
+```
+
+The public smoke is read-only by default. To also verify write/edit/command primitives against a controlled workspace, opt in explicitly:
+
+```bash
+export OTA_GATEWAY_SMOKE_WRITE=1
+npm run smoke:public
+```
+
 ## Deferred areas
 
 These are intentionally outside issue #3 and tracked separately:
