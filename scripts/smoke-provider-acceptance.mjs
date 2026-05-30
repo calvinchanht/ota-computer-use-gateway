@@ -10,7 +10,7 @@ const sessionId = await initialize();
 await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, acceptanceMarker, sessionId);
 await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, pickupSkill, sessionId);
 await expectText('get_workspace_policy', { workspace_id: workspaceId }, workspaceId, sessionId);
-await expectText('get_tool_profile', {}, 'mcp_explicit', sessionId);
+await expectToolSurface(sessionId);
 await expectText('list_skills', { workspace_id: workspaceId }, pickupSkill, sessionId);
 await expectText('read_skill', { workspace_id: workspaceId, name: pickupSkill }, 'OpenClaw-like provider chat-thread agent', sessionId);
 await expectText('list_browser_profiles', { workspace_id: workspaceId }, 'Close unused tabs.', sessionId);
@@ -20,6 +20,19 @@ await expectText('list_browser_tabs', { workspace_id: workspaceId }, 'Close unus
 if (writeProof) await checkpointAcceptance(sessionId);
 
 console.log(`${workspaceId} acceptance smoke ok (${writeProof ? 'with checkpoint' : 'read-only'})`);
+
+async function expectToolSurface(sessionId) {
+  const registeredRuntimeTools = ['browser_cdp_call', 'run_command', 'start_process', 'memory_search', 'get_project_context'];
+  const policyRuntimeTools = ['run_command', 'start_process', 'memory_search', 'get_project_context'];
+  await expectText('get_tool_profile', {}, 'mcp_explicit', sessionId);
+  for (const tool of registeredRuntimeTools) await expectText('get_tool_profile', {}, tool, sessionId);
+  for (const tool of policyRuntimeTools) await expectText('get_workspace_policy', { workspace_id: workspaceId }, tool, sessionId);
+  const listed = await rpc(nextId(), 'tools/list', {}, sessionId);
+  const listedText = JSON.stringify(listed);
+  for (const tool of registeredRuntimeTools) {
+    if (!listedText.includes(tool)) throw new Error(`tools/list missing ${tool}: ${listedText}`);
+  }
+}
 
 async function checkpointAcceptance(sessionId) {
   const stamp = new Date().toISOString();
