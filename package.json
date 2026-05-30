@@ -15,9 +15,9 @@
     "smoke:http": "npm run build && node scripts/smoke-http.mjs",
     "smoke:primitives": "npm run build && node scripts/smoke-primitives.mjs",
     "smoke:public": "node scripts/smoke-public.mjs",
-    "smoke:provider-acceptance": "node scripts/smoke-mickey-acceptance.mjs",
-    "smoke:mickey-acceptance": "node scripts/smoke-mickey-acceptance.mjs",
-    "smoke:catalyst-acceptance": "OTA_GATEWAY_SMOKE_WORKSPACE=catalyst OTA_GATEWAY_ACCEPTANCE_SKILL=catalyst-pickup node scripts/smoke-mickey-acceptance.mjs"
+    "smoke:provider-acceptance": "node scripts/smoke-provider-acceptance.mjs",
+    "smoke:mickey-acceptance": "node scripts/smoke-provider-acceptance.mjs",
+    "smoke:catalyst-acceptance": "OTA_GATEWAY_SMOKE_WORKSPACE=catalyst OTA_GATEWAY_ACCEPTANCE_SKILL=catalyst-pickup node scripts/smoke-provider-acceptance.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
