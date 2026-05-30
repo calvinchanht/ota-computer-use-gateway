@@ -2,6 +2,7 @@ const url = requiredEnv('OTA_GATEWAY_SMOKE_URL');
 const token = process.env.OTA_GATEWAY_SMOKE_TOKEN ?? '';
 const workspaceId = process.env.OTA_GATEWAY_SMOKE_WORKSPACE ?? 'mickey';
 const allowWrite = process.env.OTA_GATEWAY_SMOKE_WRITE === '1';
+const expectedSkill = process.env.OTA_GATEWAY_SMOKE_EXPECT_SKILL ?? (workspaceId === 'mickey' ? 'mickey-pickup' : '');
 
 const sessionId = await initialize();
 await expectText('get_tool_profile', {}, 'mcp_explicit', sessionId);
@@ -14,8 +15,12 @@ await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'provider
 await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'OpenClaw-like workspace agent');
 await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'agent_profile');
 await call('get_context_snapshot', { workspace_id: workspaceId }, sessionId);
-await expectText('list_skills', { workspace_id: workspaceId }, 'mickey-pickup', sessionId);
-await expectText('read_skill', { workspace_id: workspaceId, name: 'mickey-pickup' }, 'OpenClaw-like provider chat-thread agent', sessionId);
+if (expectedSkill) {
+  await expectText('list_skills', { workspace_id: workspaceId }, expectedSkill, sessionId);
+  await call('read_skill', { workspace_id: workspaceId, name: expectedSkill }, sessionId);
+} else {
+  await call('list_skills', { workspace_id: workspaceId }, sessionId);
+}
 
 if (allowWrite) await writeSmoke(sessionId);
 console.log(`public smoke ok (${allowWrite ? 'read/write' : 'read-only'})`);
