@@ -57,6 +57,13 @@ export async function openBrowserTab(workspace: Workspace, url: string, label?: 
   return ok('browser tab opened', await actionPayload(workspace, profile, { opened: tabSummary(opened) }, observeAfter));
 }
 
+export async function navigateBrowserTab(workspace: Workspace, targetId: string, url: string, label?: string, observeAfter?: ObserveAfter) {
+  assertBrowserControl(workspace);
+  const { profile, tab } = await websocketTarget(workspace, targetId, label);
+  const result = await cdpCommand<{ frameId?: string; loaderId?: string; errorText?: string }>(tab.webSocketDebuggerUrl, 'Page.navigate', { url });
+  return ok('browser tab navigated', await actionPayload(workspace, profile, { target_id: targetId, navigation: result }, observeAfter));
+}
+
 export async function activateBrowserTab(workspace: Workspace, targetId: string, label?: string, observeAfter?: ObserveAfter) {
   assertBrowserControl(workspace);
   const profile = selectedBrowserProfile(workspace, label);

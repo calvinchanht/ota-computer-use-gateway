@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { activateBrowserTab, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../src/tools/browser.js';
+import { activateBrowserTab, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, closeBrowserTab, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab } from '../src/tools/browser.js';
 
 describe('browser profile tools', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -70,6 +70,17 @@ describe('browser profile tools', () => {
     expect(data.observation.tabs[0].url).toBe('https://example.com');
   });
 
+  it('navigates an existing tab through CDP websocket', async () => {
+    mockFetchSequence([
+      [{ id: '1', type: 'page', webSocketDebuggerUrl: 'ws://cdp/1' }],
+      [{ id: '1', type: 'page', title: 'Next', url: 'https://example.com/next' }]
+    ]);
+    mockWebSocket({ frameId: 'frame-1', loaderId: 'loader-1' });
+    const data = (await navigateBrowserTab(controlWorkspace(), '1', 'https://example.com/next', undefined, { tabs: true })).data as any;
+    expect(data.navigation.frameId).toBe('frame-1');
+    expect(data.observation.tabs[0].url).toBe('https://example.com/next');
+  });
+
   it('activates and closes tabs through CDP', async () => {
     mockFetchSequence(['Target activated', [{ id: '1', type: 'page' }], 'Target is closing']);
     const active = (await activateBrowserTab(controlWorkspace(), '1', undefined, { tabs: true })).data as any;
@@ -81,6 +92,7 @@ describe('browser profile tools', () => {
 
   it('requires browser control for tab mutations', async () => {
     await expect(openBrowserTab(fixtureWorkspace(), 'https://example.com')).rejects.toThrow('browser control is not enabled');
+    await expect(navigateBrowserTab(fixtureWorkspace(), '1', 'https://example.com')).rejects.toThrow('browser control is not enabled');
     await expect(closeBrowserTab(fixtureWorkspace(), '1')).rejects.toThrow('browser control is not enabled');
   });
 

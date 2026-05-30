@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { activateBrowserTab, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../../tools/browser.js';
+import { activateBrowserTab, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, closeBrowserTab, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab } from '../../tools/browser.js';
 import { READ_ONLY, RUN_LOCAL } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -12,6 +12,7 @@ export function registerBrowserTools(context: RegisterContext): void {
   registerBrowserTabScreenshot(context);
   registerBrowserTabSnapshot(context);
   registerOpenBrowserTab(context);
+  registerNavigateBrowserTab(context);
   registerActivateBrowserTab(context);
   registerCloseBrowserTab(context);
 }
@@ -42,6 +43,10 @@ function registerBrowserTabSnapshot({ server, workspaces }: RegisterContext): vo
 
 function registerOpenBrowserTab({ server, workspaces }: RegisterContext): void {
   server.registerTool('open_browser_tab', { title: 'Open browser tab', description: 'Open a URL in a new headed Chrome tab through CDP.', inputSchema: { ...profileSchema(), url: z.string(), observe_after: observeAfterSchema().optional() }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'open_browser_tab', (workspace) => openBrowserTab(workspace, args.url, args.profile_label, args.observe_after)));
+}
+
+function registerNavigateBrowserTab({ server, workspaces }: RegisterContext): void {
+  server.registerTool('navigate_browser_tab', { title: 'Navigate browser tab', description: 'Navigate an existing Chrome target/tab to a URL through CDP.', inputSchema: { ...targetActionSchema(), url: z.string() }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'navigate_browser_tab', (workspace) => navigateBrowserTab(workspace, args.target_id, args.url, args.profile_label, args.observe_after)));
 }
 
 function registerActivateBrowserTab({ server, workspaces }: RegisterContext): void {
