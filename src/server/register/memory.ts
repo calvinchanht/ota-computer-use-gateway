@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../../tools/context.js';
+import { agentBootstrap, checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../../tools/context.js';
 import { getProjectContext, memorySearch, memoryWrite } from '../../tools/memory.js';
 import { READ_ONLY, WRITE_FILE } from './annotations.js';
 import type { RegisterContext } from './types.js';
@@ -10,6 +10,7 @@ export function registerMemoryTools(context: RegisterContext): void {
   registerMemoryWrite(context);
   registerProjectContext(context);
   registerContextSnapshot(context);
+  registerAgentBootstrap(context);
   registerProgressRecorder(context);
   registerDecisionRecorder(context);
   registerHandoffRecorder(context);
@@ -40,6 +41,12 @@ function registerProjectContext({ server, workspaces }: RegisterContext): void {
 function registerContextSnapshot({ server, workspaces }: RegisterContext): void {
   server.registerTool('get_context_snapshot', contextSnapshotSpec(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'get_context_snapshot', contextSnapshot
+  ));
+}
+
+function registerAgentBootstrap({ server, workspaces }: RegisterContext): void {
+  server.registerTool('get_agent_bootstrap', bootstrapSpec(), async (args) => runWorkspaceTool(
+    workspaces, args.workspace_id, 'get_agent_bootstrap', agentBootstrap
   ));
 }
 
@@ -92,6 +99,10 @@ function projectContextSpec() {
 
 function contextSnapshotSpec() {
   return { title: 'Get context snapshot', description: 'Return workspace identity, project instructions, continuity files, and recent memory tail.', inputSchema: { workspace_id: z.string() }, annotations: READ_ONLY };
+}
+
+function bootstrapSpec() {
+  return { title: 'Get agent bootstrap', description: 'Return an ordered startup packet for a fresh or resumed chat-thread agent.', inputSchema: { workspace_id: z.string() }, annotations: READ_ONLY };
 }
 
 function noteSpec(title: string, description: string) {

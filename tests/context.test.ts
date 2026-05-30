@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../src/tools/context.js';
+import { agentBootstrap, checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../src/tools/context.js';
 import type { Workspace } from '../src/core/workspaces.js';
 
 describe('context tools', () => {
@@ -18,6 +18,18 @@ describe('context tools', () => {
     expect(data.project_instructions['AGENTS.md']).toContain('project instructions');
     expect(data.continuity['CURRENT_TASK.md']).toContain('current task');
     expect(data.recent_memory).toContain('recent');
+  });
+
+  it('returns an ordered bootstrap packet for chat-thread pickup', async () => {
+    const workspace = await fixtureWorkspace();
+    await writeFile(path.join(workspace.realRoot, '.agent', 'CURRENT_TASK.md'), 'current task');
+    await writeFile(path.join(workspace.realRoot, '.agent', 'HANDOFF.md'), 'handoff note');
+
+    const result = await agentBootstrap(workspace);
+    const data = result.data as any;
+    expect(data.current_task).toContain('current task');
+    expect(data.recent_handoff).toContain('handoff note');
+    expect(data.operating_model.join(' ')).toContain('Checkpoint');
   });
 
   it('records progress and handoff notes', async () => {

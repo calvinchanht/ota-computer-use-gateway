@@ -11,11 +11,21 @@ const MAX_FILE_CHARS = 8000;
 
 export async function contextSnapshot(workspace: Workspace) {
   await ensureAgentDir(workspace);
-  return ok('context snapshot loaded', {
-    identity: workspaceIdentity(workspace),
-    project_instructions: await readRootFiles(workspace),
-    continuity: await readAgentFiles(workspace),
-    recent_memory: await readAgentMemoryTail(workspace)
+  return ok('context snapshot loaded', await buildContextSnapshot(workspace));
+}
+
+export async function agentBootstrap(workspace: Workspace) {
+  await ensureAgentDir(workspace);
+  const snapshot = await buildContextSnapshot(workspace);
+  return ok('agent bootstrap loaded', {
+    identity: snapshot.identity,
+    operating_model: chatThreadOperatingModel(),
+    project_instructions: snapshot.project_instructions,
+    current_task: snapshot.continuity['CURRENT_TASK.md'],
+    recent_handoff: snapshot.continuity['HANDOFF.md'],
+    recent_progress: snapshot.continuity['PROGRESS.md'],
+    recent_checkpoints: snapshot.continuity['CHECKPOINTS.md'],
+    next_actions: bootstrapNextActions()
   });
 }
 
@@ -47,6 +57,15 @@ export async function checkpointThread(workspace: Workspace, title: string, summ
   return ok('thread checkpoint recorded', { file: 'CHECKPOINTS.md', title, next_steps: nextSteps.length });
 }
 
+async function buildContextSnapshot(workspace: Workspace) {
+  return {
+    identity: workspaceIdentity(workspace),
+    project_instructions: await readRootFiles(workspace),
+    continuity: await readAgentFiles(workspace),
+    recent_memory: await readAgentMemoryTail(workspace)
+  };
+}
+
 function workspaceIdentity(workspace: Workspace) {
   return {
     id: workspace.id,
@@ -65,6 +84,23 @@ function workspaceCapabilities(workspace: Workspace) {
     screen: workspace.allow_screen,
     mouse_keyboard: workspace.allow_mouse_keyboard
   };
+}
+
+function chatThreadOperatingModel() {
+  return [
+    'Use this bootstrap once at thread start or pickup.',
+    'Use retrieval tools when more local context is needed.',
+    'Do not expect Tool Gateway to inject full context every turn.',
+    'Checkpoint progress, decisions, current task, and handoff outward to the workspace.'
+  ];
+}
+
+function bootstrapNextActions() {
+  return [
+    'Read current_task, recent_handoff, recent_progress, and recent_checkpoints.',
+    'Call memory_search/read_file for details only when needed.',
+    'Call checkpoint_thread or record_handoff before stopping or switching threads.'
+  ];
 }
 
 async function readRootFiles(workspace: Workspace) {
