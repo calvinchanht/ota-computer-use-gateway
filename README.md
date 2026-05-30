@@ -56,6 +56,7 @@ See `docs/COMPUTER_USE.md` for the observe/act and `observe_after` foundation us
 See `docs/CATALYST_ADAPTER.md` for the Catalyst adapter MVP plan and setup template used by issue #7.
 See `docs/CATALYST_CONNECTOR.md` for the Catalyst provider connector setup handoff.
 See `docs/CATALYST_PUBLIC_INGRESS.md` for the Catalyst public HTTPS ingress relay and recovery notes.
+See `docs/SIMILAR_PROJECT_SCAN.md` for adjacent GitHub project patterns we should borrow or avoid.
 
 ## Mickey provider-thread proof
 
