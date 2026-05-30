@@ -2,6 +2,18 @@
 
 Issue #6 adds provider-neutral browser/computer-use primitives in small, safe layers. The first layer establishes the MCP surface and `observe_after` convention before wiring platform-specific adapters.
 
+## CDP-first capability posture
+
+The browser layer is Chrome/CDP-first. The core capability is the scoped debugging-port proxy:
+
+- profile/target discovery through the configured Chrome debugging port;
+- target operations such as open, activate, close, and list through Chrome `/json/*` endpoints;
+- page-target websocket control through `browser_cdp_call` and `browser_cdp_batch`.
+
+Provider-thread agents can use `Runtime.evaluate`, `DOMSnapshot.captureSnapshot`, `Input.dispatchMouseEvent`, `Input.dispatchKeyEvent`, `Page.navigate`, and other CDP methods through that scoped proxy. That is enough for DOM inspection, page scripting, button clicks, keyboard input, navigation, and custom browser automation inside the selected page target.
+
+The explicit action/form tools below are convenience wrappers only. They are not the architecture, and near-term work should not keep adding per-field wrappers unless a real provider-thread usability gap appears. If a capability is missing, prefer extending the scoped CDP proxy surface over building narrow browser sugar.
+
 ## Current tools
 
 - `list_browser_profiles` — lists configured headed Chrome/CDP profiles for a workspace.
@@ -118,16 +130,17 @@ The gateway clamps delay values to a small bounded range. If screenshot or windo
 ## Safety model
 
 - `computer_status` is always read-only.
-- `observe_screen` is only advertised when a workspace enables `allow_screen`.
-- Mouse/keyboard tools are not advertised until a concrete adapter and explicit `allow_mouse_keyboard` policy path exist.
-- Semantic/browser actions should be preferred over raw coordinates where possible.
-- Raw coordinate actions should remain more tightly gated and audited.
+- `observe_screen`, screenshots, and DOM snapshots are only advertised when a workspace enables `allow_screen`.
+- Browser mutation and scoped CDP tools are only advertised when a workspace enables `allow_mouse_keyboard`.
+- Public ingress should keep origin services bound to loopback and require bearer auth; do not expose a naked Chrome debugging port.
+- CAPTCHA, Turnstile, human verification, credentials, account creation, uploads, external messages, job submission, payments, terms acceptance, and irreversible external actions remain Calvin-approved workflow boundaries.
+
+The browser layer should otherwise remain capability-first, like an OpenClaw agent. Do not add extra browser-protection layers unless a concrete project requirement appears.
 
 ## Deferred adapters
 
-The current slice does not yet capture pixels or control input. Future slices should add platform/browser adapters behind the same tool shape, for example:
+Future slices can add platform/browser adapters behind the same capability-first shape, for example:
 
-- browser/CDP observe/navigation/action primitives;
+- browser-level CDP proxying if page-target websocket scope is not enough;
 - Linux screenshot/window-tree adapter;
-- macOS/Boba/CuaDriver computer adapter;
-- `observe_after` support on click/type/hotkey/scroll actions.
+- macOS/Boba/CuaDriver computer adapter.
