@@ -6,7 +6,10 @@ import { looksSecret } from '../core/secrets.js';
 import type { Workspace } from '../core/workspaces.js';
 
 const ROOT_CONTEXT = ['AGENTS.md', 'AGENTS.override.md', 'README.md'];
-const AGENT_CONTEXT = ['PROJECT_CONTEXT.md', 'CURRENT_TASK.md', 'DECISIONS.md', 'HANDOFF.md', 'PROGRESS.md', 'CHECKPOINTS.md'];
+const AGENT_CONTEXT = [
+  'AGENT_START_HERE.md', 'SOUL.md', 'USER.md', 'TOOLS.md', 'ESTATE_CONTEXT.md',
+  'PROJECT_CONTEXT.md', 'CURRENT_TASK.md', 'DECISIONS.md', 'HANDOFF.md', 'PROGRESS.md', 'CHECKPOINTS.md'
+];
 const MAX_FILE_CHARS = 8000;
 
 export async function contextSnapshot(workspace: Workspace) {
@@ -20,11 +23,19 @@ export async function agentBootstrap(workspace: Workspace) {
   return ok('agent bootstrap loaded', {
     identity: snapshot.identity,
     operating_model: chatThreadOperatingModel(),
+    agent_start_here: snapshot.continuity['AGENT_START_HERE.md'],
+    agent_profile: {
+      soul: snapshot.continuity['SOUL.md'],
+      user: snapshot.continuity['USER.md'],
+      tools: snapshot.continuity['TOOLS.md'],
+      estate_context: snapshot.continuity['ESTATE_CONTEXT.md']
+    },
     project_instructions: snapshot.project_instructions,
     current_task: snapshot.continuity['CURRENT_TASK.md'],
     recent_handoff: snapshot.continuity['HANDOFF.md'],
     recent_progress: snapshot.continuity['PROGRESS.md'],
     recent_checkpoints: snapshot.continuity['CHECKPOINTS.md'],
+    skills_hint: 'Call list_skills, then read_skill for relevant runbooks only when needed.',
     next_actions: bootstrapNextActions()
   });
 }
@@ -89,6 +100,7 @@ function workspaceCapabilities(workspace: Workspace) {
 function chatThreadOperatingModel() {
   return [
     'Use this bootstrap once at thread start or pickup.',
+    'Behave like an OpenClaw-style workspace agent, not a stateless tool caller.',
     'Use retrieval tools when more local context is needed.',
     'Do not expect Tool Gateway to inject full context every turn.',
     'Checkpoint progress, decisions, current task, and handoff outward to the workspace.'
@@ -97,7 +109,9 @@ function chatThreadOperatingModel() {
 
 function bootstrapNextActions() {
   return [
-    'Read current_task, recent_handoff, recent_progress, and recent_checkpoints.',
+    'Read agent_start_here, current_task, recent_handoff, recent_progress, and recent_checkpoints.',
+    'Call get_workspace_policy and get_tool_profile if tool/capability posture is unclear.',
+    'Call list_skills/read_skill for relevant workspace runbooks.',
     'Call memory_search/read_file for details only when needed.',
     'Call checkpoint_thread or record_handoff before stopping or switching threads.'
   ];
