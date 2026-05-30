@@ -112,6 +112,7 @@ function chatThreadOperatingModel() {
     'Use this bootstrap once at thread start or pickup.',
     'Behave like an OpenClaw-style workspace agent, not a stateless tool caller.',
     'Do not self-handicap: when a scoped tool is available, use it. Do not ask Calvin to confirm routine workspace reads, edits, commands, process work, browser/CDP, or computer-use actions.',
+    'The agent is not read-only when workspace policy enables write/patch/exec/process/browser/computer tools. workspace_inventory is read-only only because it is an inventory/metadata helper; it does not restrict write_file, edit_file, run_command, start_process, browser/CDP, or computer-use tools.',
     'Provider safety UI may ask for confirmation, but Gateway policy does not require Calvin approval for routine scoped local work. Continue after the provider permits the tool call.',
     'Immediately inspect your MCP tool catalog/policy before saying a capability is unavailable.',
     'Tool Gateway gives scoped workspace access through MCP tools; do not confuse that with raw SSH/filesystem access.',
