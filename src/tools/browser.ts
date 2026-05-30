@@ -86,6 +86,18 @@ export async function typeBrowserTab(workspace: Workspace, targetId: string, tex
   return ok('browser tab typed text', await actionPayload(workspace, profile, { target_id: tab.id, target_ref: targetId, text_chars: boundedText.length }, observeAfter));
 }
 
+export async function fillBrowserTabField(workspace: Workspace, targetId: string, selector: string, value: string, label?: string, observeAfter?: ObserveAfter) {
+  assertBrowserControl(workspace);
+  const { profile, tab } = await websocketTarget(workspace, targetId, label);
+  const boundedSelectorValue = boundedSelector(selector);
+  const boundedValue = boundedInputText(value);
+  const expression = fillFieldExpression(boundedSelectorValue, boundedValue);
+  const result = await cdpCommand<{ result?: { value?: unknown } }>(tab.webSocketDebuggerUrl, 'Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+  const filled = result.result?.value as { ok?: boolean; reason?: string; tag?: string } | undefined;
+  if (!filled?.ok) throw new Error(`browser field fill failed: ${filled?.reason ?? 'unknown'}`);
+  return ok('browser tab field filled', await actionPayload(workspace, profile, { target_id: tab.id, target_ref: targetId, selector: boundedSelectorValue, value_chars: boundedValue.length, element: filled.tag ?? null }, observeAfter));
+}
+
 export async function pressBrowserTabKey(workspace: Workspace, targetId: string, key: string, label?: string, observeAfter?: ObserveAfter) {
   assertBrowserControl(workspace);
   const { profile, tab } = await websocketTarget(workspace, targetId, label);
@@ -427,6 +439,27 @@ function boundedCoordinate(value: number) {
 function boundedInputText(value: string) {
   if (value.length > 10_000) throw new Error('browser typed text exceeds 10000 character limit');
   return value;
+}
+
+function boundedSelector(value: string) {
+  if (!value || value.length > 1000) throw new Error('browser selector must be 1-1000 characters');
+  return value;
+}
+
+function fillFieldExpression(selector: string, value: string) {
+  return `(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return { ok: false, reason: 'not_found' };
+    const tag = String(el.tagName || '').toLowerCase();
+    const proto = tag === 'textarea' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+    if (!('value' in el) || !descriptor?.set) return { ok: false, reason: 'not_value_field', tag };
+    el.focus();
+    descriptor.set.call(el, ${JSON.stringify(value)});
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true, tag };
+  })()`;
 }
 
 function boundedKey(value: string) {

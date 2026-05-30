@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { activateBrowserTab, browserCdpBatch, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, pressBrowserTabKey, scrollBrowserTab, typeBrowserTab } from '../../tools/browser.js';
+import { activateBrowserTab, browserCdpBatch, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, fillBrowserTabField, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, pressBrowserTabKey, scrollBrowserTab, typeBrowserTab } from '../../tools/browser.js';
 import { READ_ONLY, RUN_LOCAL } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -15,6 +15,7 @@ export function registerBrowserTools(context: RegisterContext): void {
   registerNavigateBrowserTab(context);
   registerClickBrowserTab(context);
   registerTypeBrowserTab(context);
+  registerFillBrowserTabField(context);
   registerPressBrowserTabKey(context);
   registerScrollBrowserTab(context);
   registerBrowserCdpCall(context);
@@ -61,6 +62,10 @@ function registerClickBrowserTab({ server, workspaces }: RegisterContext): void 
 
 function registerTypeBrowserTab({ server, workspaces }: RegisterContext): void {
   server.registerTool('type_browser_tab', { title: 'Type into browser tab', description: 'Insert text into the focused element of an existing Chrome target/tab through CDP.', inputSchema: { ...targetActionSchema(), text: z.string().max(10000) }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'type_browser_tab', (workspace) => typeBrowserTab(workspace, args.target_id, args.text, args.profile_label, args.observe_after)));
+}
+
+function registerFillBrowserTabField({ server, workspaces }: RegisterContext): void {
+  server.registerTool('fill_browser_tab_field', { title: 'Fill browser tab field', description: 'Set the value of an input or textarea selected by CSS selector through scoped CDP Runtime.evaluate.', inputSchema: { ...targetActionSchema(), selector: z.string().min(1).max(1000), value: z.string().max(10000) }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'fill_browser_tab_field', (workspace) => fillBrowserTabField(workspace, args.target_id, args.selector, args.value, args.profile_label, args.observe_after)));
 }
 
 function registerPressBrowserTabKey({ server, workspaces }: RegisterContext): void {
