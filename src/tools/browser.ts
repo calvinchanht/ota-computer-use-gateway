@@ -38,11 +38,16 @@ export async function browserTabInfo(workspace: Workspace, targetId: string, lab
 
 export async function browserTabScreenshot(workspace: Workspace, targetId: string, label?: string, format: ScreenshotFormat = 'png') {
   assertScreenAllowed(workspace);
-  const profile = selectedBrowserProfile(workspace, label);
-  const tab = await findBrowserTarget(profile, targetId);
-  if (!tab.webSocketDebuggerUrl) throw new Error(`browser tab has no websocket debugger url: ${targetId}`);
+  const { profile, tab } = await websocketTarget(workspace, targetId, label);
   const result = await cdpCommand<{ data: string }>(tab.webSocketDebuggerUrl, 'Page.captureScreenshot', { format });
   return ok('browser tab screenshot captured', { ...tabInfoPayload(workspace, profile, tab), screenshot: screenshotPayload(result.data, format) });
+}
+
+export async function browserTabSnapshot(workspace: Workspace, targetId: string, label?: string) {
+  assertScreenAllowed(workspace);
+  const { profile, tab } = await websocketTarget(workspace, targetId, label);
+  const result = await cdpCommand<DomSnapshot>(tab.webSocketDebuggerUrl, 'DOMSnapshot.captureSnapshot', { computedStyles: [] });
+  return ok('browser tab snapshot captured', { ...tabInfoPayload(workspace, profile, tab), snapshot: boundedJson(result) });
 }
 
 export async function openBrowserTab(workspace: Workspace, url: string, label?: string, observeAfter?: ObserveAfter) {
@@ -74,6 +79,13 @@ async function actionPayload(workspace: Workspace, profile: ReturnType<typeof br
     ...data,
     observation: await observeBrowserAfter(workspace, profile, observeAfter)
   };
+}
+
+async function websocketTarget(workspace: Workspace, targetId: string, label?: string) {
+  const profile = selectedBrowserProfile(workspace, label);
+  const tab = await findBrowserTarget(profile, targetId);
+  if (!tab.webSocketDebuggerUrl) throw new Error(`browser tab has no websocket debugger url: ${targetId}`);
+  return { profile, tab: tab as ChromeTarget & { webSocketDebuggerUrl: string } };
 }
 
 async function findBrowserTarget(profile: ReturnType<typeof browserProfile>, targetId: string) {
@@ -176,6 +188,11 @@ type ObserveAfter = {
 
 type ScreenshotFormat = 'png' | 'jpeg' | 'webp';
 
+type DomSnapshot = {
+  documents?: unknown[];
+  strings?: string[];
+};
+
 type ChromeTarget = {
   id: string;
   type?: string;
@@ -189,6 +206,12 @@ function screenshotPayload(base64: string, format: ScreenshotFormat) {
   const bytes = Buffer.from(base64, 'base64').length;
   if (bytes > 5 * 1024 * 1024) throw new Error('browser screenshot exceeds 5 MiB limit');
   return { media_type: `image/${format}`, base64, bytes };
+}
+
+function boundedJson(value: unknown) {
+  const json = JSON.stringify(value);
+  const limit = 200_000;
+  return { truncated: json.length > limit, chars: Math.min(json.length, limit), json: json.slice(0, limit) };
 }
 
 async function cdpCommand<T>(url: string, method: string, params: Record<string, unknown>) {

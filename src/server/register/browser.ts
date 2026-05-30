@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { activateBrowserTab, browserStatus, browserTabInfo, browserTabScreenshot, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../../tools/browser.js';
+import { activateBrowserTab, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../../tools/browser.js';
 import { READ_ONLY, RUN_LOCAL } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -10,6 +10,7 @@ export function registerBrowserTools(context: RegisterContext): void {
   registerListBrowserTabs(context);
   registerBrowserTabInfo(context);
   registerBrowserTabScreenshot(context);
+  registerBrowserTabSnapshot(context);
   registerOpenBrowserTab(context);
   registerActivateBrowserTab(context);
   registerCloseBrowserTab(context);
@@ -33,6 +34,10 @@ function registerBrowserTabInfo({ server, workspaces }: RegisterContext): void {
 
 function registerBrowserTabScreenshot({ server, workspaces }: RegisterContext): void {
   server.registerTool('browser_tab_screenshot', { title: 'Browser tab screenshot', description: 'Capture a screenshot from one Chrome target/tab through CDP.', inputSchema: screenshotSchema(), annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_tab_screenshot', (workspace) => browserTabScreenshot(workspace, args.target_id, args.profile_label, args.format)));
+}
+
+function registerBrowserTabSnapshot({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_tab_snapshot', { title: 'Browser tab snapshot', description: 'Capture a bounded DOM snapshot from one Chrome target/tab through CDP.', inputSchema: targetInfoSchema(), annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_tab_snapshot', (workspace) => browserTabSnapshot(workspace, args.target_id, args.profile_label)));
 }
 
 function registerOpenBrowserTab({ server, workspaces }: RegisterContext): void {

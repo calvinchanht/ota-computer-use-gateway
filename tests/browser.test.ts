@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { activateBrowserTab, browserStatus, browserTabInfo, browserTabScreenshot, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../src/tools/browser.js';
+import { activateBrowserTab, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../src/tools/browser.js';
 
 describe('browser profile tools', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -50,8 +50,17 @@ describe('browser profile tools', () => {
     expect(data.tab.id).toBe('1');
   });
 
-  it('requires screen permission for browser screenshots', async () => {
+  it('captures a bounded DOM snapshot from one tab through CDP websocket', async () => {
+    mockFetch([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com', webSocketDebuggerUrl: 'ws://cdp/1' }]);
+    mockWebSocket({ documents: [{ nodes: {} }], strings: ['hello'] });
+    const data = (await browserTabSnapshot(fixtureWorkspace(), '1')).data as any;
+    expect(data.snapshot.truncated).toBe(false);
+    expect(data.snapshot.json).toContain('hello');
+  });
+
+  it('requires screen permission for browser screenshots and snapshots', async () => {
     await expect(browserTabScreenshot(fixtureWorkspace({ allow_screen: false }), '1')).rejects.toThrow('screen observation is not enabled');
+    await expect(browserTabSnapshot(fixtureWorkspace({ allow_screen: false }), '1')).rejects.toThrow('screen observation is not enabled');
   });
 
   it('opens a new tab through CDP with observe_after tabs', async () => {

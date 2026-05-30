@@ -18,7 +18,7 @@ function allowedTools(workspace: Workspace): string[] {
   if (workspace.allow_write) base.push('write_file', 'write_binary_file', 'edit_file', 'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread');
   if (workspace.allow_patch) base.push('propose_patch', 'apply_patch');
   if (workspace.allow_tests) base.push('run_command', 'run_configured_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process');
-  if (workspace.allow_screen) base.push('observe_screen', 'browser_tab_screenshot');
+  if (workspace.allow_screen) base.push('observe_screen', 'browser_tab_screenshot', 'browser_tab_snapshot');
   if (workspace.allow_mouse_keyboard) base.push('open_browser_tab', 'activate_browser_tab', 'close_browser_tab');
   return base;
 }
