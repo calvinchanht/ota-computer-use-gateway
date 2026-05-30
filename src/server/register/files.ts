@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
 import { READ_ONLY, WRITE_FILE } from './annotations.js';
-import { editFileTool, listDir, readBinaryFileTool, readFileTool, statPath, treeTool, writeBinaryFileTool, writeFileTool } from '../../tools/files.js';
+import { editFileTool, listDir, readBinaryFileTool, readFileTool, statPath, treeTool, workspaceInventory, writeBinaryFileTool, writeFileTool } from '../../tools/files.js';
 import { searchFiles } from '../../tools/search.js';
 import type { RegisterContext } from './types.js';
 
@@ -12,6 +12,10 @@ export function registerFileTools(context: RegisterContext): void {
 }
 
 function registerReadTools({ server, config, workspaces }: RegisterContext): void {
+  server.registerTool('workspace_inventory', workspaceInventoryTool(), async (args) => runWorkspaceTool(
+    workspaces, args.workspace_id, 'workspace_inventory',
+    (workspace) => workspaceInventory(config, workspace, args.max_entries)
+  ));
   server.registerTool('list_dir', listDirTool(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'list_dir',
     (workspace) => listDir(config, workspace, args.path, args.max_entries)
@@ -54,6 +58,15 @@ function registerSearchTools({ server, config, workspaces }: RegisterContext): v
     workspaces, args.workspace_id, 'search_files',
     (workspace) => searchFiles(config, workspace, args.query, args.path)
   ));
+}
+
+function workspaceInventoryTool() {
+  return {
+    title: 'Workspace inventory',
+    description: 'List a bounded workspace inventory with names and metadata only, including protected/sensitive-looking entries without reading their contents.',
+    inputSchema: { workspace_id: z.string(), max_entries: z.number().optional() },
+    annotations: READ_ONLY
+  };
 }
 
 function listDirTool() {

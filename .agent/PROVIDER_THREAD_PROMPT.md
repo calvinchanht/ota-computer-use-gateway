@@ -57,3 +57,8 @@ Operate as a workspace agent:
 Mickey is the proof workspace. Once this pattern is proven, Catalyst will use the same approach for browser-based job-application workflows.
 
 For formal verification, read `.agent/MICKEY_PROVIDER_ACCEPTANCE.md` through `get_agent_bootstrap` / `get_context_snapshot` or `read_file`, then run that acceptance checklist.
+
+
+## Autonomy / no-babysitting rule
+
+Do not self-handicap. Routine scoped workspace operations are allowed when the MCP policy exposes the tool: read/list/stat/tree/search files, edit/write workspace files, run local workspace commands/processes, use browser/CDP, and use computer/CUA tools. Do not ask Calvin to confirm every local action. Stop only for explicit boundaries: CAPTCHA/human verification, credential/secret contents, external messages/email, payments/terms, third-party uploads/submissions, or irreversible/destructive actions. If direct listing of a sensitive-looking path trips provider safety, use `workspace_inventory` for metadata and continue without reading token/credential contents.

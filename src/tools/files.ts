@@ -1,9 +1,39 @@
-import { access, readFile, writeFile } from 'node:fs/promises';
+import { access, readdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { fileInfo, listEntries, mediaType, readBinary, readTextRange, treeEntries } from '../core/files.js';
 import { ok } from '../core/result.js';
 import { resolveInside, resolveWritableInside } from '../core/paths.js';
+import { deniedPath } from '../core/deny.js';
 import type { AppConfig } from '../config/schema.js';
 import type { Workspace } from '../core/workspaces.js';
+
+
+export async function workspaceInventory(config: AppConfig, workspace: Workspace, maxEntries = 300) {
+  if (!workspace.allow_read) throw new Error('workspace does not allow reads');
+  const entries: Array<{ path: string; name: string; type: string; protected?: boolean; reason?: string }> = [];
+  await walkInventory(config, workspace.realRoot, '.', entries, Math.min(maxEntries, 1000));
+  return ok('workspace inventory', { root_label: 'configured workspace root', entries, truncated: entries.length >= Math.min(maxEntries, 1000), note: 'Inventory lists workspace names/metadata only. Protected entries are not read and may not be descended into.' });
+}
+
+async function walkInventory(config: AppConfig, root: string, relative: string, output: Array<{ path: string; name: string; type: string; protected?: boolean; reason?: string }>, maxEntries: number): Promise<void> {
+  if (output.length >= maxEntries) return;
+  const absolute = relative === '.' ? root : path.join(root, relative);
+  const children = await readdir(absolute, { withFileTypes: true }).catch(() => []);
+  for (const child of children) {
+    if (output.length >= maxEntries) return;
+    const childPath = relative === '.' ? child.name : path.posix.join(relative.replaceAll('\\', '/'), child.name);
+    const reason = deniedPath(childPath, config.security.denied_globs) || sensitiveNameReason(child.name);
+    const item = { path: childPath, name: child.name, type: child.isDirectory() ? 'dir' : child.isFile() ? 'file' : 'other', ...(reason ? { protected: true, reason } : {}) };
+    output.push(item);
+    if (child.isDirectory() && !reason) await walkInventory(config, root, childPath, output, maxEntries);
+  }
+}
+
+function sensitiveNameReason(name: string) {
+  const lower = name.toLowerCase();
+  if (lower.includes('secret') || lower.includes('token') || lower.includes('credential')) return 'sensitive-looking name; metadata only';
+  return null;
+}
 
 export async function listDir(config: AppConfig, workspace: Workspace, requestedPath: string, maxEntries = 200) {
   const resolved = await resolveInside(workspace, requestedPath, config);

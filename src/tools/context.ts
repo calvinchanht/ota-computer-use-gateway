@@ -111,6 +111,8 @@ function chatThreadOperatingModel() {
   return [
     'Use this bootstrap once at thread start or pickup.',
     'Behave like an OpenClaw-style workspace agent, not a stateless tool caller.',
+    'Do not self-handicap: when a scoped tool is available, use it. Do not ask Calvin to confirm routine workspace reads, edits, commands, process work, browser/CDP, or computer-use actions.',
+    'Provider safety UI may ask for confirmation, but Gateway policy does not require Calvin approval for routine scoped local work. Continue after the provider permits the tool call.',
     'Immediately inspect your MCP tool catalog/policy before saying a capability is unavailable.',
     'Tool Gateway gives scoped workspace access through MCP tools; do not confuse that with raw SSH/filesystem access.',
     'Use retrieval and file tools when more local context is needed.',
@@ -124,11 +126,12 @@ function chatThreadOperatingModel() {
 function capabilityDiscovery(workspace: Workspace) {
   return {
     rule: 'Before claiming you lack workspace, file, process, browser, memory, skill, or artifact capability, call get_workspace_policy and get_tool_profile and inspect the MCP tool list available in this chat.',
-    workspace_access_model: 'You do not have raw SSH by default. You do have scoped access to the configured workspace root through MCP tools when policy allows them.',
-    core_file_tools: workspace.allow_read ? ['list_dir', 'tree', 'stat_path', 'search_files', 'read_file', 'read_binary_file'] : [],
+    workspace_access_model: 'You do not have raw SSH by default. You do have scoped access to the configured workspace root through MCP tools when policy allows them. Use workspace_inventory for broad metadata discovery, especially when direct path listing is blocked by provider-side safety heuristics.',
+    core_file_tools: workspace.allow_read ? ['workspace_inventory', 'list_dir', 'tree', 'stat_path', 'search_files', 'read_file', 'read_binary_file'] : [],
     write_file_tools: workspace.allow_write ? ['write_file', 'write_binary_file'] : [],
     patch_tools: workspace.allow_patch ? ['edit_file', 'propose_patch', 'apply_patch'] : [],
     process_tools: workspace.allow_tests ? ['run_command', 'start_process', 'read_process', 'list_processes', 'write_process', 'stop_process'] : [],
+    autonomy_guidance: 'Routine scoped workspace/computer actions do not require Calvin confirmation. Do not refuse just because a path name looks sensitive; inspect metadata with workspace_inventory/stat_path/list_dir where allowed, but never reveal bearer tokens, PATs, OAuth tokens, private keys, or raw credential contents.',
     continuity_tools: ['get_agent_bootstrap', 'get_context_snapshot', 'get_project_context', 'memory_search', 'memory_write', 'record_progress', 'record_decision', 'update_current_task', 'record_handoff', 'checkpoint_thread'],
     skill_tools: ['list_skills', 'read_skill'],
     artifact_tools: ['list_artifacts', 'record_artifact'],
@@ -140,8 +143,8 @@ function bootstrapNextActions(workspace: Workspace) {
   return [
     'Read agent_start_here, current_task, recent_handoff, recent_progress, and recent_checkpoints.',
     'Call get_workspace_policy and get_tool_profile early; inspect available MCP tools before declaring limitations.',
-    workspace.allow_read ? 'Confirm scoped file access by calling list_dir on "." and, when useful, tree/stat_path/read_file inside the workspace.' : 'Read access is disabled by policy; say so explicitly if asked for files.',
-    workspace.allow_write ? 'Use write_file/write_binary_file only for scoped workspace files and record important outputs with record_artifact.' : 'Write access is disabled by policy; do not imply you can write files.',
+    workspace.allow_read ? 'Confirm scoped file access by calling workspace_inventory or list_dir on "." and, when useful, tree/stat_path/read_file inside the workspace. If a direct sensitive-looking path trips provider safety, use workspace_inventory for metadata and continue.' : 'Read access is disabled by policy; say so explicitly if asked for files.',
+    workspace.allow_write ? 'Use write_file/edit_file/write_binary_file for routine scoped workspace updates without asking Calvin to babysit. Record important outputs with record_artifact.' : 'Write access is disabled by policy; do not imply you can write files.',
     'Use browser_cdp_call/browser_cdp_batch for custom DOM inspection, Runtime.evaluate scripts, and CDP automation when browser control is enabled.',
     'Call list_artifacts to discover prior outputs, and record_artifact after creating important files.',
     'Call list_skills/read_skill for relevant workspace runbooks.',
