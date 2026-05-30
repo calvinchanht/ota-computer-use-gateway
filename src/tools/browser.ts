@@ -94,6 +94,22 @@ export async function closeBrowserTab(workspace: Workspace, targetId: string, la
   return ok('browser tab closed', await actionPayload(workspace, profile, { target_id: targetId }, observeAfter));
 }
 
+export async function browserCdpCall(workspace: Workspace, targetId: string, method: string, params: Record<string, unknown> = {}, label?: string) {
+  assertBrowserControl(workspace);
+  const { profile, tab } = await websocketTarget(workspace, targetId, label);
+  const result = await cdpCommand(tab.webSocketDebuggerUrl, boundedCdpMethod(method), boundedCdpParams(params));
+  return ok('browser CDP call completed', { ...tabInfoPayload(workspace, profile, tab), method, result: boundedJson(result) });
+}
+
+export async function browserCdpBatch(workspace: Workspace, targetId: string, calls: CdpBatchCall[], label?: string) {
+  assertBrowserControl(workspace);
+  const { profile, tab } = await websocketTarget(workspace, targetId, label);
+  const boundedCalls = calls.slice(0, 20);
+  const results = [];
+  for (const call of boundedCalls) results.push(await oneCdpBatchCall(tab.webSocketDebuggerUrl, call));
+  return ok('browser CDP batch completed', { ...tabInfoPayload(workspace, profile, tab), results });
+}
+
 async function actionPayload(workspace: Workspace, profile: ReturnType<typeof browserProfile>, data: Record<string, unknown>, observeAfter?: ObserveAfter) {
   return {
     workspace_id: workspace.id,
@@ -216,6 +232,11 @@ type DomSnapshot = {
   strings?: string[];
 };
 
+type CdpBatchCall = {
+  method: string;
+  params?: Record<string, unknown>;
+};
+
 type ChromeTarget = {
   id: string;
   type?: string;
@@ -250,6 +271,22 @@ function boundedCoordinate(value: number) {
 function boundedInputText(value: string) {
   if (value.length > 10_000) throw new Error('browser typed text exceeds 10000 character limit');
   return value;
+}
+
+function boundedCdpMethod(method: string) {
+  if (!/^[A-Za-z][A-Za-z0-9]*\.[A-Za-z][A-Za-z0-9]*$/.test(method)) throw new Error('invalid CDP method name');
+  return method;
+}
+
+function boundedCdpParams(params: Record<string, unknown>) {
+  if (JSON.stringify(params).length > 200_000) throw new Error('browser CDP params exceed 200000 character limit');
+  return params;
+}
+
+async function oneCdpBatchCall(url: string, call: CdpBatchCall) {
+  const method = boundedCdpMethod(call.method);
+  const result = await cdpCommand(url, method, boundedCdpParams(call.params ?? {}));
+  return { method, result: boundedJson(result) };
 }
 
 async function cdpCommand<T>(url: string, method: string, params: Record<string, unknown>) {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { activateBrowserTab, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, typeBrowserTab } from '../../tools/browser.js';
+import { activateBrowserTab, browserCdpBatch, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, typeBrowserTab } from '../../tools/browser.js';
 import { READ_ONLY, RUN_LOCAL } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -15,6 +15,8 @@ export function registerBrowserTools(context: RegisterContext): void {
   registerNavigateBrowserTab(context);
   registerClickBrowserTab(context);
   registerTypeBrowserTab(context);
+  registerBrowserCdpCall(context);
+  registerBrowserCdpBatch(context);
   registerActivateBrowserTab(context);
   registerCloseBrowserTab(context);
 }
@@ -59,6 +61,14 @@ function registerTypeBrowserTab({ server, workspaces }: RegisterContext): void {
   server.registerTool('type_browser_tab', { title: 'Type into browser tab', description: 'Insert text into the focused element of an existing Chrome target/tab through CDP.', inputSchema: { ...targetActionSchema(), text: z.string().max(10000) }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'type_browser_tab', (workspace) => typeBrowserTab(workspace, args.target_id, args.text, args.profile_label, args.observe_after)));
 }
 
+function registerBrowserCdpCall({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_cdp_call', { title: 'Browser CDP call', description: 'Call one Chrome DevTools Protocol method on a scoped target/tab.', inputSchema: cdpCallSchema(), annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_cdp_call', (workspace) => browserCdpCall(workspace, args.target_id, args.method, args.params ?? {}, args.profile_label)));
+}
+
+function registerBrowserCdpBatch({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_cdp_batch', { title: 'Browser CDP batch', description: 'Call multiple Chrome DevTools Protocol methods on a scoped target/tab.', inputSchema: { ...targetInfoSchema(), calls: z.array(cdpCallItemSchema()).min(1).max(20) }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_cdp_batch', (workspace) => browserCdpBatch(workspace, args.target_id, args.calls, args.profile_label)));
+}
+
 function registerActivateBrowserTab({ server, workspaces }: RegisterContext): void {
   server.registerTool('activate_browser_tab', { title: 'Activate browser tab', description: 'Focus a Chrome target/tab through CDP.', inputSchema: targetActionSchema(), annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'activate_browser_tab', (workspace) => activateBrowserTab(workspace, args.target_id, args.profile_label, args.observe_after)));
 }
@@ -77,6 +87,18 @@ function targetInfoSchema() {
 
 function screenshotSchema() {
   return { ...targetInfoSchema(), format: z.enum(['png', 'jpeg', 'webp']).optional() };
+}
+
+function cdpCallSchema() {
+  return { ...targetInfoSchema(), method: cdpMethodSchema(), params: z.record(z.string(), z.unknown()).optional() };
+}
+
+function cdpCallItemSchema() {
+  return z.object({ method: cdpMethodSchema(), params: z.record(z.string(), z.unknown()).optional() });
+}
+
+function cdpMethodSchema() {
+  return z.string().regex(/^[A-Za-z][A-Za-z0-9]*\.[A-Za-z][A-Za-z0-9]*$/);
 }
 
 function targetActionSchema() {

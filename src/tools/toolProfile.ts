@@ -16,8 +16,8 @@ function canonicalTools(): string[] {
   return [
     'list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_tab_info',
     'browser_tab_screenshot', 'browser_tab_snapshot', 'open_browser_tab', 'navigate_browser_tab',
-    'click_browser_tab', 'type_browser_tab', 'activate_browser_tab', 'close_browser_tab',
-    'computer_status', 'observe_screen',
+    'click_browser_tab', 'type_browser_tab', 'browser_cdp_call', 'browser_cdp_batch',
+    'activate_browser_tab', 'close_browser_tab', 'computer_status', 'observe_screen',
     'read_file', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
     'run_command', 'run_configured_command', 'list_dir', 'search_files',
     'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',

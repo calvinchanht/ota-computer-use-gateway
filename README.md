@@ -40,7 +40,7 @@ See GitHub issue #1 for the source-of-truth implementation plan.
 The gateway exposes explicit snake_case MCP primitives for agent runtime work:
 
 - discovery and policy: `heartbeat`, `workspace_status`, `get_workspace_policy`, `get_tool_profile`
-- browser/computer-use foundation: `list_browser_profiles`, `browser_status`, `list_browser_tabs`, `browser_tab_info`, `browser_tab_screenshot`, `browser_tab_snapshot`, `open_browser_tab`, `navigate_browser_tab`, `click_browser_tab`, `type_browser_tab`, `activate_browser_tab`, `close_browser_tab`, `computer_status`, `observe_screen`
+- browser/computer-use foundation: `list_browser_profiles`, `browser_status`, `list_browser_tabs`, `browser_tab_info`, `browser_tab_screenshot`, `browser_tab_snapshot`, `open_browser_tab`, `navigate_browser_tab`, `click_browser_tab`, `type_browser_tab`, `browser_cdp_call`, `browser_cdp_batch`, `activate_browser_tab`, `close_browser_tab`, `computer_status`, `observe_screen`
 - filesystem: `list_dir`, `stat_path`, `tree`, `read_file`, `write_file`, `read_binary_file`, `write_binary_file`, `edit_file`, `search_files`
 - patches: `propose_patch`, `apply_patch`
 - commands: `run_command`, `run_configured_command`
