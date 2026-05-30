@@ -51,5 +51,5 @@ describe('writeFileTool', () => {
 
 async function fixtureWorkspace(allowWrite: boolean): Promise<Workspace> {
   const root = await mkdtemp(path.join(tmpdir(), 'gtp-write-'));
-  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: allowWrite, allow_patch: false, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, commands: {} };
+  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: allowWrite, allow_patch: false, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, browser: { profiles: [] }, commands: {} };
 }

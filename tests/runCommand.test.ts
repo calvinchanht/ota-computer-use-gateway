@@ -41,5 +41,5 @@ describe('runConfiguredCommand', () => {
 
 async function fixtureWorkspace(allowTests: boolean): Promise<Workspace> {
   const root = await mkdtemp(path.join(tmpdir(), 'gtp-command-'));
-  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: false, allow_patch: false, allow_tests: allowTests, allow_screen: false, allow_mouse_keyboard: false, commands: { echo: 'printf hello' } };
+  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: false, allow_patch: false, allow_tests: allowTests, allow_screen: false, allow_mouse_keyboard: false, browser: { profiles: [] }, commands: { echo: 'printf hello' } };
 }

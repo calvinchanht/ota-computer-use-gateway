@@ -1,5 +1,20 @@
 import { z } from 'zod';
 
+export const browserProfileSchema = z.object({
+  label: z.string().min(1).optional(),
+  user_data_dir: z.string().min(1).optional(),
+  cdp_host: z.string().min(1).default('127.0.0.1'),
+  cdp_port: z.number().int().positive().default(9222),
+  display: z.string().min(1).optional(),
+  headed: z.boolean().default(true),
+  default: z.boolean().default(false),
+  launch: z.boolean().default(false)
+});
+
+export const browserSchema = z.object({
+  profiles: z.array(browserProfileSchema).default([])
+}).default({ profiles: [] });
+
 export const workspaceSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -10,6 +25,7 @@ export const workspaceSchema = z.object({
   allow_tests: z.boolean().default(false),
   allow_screen: z.boolean().default(false),
   allow_mouse_keyboard: z.boolean().default(false),
+  browser: browserSchema,
   commands: z.record(z.string(), z.string()).default({})
 });
 

@@ -53,6 +53,7 @@ async function fixtureWorkspace(): Promise<Workspace> {
     allow_tests: false,
     allow_screen: false,
     allow_mouse_keyboard: false,
+    browser: { profiles: [] },
     commands: {}
   };
 }

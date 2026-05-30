@@ -4,8 +4,37 @@ Issue #6 adds provider-neutral browser/computer-use primitives in small, safe la
 
 ## Current tools
 
+- `list_browser_profiles` — lists configured headed Chrome/CDP profiles for a workspace.
+- `browser_status` — returns selected profile metadata, CDP endpoint, and tab hygiene reminder.
 - `computer_status` — returns workspace computer-use capability posture and adapter status.
 - `observe_screen` — returns the screen observation shape when `allow_screen` is enabled. Platform adapters will fill screenshot/window-tree data in later slices.
+
+## Browser profile defaults
+
+Browser tools are Chrome/CDP-first, not Playwright-first. The default posture is headed Chrome attached through a debugging port.
+
+Workspace config can declare profiles:
+
+```yaml
+browser:
+  profiles:
+    - label: "mickey"
+      user_data_dir: "/home/mickey/.config/google-chrome-mickey"
+      cdp_host: "127.0.0.1"
+      cdp_port: 9222
+      display: ":20"
+      headed: true
+      default: true
+      launch: false
+```
+
+If no profile is configured, the gateway synthesizes a default profile whose label is the workspace/agent id. This avoids vague labels like `default` and helps agents stay aware of which browser profile they are using.
+
+Browser status/profile responses include:
+
+```json
+{ "reminder": "Close unused tabs." }
+```
 
 ## `observe_after` convention
 

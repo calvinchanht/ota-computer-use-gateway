@@ -28,5 +28,5 @@ describe('tool limits', () => {
 
 async function fixtureWorkspace(): Promise<Workspace> {
   const root = await mkdtemp(path.join(tmpdir(), 'gtp-limits-'));
-  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: false, allow_patch: false, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, commands: {} };
+  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: false, allow_patch: false, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, browser: { profiles: [] }, commands: {} };
 }

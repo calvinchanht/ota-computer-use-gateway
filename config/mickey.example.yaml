@@ -21,6 +21,16 @@ workspaces:
     allow_tests: true
     allow_screen: false
     allow_mouse_keyboard: false
+    browser:
+      profiles:
+        - label: "mickey"
+          user_data_dir: "/absolute/path/to/chrome-profile"
+          cdp_host: "127.0.0.1"
+          cdp_port: 9222
+          display: ":20"
+          headed: true
+          default: true
+          launch: false
     commands:
       check: "npm run check"
       smoke: "npm run smoke:stdio"

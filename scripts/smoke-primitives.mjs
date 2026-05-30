@@ -16,6 +16,8 @@ try {
   await waitForHealth(port);
   const sessionId = await initialize(port);
   await call(port, sessionId, 'get_tool_profile', {});
+  await expectText(port, sessionId, 'list_browser_profiles', { workspace_id: 'smoke' }, 'Close unused tabs.');
+  await expectText(port, sessionId, 'browser_status', { workspace_id: 'smoke' }, '127.0.0.1:9222');
   await expectText(port, sessionId, 'computer_status', { workspace_id: 'smoke' }, 'observe_after');
   await exerciseFiles(port, sessionId);
   await exerciseContext(port, sessionId);

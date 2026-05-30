@@ -34,5 +34,5 @@ describe('resolveInside', () => {
 async function fixtureWorkspace(): Promise<Workspace> {
   const root = await mkdtemp(path.join(tmpdir(), 'gtp-mcp-'));
   await mkdir(path.join(root, 'src'), { recursive: true });
-  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: false, allow_patch: true, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, commands: {} };
+  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: false, allow_patch: true, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, browser: { profiles: [] }, commands: {} };
 }
