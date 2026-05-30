@@ -34,13 +34,31 @@ export async function openBrowserTab(workspace: Workspace, url: string, label?: 
   assertBrowserControl(workspace);
   const profile = selectedBrowserProfile(workspace, label);
   const opened = await fetchCdpJson<ChromeTarget>(profile, `/json/new?${encodeURIComponent(url)}`, 'PUT');
-  return ok('browser tab opened', {
+  return ok('browser tab opened', await actionPayload(workspace, profile, { opened: tabSummary(opened) }, observeAfter));
+}
+
+export async function activateBrowserTab(workspace: Workspace, targetId: string, label?: string, observeAfter?: ObserveAfter) {
+  assertBrowserControl(workspace);
+  const profile = selectedBrowserProfile(workspace, label);
+  await fetchCdpText(profile, `/json/activate/${encodeURIComponent(targetId)}`);
+  return ok('browser tab activated', await actionPayload(workspace, profile, { target_id: targetId }, observeAfter));
+}
+
+export async function closeBrowserTab(workspace: Workspace, targetId: string, label?: string, observeAfter?: ObserveAfter) {
+  assertBrowserControl(workspace);
+  const profile = selectedBrowserProfile(workspace, label);
+  await fetchCdpText(profile, `/json/close/${encodeURIComponent(targetId)}`);
+  return ok('browser tab closed', await actionPayload(workspace, profile, { target_id: targetId }, observeAfter));
+}
+
+async function actionPayload(workspace: Workspace, profile: ReturnType<typeof browserProfile>, data: Record<string, unknown>, observeAfter?: ObserveAfter) {
+  return {
     workspace_id: workspace.id,
     reminder: REMINDER,
     profile_label: profile.label,
-    opened: tabSummary(opened),
+    ...data,
     observation: await observeBrowserAfter(workspace, profile, observeAfter)
-  });
+  };
 }
 
 async function observeBrowserAfter(workspace: Workspace, profile: ReturnType<typeof browserProfile>, options?: ObserveAfter) {
@@ -60,9 +78,19 @@ async function cdpReachable(profile: ReturnType<typeof browserProfile>) {
 }
 
 async function fetchCdpJson<T>(profile: ReturnType<typeof browserProfile>, path: string, method = 'GET'): Promise<T> {
+  const res = await fetchCdp(profile, path, method);
+  return await res.json() as T;
+}
+
+async function fetchCdpText(profile: ReturnType<typeof browserProfile>, path: string, method = 'GET') {
+  const res = await fetchCdp(profile, path, method);
+  return await res.text();
+}
+
+async function fetchCdp(profile: ReturnType<typeof browserProfile>, path: string, method = 'GET') {
   const res = await fetch(`${cdpEndpoint(profile)}${path}`, { method });
   if (!res.ok) throw new Error(`CDP request failed: ${res.status}`);
-  return await res.json() as T;
+  return res;
 }
 
 function cdpEndpoint(profile: ReturnType<typeof browserProfile>) {

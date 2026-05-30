@@ -1,13 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { browserStatus, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../src/tools/browser.js';
+import { activateBrowserTab, browserStatus, closeBrowserTab, listBrowserProfiles, listBrowserTabs, openBrowserTab } from '../src/tools/browser.js';
 
 describe('browser profile tools', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('defaults browser profile label to workspace id', async () => {
-    const result = await listBrowserProfiles(fixtureWorkspace());
-    const data = result.data as any;
+    const data = (await listBrowserProfiles(fixtureWorkspace())).data as any;
     expect(data.reminder).toBe('Close unused tabs.');
     expect(data.profiles[0].label).toBe('mickey');
     expect(data.profiles[0].headed).toBe(true);
@@ -38,13 +37,23 @@ describe('browser profile tools', () => {
 
   it('opens a new tab through CDP with observe_after tabs', async () => {
     mockFetchSequence([{ id: 'new', type: 'page', title: 'New', url: 'https://example.com' }, [{ id: 'new', type: 'page', title: 'New', url: 'https://example.com' }]]);
-    const data = (await openBrowserTab(fixtureWorkspace({ allow_mouse_keyboard: true }), 'https://example.com', undefined, { tabs: true })).data as any;
+    const data = (await openBrowserTab(controlWorkspace(), 'https://example.com', undefined, { tabs: true })).data as any;
     expect(data.opened.id).toBe('new');
     expect(data.observation.tabs[0].url).toBe('https://example.com');
   });
 
-  it('requires browser control for opening tabs', async () => {
+  it('activates and closes tabs through CDP', async () => {
+    mockFetchSequence(['Target activated', [{ id: '1', type: 'page' }], 'Target is closing']);
+    const active = (await activateBrowserTab(controlWorkspace(), '1', undefined, { tabs: true })).data as any;
+    const closed = (await closeBrowserTab(controlWorkspace(), '1')).data as any;
+    expect(active.target_id).toBe('1');
+    expect(active.observation.tabs[0].id).toBe('1');
+    expect(closed.target_id).toBe('1');
+  });
+
+  it('requires browser control for tab mutations', async () => {
     await expect(openBrowserTab(fixtureWorkspace(), 'https://example.com')).rejects.toThrow('browser control is not enabled');
+    await expect(closeBrowserTab(fixtureWorkspace(), '1')).rejects.toThrow('browser control is not enabled');
   });
 
   it('rejects unknown profile labels', async () => {
@@ -52,13 +61,21 @@ describe('browser profile tools', () => {
   });
 });
 
+function controlWorkspace() {
+  return fixtureWorkspace({ allow_mouse_keyboard: true });
+}
+
 function mockFetch(body: unknown) {
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => body })));
+  vi.stubGlobal('fetch', vi.fn(async () => response(body)));
 }
 
 function mockFetchSequence(bodies: unknown[]) {
   const responses = [...bodies];
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => responses.shift() })));
+  vi.stubGlobal('fetch', vi.fn(async () => response(responses.shift())));
+}
+
+function response(body: unknown) {
+  return { ok: true, json: async () => body, text: async () => String(body) };
 }
 
 function fixtureWorkspace(overrides: Partial<Workspace> = {}): Workspace {

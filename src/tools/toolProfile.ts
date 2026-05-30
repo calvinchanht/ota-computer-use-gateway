@@ -14,7 +14,8 @@ export function toolProfile() {
 
 function canonicalTools(): string[] {
   return [
-    'list_browser_profiles', 'browser_status', 'list_browser_tabs', 'open_browser_tab', 'computer_status', 'observe_screen',
+    'list_browser_profiles', 'browser_status', 'list_browser_tabs', 'open_browser_tab',
+    'activate_browser_tab', 'close_browser_tab', 'computer_status', 'observe_screen',
     'read_file', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
     'run_command', 'run_configured_command', 'list_dir', 'search_files',
     'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',
