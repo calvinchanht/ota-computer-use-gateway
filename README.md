@@ -48,6 +48,7 @@ The gateway exposes explicit snake_case MCP primitives for agent runtime work:
 `exec` and old `process_*` names exist only as deprecated compatibility aliases. Use `get_tool_profile` for machine-readable canonical names and aliases.
 
 See `docs/PRIMITIVE_RUNTIME.md` for the runtime surface, safety model, and validation gate.
+See `docs/CONTEXT_PICKUP.md` for the chat-thread bootstrap/checkpoint model used by issue #4.
 
 Validation:
 

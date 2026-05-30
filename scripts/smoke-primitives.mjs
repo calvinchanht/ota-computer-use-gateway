@@ -17,6 +17,7 @@ try {
   const sessionId = await initialize(port);
   await call(port, sessionId, 'get_tool_profile', {});
   await exerciseFiles(port, sessionId);
+  await exerciseContext(port, sessionId);
   await exerciseCommand(port, sessionId);
   await exerciseProcess(port, sessionId);
   console.log('primitive smoke ok');
@@ -35,6 +36,15 @@ async function exerciseFiles(port, sessionId) {
   await call(port, sessionId, 'write_file', { workspace_id: 'smoke', path: 'note.txt', content: 'alpha beta', overwrite: true });
   await call(port, sessionId, 'edit_file', { workspace_id: 'smoke', path: 'note.txt', old_text: 'beta', new_text: 'BETA' });
   await expectText(port, sessionId, 'read_file', { workspace_id: 'smoke', path: 'note.txt' }, 'alpha BETA');
+}
+
+async function exerciseContext(port, sessionId) {
+  await expectText(port, sessionId, 'get_agent_bootstrap', { workspace_id: 'smoke' }, 'Checkpoint');
+  await call(port, sessionId, 'record_progress', { workspace_id: 'smoke', title: 'Smoke progress', body: 'progress smoke' });
+  await call(port, sessionId, 'record_decision', { workspace_id: 'smoke', title: 'Smoke decision', body: 'decision smoke' });
+  await call(port, sessionId, 'update_current_task', { workspace_id: 'smoke', title: 'Smoke task', body: 'task smoke' });
+  await call(port, sessionId, 'checkpoint_thread', { workspace_id: 'smoke', title: 'Smoke checkpoint', summary: 'checkpoint smoke', next_steps: ['ship it'] });
+  await expectText(port, sessionId, 'get_context_snapshot', { workspace_id: 'smoke' }, 'checkpoint smoke');
 }
 
 async function exerciseCommand(port, sessionId) {
