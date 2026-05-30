@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { computerClick, computerHotkey, computerPressKey, computerStatus, computerTypeText, observeScreen } from '../../tools/computer.js';
+import { computerClick, computerCuaCall, computerHotkey, computerPressKey, computerStatus, computerTypeText, observeScreen } from '../../tools/computer.js';
 import { READ_ONLY, RUN_LOCAL } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -17,6 +17,7 @@ export function registerComputerTools(context: RegisterContext): void {
   registerComputerTypeText(context);
   registerComputerPressKey(context);
   registerComputerHotkey(context);
+  registerComputerCuaCall(context);
 }
 
 function registerComputerStatus({ server, workspaces }: RegisterContext): void {
@@ -71,4 +72,14 @@ function registerComputerHotkey({ server, workspaces }: RegisterContext): void {
     inputSchema: { workspace_id: z.string(), pid: z.number().int().positive(), keys: z.array(z.string().min(1).max(32)).min(2).max(8), window_id: z.number().int().positive().optional(), observe_after: observeAfterSchema },
     annotations: RUN_LOCAL
   }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_hotkey', (workspace) => computerHotkey(workspace, args.pid, args.keys, args.window_id, args.observe_after)));
+}
+
+
+function registerComputerCuaCall({ server, workspaces }: RegisterContext): void {
+  server.registerTool('computer_cua_call', {
+    title: 'Computer CUA call',
+    description: 'Call an allowed CUADriver tool directly. Read-only CUA tools require screen policy; mutating CUA tools require mouse/keyboard policy.',
+    inputSchema: { workspace_id: z.string(), tool: z.string().min(1).max(80), args: z.record(z.string(), z.unknown()).default({}), observe_after: observeAfterSchema },
+    annotations: RUN_LOCAL
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_cua_call', (workspace) => computerCuaCall(workspace, args.tool, args.args, args.observe_after)));
 }

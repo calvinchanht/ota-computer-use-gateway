@@ -41,6 +41,9 @@ When running on macOS with `cua-driver` available, Tool Gateway computer tools u
 - `computer_type_text`
 - `computer_press_key`
 - `computer_hotkey`
+- `computer_cua_call`
+
+`computer_cua_call` is the capability-first CUADriver proxy for allowed CUA tools. Read-only calls (`check_permissions`, `list_windows`, `get_screen_size`, `get_window_state`, `get_accessibility_tree`, `get_agent_cursor_state`, `screenshot`) require screen policy. Mutating calls (`click`, `double_click`, `drag`, `hotkey`, `press_key`, `set_value`, `type_text`, `type_text_chars`, `zoom`) require mouse/keyboard policy.
 
 `observe_screen` returns permissions, screen size, a bounded window list, and a bounded screenshot payload when CUA screenshot succeeds. If macOS `screencapture` fails, the tool returns `screenshot_error` while still returning window state when available.
 
@@ -68,6 +71,7 @@ On 2026-05-30, Genesis verified:
 - Direct CUA Terminal mutation proof succeeded by typing a command into Terminal and reading back `/Users/calvinc/Desktop/boba-cua-terminal-proof.txt`.
 - Local Boba Tool Gateway was cloned/built on the Mac and run on `127.0.0.1:8768` with `config/boba.local.yaml`.
 - Public-style local MCP tool discovery exposed the computer tools above.
+- Added `computer_cua_call` so Boba can use the real scoped CUADriver surface rather than being trapped behind a tiny toy wrapper.
 - `computer_status` reported CUA ready for screen and mouse/keyboard.
 - `observe_screen` returned screen size and window list; screenshot failed with `screencapture failed for main display`, so screenshot remains a live Mac display/TCC/screencapture blocker.
 - Gateway-mediated CUA mutation proof succeeded via `computer_type_text` + `computer_press_key` against Terminal, creating `/Users/calvinc/Desktop/boba-gateway-cua-proof.txt` with the expected marker.

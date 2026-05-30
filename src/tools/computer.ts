@@ -7,6 +7,27 @@ import type { Workspace } from '../core/workspaces.js';
 const execFileAsync = promisify(execFile);
 const CUA_DRIVER = process.env.CUA_DRIVER_BIN || 'cua-driver';
 const MAX_SCREENSHOT_BASE64 = 40000;
+const READ_ONLY_CUA_TOOLS = new Set([
+  'check_permissions',
+  'list_windows',
+  'get_screen_size',
+  'get_window_state',
+  'get_accessibility_tree',
+  'get_agent_cursor_state',
+  'screenshot'
+]);
+const MUTATING_CUA_TOOLS = new Set([
+  'click',
+  'double_click',
+  'drag',
+  'hotkey',
+  'press_key',
+  'set_value',
+  'type_text',
+  'type_text_chars',
+  'zoom'
+]);
+const ALLOWED_CUA_TOOLS = new Set([...READ_ONLY_CUA_TOOLS, ...MUTATING_CUA_TOOLS]);
 
 export type ObserveAfter = {
   delay_ms?: number;
@@ -93,12 +114,34 @@ export async function computerHotkey(workspace: Workspace, pid: number, keys: st
   return ok('computer hotkey', { result, observe_after: await observeAfter(workspace, observe) });
 }
 
+export async function computerCuaCall(workspace: Workspace, tool: string, args: Record<string, unknown> = {}, observe?: ObserveAfter) {
+  if (!ALLOWED_CUA_TOOLS.has(tool)) throw new Error(`cua tool is not allowed: ${tool}`);
+  const readOnly = READ_ONLY_CUA_TOOLS.has(tool);
+  if (readOnly) {
+    if (!workspace.allow_screen) throw new Error('screen observation is not enabled for this workspace');
+  } else {
+    ensureMouseKeyboard(workspace);
+  }
+  const result = await cuaCall(tool, sanitizeCuaArgs(args));
+  return ok('cua tool call', { tool, read_only: readOnly, result: boundCuaResult(tool, result), observe_after: await observeAfter(workspace, observe) });
+}
+
 export async function observeAfter(workspace: Workspace, options?: ObserveAfter) {
   if (!options) return undefined;
   const delayMs = clampDelay(options.delay_ms ?? 0);
   if (delayMs > 0) await delay(delayMs);
   if (options.screenshot || options.include_window_tree) return (await observeScreen(workspace)).data;
   return { delay_ms: delayMs };
+}
+
+function sanitizeCuaArgs(args: Record<string, unknown>) {
+  return JSON.parse(JSON.stringify(args ?? {})) as Record<string, unknown>;
+}
+
+function boundCuaResult(tool: string, result: unknown) {
+  if (tool === 'list_windows') return boundWindows(result);
+  if (tool === 'screenshot') return boundedScreenshot(result);
+  return result;
 }
 
 function ensureMouseKeyboard(workspace: Workspace) {
