@@ -10,6 +10,7 @@ describe('context tools', () => {
     const workspace = await fixtureWorkspace();
     await writeFile(path.join(workspace.realRoot, 'AGENTS.md'), 'project instructions');
     await writeFile(path.join(workspace.realRoot, '.agent', 'AGENT_START_HERE.md'), 'start here');
+    await writeFile(path.join(workspace.realRoot, '.agent', 'PROVIDER_THREAD_PROMPT.md'), 'provider prompt');
     await writeFile(path.join(workspace.realRoot, '.agent', 'SOUL.md'), 'agent soul');
     await writeFile(path.join(workspace.realRoot, '.agent', 'CURRENT_TASK.md'), 'current task');
     await writeFile(path.join(workspace.realRoot, '.agent', 'MEMORY_LOG.jsonl'), '{"title":"recent"}\n');
@@ -19,6 +20,7 @@ describe('context tools', () => {
     expect(data.identity.id).toBe('ctx');
     expect(data.project_instructions['AGENTS.md']).toContain('project instructions');
     expect(data.continuity['AGENT_START_HERE.md']).toContain('start here');
+    expect(data.continuity['PROVIDER_THREAD_PROMPT.md']).toContain('provider prompt');
     expect(data.continuity['SOUL.md']).toContain('agent soul');
     expect(data.continuity['CURRENT_TASK.md']).toContain('current task');
     expect(data.recent_memory).toContain('recent');
@@ -27,6 +29,7 @@ describe('context tools', () => {
   it('returns an ordered bootstrap packet for chat-thread pickup', async () => {
     const workspace = await fixtureWorkspace();
     await writeFile(path.join(workspace.realRoot, '.agent', 'AGENT_START_HERE.md'), 'call bootstrap first');
+    await writeFile(path.join(workspace.realRoot, '.agent', 'PROVIDER_THREAD_PROMPT.md'), 'provider thread first message');
     await writeFile(path.join(workspace.realRoot, '.agent', 'SOUL.md'), 'mickey soul');
     await writeFile(path.join(workspace.realRoot, '.agent', 'TOOLS.md'), 'tool notes');
     await writeFile(path.join(workspace.realRoot, '.agent', 'CURRENT_TASK.md'), 'current task');
@@ -35,6 +38,7 @@ describe('context tools', () => {
     const result = await agentBootstrap(workspace);
     const data = result.data as any;
     expect(data.agent_start_here).toContain('call bootstrap first');
+    expect(data.provider_thread_prompt).toContain('provider thread first message');
     expect(data.agent_profile.soul).toContain('mickey soul');
     expect(data.agent_profile.tools).toContain('tool notes');
     expect(data.current_task).toContain('current task');

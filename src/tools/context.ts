@@ -7,7 +7,7 @@ import type { Workspace } from '../core/workspaces.js';
 
 const ROOT_CONTEXT = ['AGENTS.md', 'AGENTS.override.md', 'README.md'];
 const AGENT_CONTEXT = [
-  'AGENT_START_HERE.md', 'SOUL.md', 'USER.md', 'TOOLS.md', 'ESTATE_CONTEXT.md',
+  'AGENT_START_HERE.md', 'PROVIDER_THREAD_PROMPT.md', 'SOUL.md', 'USER.md', 'TOOLS.md', 'ESTATE_CONTEXT.md',
   'PROJECT_CONTEXT.md', 'CURRENT_TASK.md', 'DECISIONS.md', 'HANDOFF.md', 'PROGRESS.md', 'CHECKPOINTS.md'
 ];
 const MAX_FILE_CHARS = 8000;
@@ -24,6 +24,7 @@ export async function agentBootstrap(workspace: Workspace) {
     identity: snapshot.identity,
     operating_model: chatThreadOperatingModel(),
     agent_start_here: snapshot.continuity['AGENT_START_HERE.md'],
+    provider_thread_prompt: snapshot.continuity['PROVIDER_THREAD_PROMPT.md'],
     agent_profile: {
       soul: snapshot.continuity['SOUL.md'],
       user: snapshot.continuity['USER.md'],
