@@ -75,3 +75,18 @@ The local primitive smoke now exercises both primitive tools and the context pic
 ```bash
 npm run smoke:primitives
 ```
+
+The public smoke checks deployed/tunneled context pickup too:
+
+```bash
+export OTA_GATEWAY_SMOKE_URL="https://mickey-mcp.example.com/mcp"
+export OTA_GATEWAY_SMOKE_TOKEN="..."
+npm run smoke:public
+```
+
+With explicit write opt-in, the public smoke also records progress, decisions, and a checkpoint:
+
+```bash
+export OTA_GATEWAY_SMOKE_WRITE=1
+npm run smoke:public
+```

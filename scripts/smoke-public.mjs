@@ -8,6 +8,8 @@ await expectText('get_tool_profile', {}, 'mcp_explicit', sessionId);
 await expectText('workspace_status', {}, workspaceId, sessionId);
 await call('list_dir', { workspace_id: workspaceId, path: '.' }, sessionId);
 await call('get_workspace_policy', { workspace_id: workspaceId }, sessionId);
+await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, 'Checkpoint');
+await call('get_context_snapshot', { workspace_id: workspaceId }, sessionId);
 
 if (allowWrite) await writeSmoke(sessionId);
 console.log(`public smoke ok (${allowWrite ? 'read/write' : 'read-only'})`);
@@ -18,8 +20,16 @@ async function writeSmoke(sessionId) {
   await call('write_file', { workspace_id: workspaceId, path, content: `before ${stamp}\n`, overwrite: true }, sessionId);
   await call('edit_file', { workspace_id: workspaceId, path, old_text: 'before', new_text: 'after' }, sessionId);
   await expectText('read_file', { workspace_id: workspaceId, path }, `after ${stamp}`, sessionId);
+  await contextWriteSmoke(sessionId, stamp);
   await call('create_local_approval', { workspace_id: workspaceId, action: 'run_command', approved_by: 'public-smoke' }, sessionId);
   await expectText('run_command', { workspace_id: workspaceId, command: 'printf public-command-smoke' }, 'public-command-smoke', sessionId);
+}
+
+async function contextWriteSmoke(sessionId, stamp) {
+  await call('record_progress', { workspace_id: workspaceId, title: 'Public smoke progress', body: `progress ${stamp}` }, sessionId);
+  await call('record_decision', { workspace_id: workspaceId, title: 'Public smoke decision', body: `decision ${stamp}` }, sessionId);
+  await call('checkpoint_thread', { workspace_id: workspaceId, title: 'Public smoke checkpoint', summary: `checkpoint ${stamp}`, next_steps: ['continue'] }, sessionId);
+  await expectText('get_context_snapshot', { workspace_id: workspaceId }, `checkpoint ${stamp}`, sessionId);
 }
 
 async function initialize() {
