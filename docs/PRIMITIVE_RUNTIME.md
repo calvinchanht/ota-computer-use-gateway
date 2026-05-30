@@ -24,10 +24,17 @@ Use `get_tool_profile` at runtime to discover canonical tools, compatibility ali
 - `tree` — return a bounded recursive directory tree.
 - `read_file` — read a bounded UTF-8 text range.
 - `write_file` — create or overwrite a UTF-8 file.
+- `read_binary_file` — read a bounded binary file as base64 with metadata.
+- `write_binary_file` — create or overwrite a bounded binary file from base64 content.
 - `edit_file` — replace exactly one matching text region.
 - `search_files` — search text in workspace files.
 
 All filesystem tools resolve paths inside the configured workspace root. Symlink escapes and denied globs are rejected.
+
+Keep text and binary tools separate:
+
+- use `read_file` / `write_file` for UTF-8 text;
+- use `read_binary_file` / `write_binary_file` for images, PDFs, zips, screenshots, and other binary artifacts.
 
 ## Patch primitives
 

@@ -1,5 +1,5 @@
 import { access, readFile, writeFile } from 'node:fs/promises';
-import { fileInfo, listEntries, readTextRange, treeEntries } from '../core/files.js';
+import { fileInfo, listEntries, mediaType, readBinary, readTextRange, treeEntries } from '../core/files.js';
 import { ok } from '../core/result.js';
 import { resolveInside, resolveWritableInside } from '../core/paths.js';
 import type { AppConfig } from '../config/schema.js';
@@ -28,16 +28,30 @@ export async function readFileTool(config: AppConfig, workspace: Workspace, requ
   return ok(`read ${resolved.relative}`, { path: resolved.relative, ...range });
 }
 
+export async function readBinaryFileTool(config: AppConfig, workspace: Workspace, requestedPath: string) {
+  const resolved = await resolveInside(workspace, requestedPath, config);
+  return ok(`read binary ${resolved.relative}`, { path: resolved.relative, ...(await readBinary(resolved.absolute, config.security.max_file_bytes)) });
+}
+
 export async function writeFileTool(config: AppConfig, workspace: Workspace, requestedPath: string, content: string, overwrite = false) {
-  assertWriteAllowed(config, workspace, content);
+  assertTextWriteAllowed(config, workspace, content);
   const resolved = await resolveWritableInside(workspace, requestedPath, config);
   if (!overwrite) await assertNewFile(resolved.absolute);
   await writeFile(resolved.absolute, content, 'utf8');
   return ok(`wrote ${resolved.relative}`, { path: resolved.relative, bytes: Buffer.byteLength(content, 'utf8') });
 }
 
+export async function writeBinaryFileTool(config: AppConfig, workspace: Workspace, requestedPath: string, base64: string, overwrite = false) {
+  const bytes = decodeBase64(base64);
+  assertBinaryWriteAllowed(config, workspace, bytes);
+  const resolved = await resolveWritableInside(workspace, requestedPath, config);
+  if (!overwrite) await assertNewFile(resolved.absolute);
+  await writeFile(resolved.absolute, bytes);
+  return ok(`wrote binary ${resolved.relative}`, { path: resolved.relative, bytes: bytes.length, media_type: mediaType(resolved.absolute) });
+}
+
 export async function editFileTool(config: AppConfig, workspace: Workspace, requestedPath: string, oldText: string, newText: string) {
-  assertWriteAllowed(config, workspace, newText);
+  assertTextWriteAllowed(config, workspace, newText);
   const resolved = await resolveInside(workspace, requestedPath, config);
   const current = await readFile(resolved.absolute, 'utf8');
   const next = replaceExactlyOnce(current, oldText, newText, resolved.relative);
@@ -46,9 +60,20 @@ export async function editFileTool(config: AppConfig, workspace: Workspace, requ
   return ok(`edited ${resolved.relative}`, { path: resolved.relative, bytes: Buffer.byteLength(next, 'utf8') });
 }
 
-function assertWriteAllowed(config: AppConfig, workspace: Workspace, content: string): void {
+function assertTextWriteAllowed(config: AppConfig, workspace: Workspace, content: string): void {
   if (!workspace.allow_write) throw new Error('workspace does not allow file writes');
   if (Buffer.byteLength(content, 'utf8') > config.security.max_file_bytes) throw new Error('content exceeds max_file_bytes');
+}
+
+function assertBinaryWriteAllowed(config: AppConfig, workspace: Workspace, bytes: Buffer): void {
+  if (!workspace.allow_write) throw new Error('workspace does not allow file writes');
+  if (bytes.length > config.security.max_file_bytes) throw new Error('content exceeds max_file_bytes');
+}
+
+function decodeBase64(base64: string): Buffer {
+  const bytes = Buffer.from(base64, 'base64');
+  if (bytes.toString('base64').replace(/=+$/, '') !== base64.replace(/\s/g, '').replace(/=+$/, '')) throw new Error('invalid base64 content');
+  return bytes;
 }
 
 function replaceExactlyOnce(current: string, oldText: string, newText: string, filePath: string): string {

@@ -40,7 +40,7 @@ See GitHub issue #1 for the source-of-truth implementation plan.
 The gateway exposes explicit snake_case MCP primitives for agent runtime work:
 
 - discovery and policy: `heartbeat`, `workspace_status`, `get_workspace_policy`, `get_tool_profile`
-- filesystem: `list_dir`, `stat_path`, `tree`, `read_file`, `write_file`, `edit_file`, `search_files`
+- filesystem: `list_dir`, `stat_path`, `tree`, `read_file`, `write_file`, `read_binary_file`, `write_binary_file`, `edit_file`, `search_files`
 - patches: `propose_patch`, `apply_patch`
 - commands: `run_command`, `run_configured_command`
 - processes: `start_process`, `list_processes`, `read_process`, `write_process`, `stop_process`

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { truncateText } from './text.js';
 
 export type DirEntry = { name: string; type: 'file' | 'dir' | 'other' };
-export type FileInfo = { type: DirEntry['type']; size: number; modified_at: string };
+export type FileInfo = { type: DirEntry['type']; size: number; modified_at: string; media_type?: string };
 export type TreeEntry = DirEntry & { path: string; size?: number };
 
 export async function listEntries(dir: string, maxEntries: number): Promise<DirEntry[]> {
@@ -41,7 +41,7 @@ function entryType(entry: { isDirectory(): boolean; isFile(): boolean }): DirEnt
 
 export async function fileInfo(filePath: string): Promise<FileInfo> {
   const info = await stat(filePath);
-  return { type: statType(info), size: info.size, modified_at: info.mtime.toISOString() };
+  return { type: statType(info), size: info.size, modified_at: info.mtime.toISOString(), media_type: mediaType(filePath) };
 }
 
 export async function treeEntries(root: string, maxEntries: number): Promise<TreeEntry[]> {
@@ -49,6 +49,26 @@ export async function treeEntries(root: string, maxEntries: number): Promise<Tre
   await walkTree(root, '.', output, maxEntries);
   return output;
 }
+
+export async function readBinary(file: string, maxBytes: number) {
+  const info = await stat(file);
+  if (!info.isFile()) throw new Error('path is not a file');
+  if (info.size > maxBytes) throw new Error(`file exceeds max bytes: ${info.size}`);
+  const raw = await readFile(file);
+  return { bytes: raw.length, media_type: mediaType(file), base64: raw.toString('base64') };
+}
+
+export function mediaType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  return MIME_TYPES[ext] ?? 'application/octet-stream';
+}
+
+const MIME_TYPES: Record<string, string> = {
+  '.txt': 'text/plain', '.md': 'text/markdown', '.json': 'application/json',
+  '.yaml': 'application/yaml', '.yml': 'application/yaml', '.png': 'image/png',
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
+  '.gif': 'image/gif', '.pdf': 'application/pdf', '.zip': 'application/zip'
+};
 
 export async function readTextRange(file: string, startLine: number, maxLines: number, maxBytes: number) {
   const info = await stat(file);

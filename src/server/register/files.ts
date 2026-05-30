@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
 import { READ_ONLY, WRITE_FILE } from './annotations.js';
-import { editFileTool, listDir, readFileTool, statPath, treeTool, writeFileTool } from '../../tools/files.js';
+import { editFileTool, listDir, readBinaryFileTool, readFileTool, statPath, treeTool, writeBinaryFileTool, writeFileTool } from '../../tools/files.js';
 import { searchFiles } from '../../tools/search.js';
 import type { RegisterContext } from './types.js';
 
@@ -28,12 +28,20 @@ function registerReadTools({ server, config, workspaces }: RegisterContext): voi
     workspaces, args.workspace_id, 'read_file',
     (workspace) => readFileTool(config, workspace, args.path, args.start_line, args.max_lines)
   ));
+  server.registerTool('read_binary_file', readBinaryFileSpec(), async (args) => runWorkspaceTool(
+    workspaces, args.workspace_id, 'read_binary_file',
+    (workspace) => readBinaryFileTool(config, workspace, args.path)
+  ));
 }
 
 function registerWriteTools({ server, config, workspaces }: RegisterContext): void {
   server.registerTool('write_file', writeFileSpec(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'write_file',
     (workspace) => writeFileTool(config, workspace, args.path, args.content, args.overwrite)
+  ));
+  server.registerTool('write_binary_file', writeBinaryFileSpec(), async (args) => runWorkspaceTool(
+    workspaces, args.workspace_id, 'write_binary_file',
+    (workspace) => writeBinaryFileTool(config, workspace, args.path, args.base64, args.overwrite)
   ));
   server.registerTool('edit_file', editFileSpec(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'edit_file',
@@ -84,11 +92,29 @@ function readFileSpec() {
   };
 }
 
+function readBinaryFileSpec() {
+  return {
+    title: 'Read binary file',
+    description: 'Read a bounded binary file inside a workspace as base64 with metadata.',
+    inputSchema: { workspace_id: z.string(), path: z.string() },
+    annotations: READ_ONLY
+  };
+}
+
 function writeFileSpec() {
   return {
     title: 'Write file',
     description: 'Create or overwrite a UTF-8 text file inside a workspace.',
     inputSchema: { workspace_id: z.string(), path: z.string(), content: z.string(), overwrite: z.boolean().default(false) },
+    annotations: WRITE_FILE
+  };
+}
+
+function writeBinaryFileSpec() {
+  return {
+    title: 'Write binary file',
+    description: 'Create or overwrite a bounded binary file from base64 content inside a workspace.',
+    inputSchema: { workspace_id: z.string(), path: z.string(), base64: z.string(), overwrite: z.boolean().default(false) },
     annotations: WRITE_FILE
   };
 }

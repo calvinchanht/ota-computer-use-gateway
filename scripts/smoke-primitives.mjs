@@ -36,6 +36,8 @@ async function exerciseFiles(port, sessionId) {
   await call(port, sessionId, 'write_file', { workspace_id: 'smoke', path: 'note.txt', content: 'alpha beta', overwrite: true });
   await call(port, sessionId, 'edit_file', { workspace_id: 'smoke', path: 'note.txt', old_text: 'beta', new_text: 'BETA' });
   await expectText(port, sessionId, 'read_file', { workspace_id: 'smoke', path: 'note.txt' }, 'alpha BETA');
+  await call(port, sessionId, 'write_binary_file', { workspace_id: 'smoke', path: 'artifact.png', base64: 'iVBORw==', overwrite: true });
+  await expectText(port, sessionId, 'read_binary_file', { workspace_id: 'smoke', path: 'artifact.png' }, 'image/png');
 }
 
 async function exerciseContext(port, sessionId) {
