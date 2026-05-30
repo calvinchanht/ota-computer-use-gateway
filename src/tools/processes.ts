@@ -1,4 +1,3 @@
-import { requireApproval } from './approval.js';
 import { getManagedProcess, killManagedProcess, listManagedProcesses, startManagedProcess, writeManagedProcess } from '../core/processManager.js';
 import { ok } from '../core/result.js';
 import { truncateText } from '../core/text.js';
@@ -7,9 +6,8 @@ import type { Workspace } from '../core/workspaces.js';
 
 const MAX_LOG_BYTES = 50000;
 
-export async function processStart(config: AppConfig, workspace: Workspace, command: string, approvalAction = 'start_process') {
+export async function processStart(config: AppConfig, workspace: Workspace, command: string) {
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
-  await requireApproval(workspace, approvalAction);
   const item = startManagedProcess(command, workspace.realRoot, config.security.max_exec_ms);
   return ok('process started', describeProcess(item));
 }

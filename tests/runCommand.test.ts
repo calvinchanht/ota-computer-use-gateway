@@ -2,7 +2,6 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { recordApproval } from '../src/core/approval.js';
 import { runConfiguredCommand, runShellTool } from '../src/tools/runCommand.js';
 import type { AppConfig } from '../src/config/schema.js';
 import type { Workspace } from '../src/core/workspaces.js';
@@ -19,21 +18,14 @@ describe('runConfiguredCommand', () => {
     await expect(runConfiguredCommand(workspace, 'echo')).rejects.toThrow('does not allow');
   });
 
-  it('requires approval for command id', async () => {
+  it('runs allowlisted commands without local approval markers', async () => {
     const workspace = await fixtureWorkspace(true);
-    await expect(runConfiguredCommand(workspace, 'echo')).rejects.toThrow('missing approval');
-  });
-
-  it('runs approved allowlisted commands', async () => {
-    const workspace = await fixtureWorkspace(true);
-    await recordApproval(workspace, { id: 'ok', action: 'run_command:echo', created_at: new Date().toISOString() });
     const result = await runConfiguredCommand(workspace, 'echo');
     expect(JSON.stringify(result.data)).toContain('hello');
   });
 
-  it('runs approved shell commands', async () => {
+  it('runs scoped shell commands without local approval markers', async () => {
     const workspace = await fixtureWorkspace(true);
-    await recordApproval(workspace, { id: 'ok', action: 'run_command', created_at: new Date().toISOString() });
     const result = await runShellTool(config, workspace, 'printf shell-ok');
     expect(JSON.stringify(result.data)).toContain('shell-ok');
   });

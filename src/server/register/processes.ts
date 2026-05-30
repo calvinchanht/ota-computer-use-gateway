@@ -16,15 +16,15 @@ function registerCommandTools(context: RegisterContext): void {
   const { server, config, workspaces } = context;
   server.registerTool('run_command', commandTool(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'run_command',
-    (workspace) => runShellTool(config, workspace, args.command, args.approval_action)
+    (workspace) => runShellTool(config, workspace, args.command)
   ));
   server.registerTool('run_configured_command', configuredTool(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'run_configured_command',
-    (workspace) => runConfiguredCommand(workspace, args.command_id, args.approval_action)
+    (workspace) => runConfiguredCommand(workspace, args.command_id)
   ));
   server.registerTool('exec', execTool(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'exec',
-    (workspace) => runShellTool(config, workspace, args.command, args.approval_action)
+    (workspace) => runShellTool(config, workspace, args.command)
   ));
 }
 
@@ -32,7 +32,7 @@ function registerCanonicalProcessTools(context: RegisterContext): void {
   const { server, config, workspaces } = context;
   server.registerTool('start_process', startProcessTool(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'start_process',
-    (workspace) => processStart(config, workspace, args.command, args.approval_action)
+    (workspace) => processStart(config, workspace, args.command)
   ));
   server.registerTool('list_processes', listProcessTool(false), async () => asText(processList()));
   server.registerTool('read_process', readProcessTool(false), async (args) => asText(processLog(args.process_id, args.max_bytes)));
@@ -44,7 +44,7 @@ function registerDeprecatedProcessTools(context: RegisterContext): void {
   const { server, config, workspaces } = context;
   server.registerTool('process_start', startProcessTool(true), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'process_start',
-    (workspace) => processStart(config, workspace, args.command, args.approval_action)
+    (workspace) => processStart(config, workspace, args.command)
   ));
   server.registerTool('process_list', listProcessTool(true), async () => asText(processList()));
   server.registerTool('process_log', readProcessTool(true), async (args) => asText(processLog(args.process_id, args.max_bytes)));
@@ -54,8 +54,8 @@ function registerDeprecatedProcessTools(context: RegisterContext): void {
 function commandTool() {
   return {
     title: 'Run command',
-    description: 'Run an approved shell command in the workspace root.',
-    inputSchema: { workspace_id: z.string(), command: z.string(), approval_action: z.string().default('run_command') },
+    description: 'Run a scoped local shell command in the workspace root.',
+    inputSchema: { workspace_id: z.string(), command: z.string() },
     annotations: RUN_LOCAL
   };
 }
@@ -63,8 +63,8 @@ function commandTool() {
 function configuredTool() {
   return {
     title: 'Run configured command',
-    description: 'Run an allowlisted workspace command by id after approval.',
-    inputSchema: { workspace_id: z.string(), command_id: z.string(), approval_action: z.string().optional() },
+    description: 'Run an allowlisted workspace command by id.',
+    inputSchema: { workspace_id: z.string(), command_id: z.string() },
     annotations: RUN_LOCAL
   };
 }
@@ -73,7 +73,7 @@ function execTool() {
   return {
     title: 'Exec (deprecated)',
     description: 'Deprecated OpenClaw-compatible alias for run_command.',
-    inputSchema: { workspace_id: z.string(), command: z.string(), approval_action: z.string().default('run_command') },
+    inputSchema: { workspace_id: z.string(), command: z.string() },
     annotations: RUN_LOCAL
   };
 }
@@ -81,8 +81,8 @@ function execTool() {
 function startProcessTool(deprecated = false) {
   return {
     title: deprecated ? 'Process start (deprecated)' : 'Start process',
-    description: deprecated ? 'Deprecated alias for start_process.' : 'Start an approved background shell command.',
-    inputSchema: { workspace_id: z.string(), command: z.string(), approval_action: z.string().default('start_process') },
+    description: deprecated ? 'Deprecated alias for start_process.' : 'Start a scoped local background shell command.',
+    inputSchema: { workspace_id: z.string(), command: z.string() },
     annotations: RUN_LOCAL
   };
 }

@@ -8,7 +8,11 @@ export function workspacePolicy(workspace: Workspace) {
     root_label: 'configured workspace root',
     allowed_tools: allowedTools(workspace),
     blocked_tools: ['delete_file', 'mouse_click', 'keyboard_type'],
-    requires_approval: ['apply_patch', 'run_command', 'start_process', 'capture_screen']
+    // Provider-side confirmation prompts are harmful for OpenClaw-like chat-thread agents.
+    // Routine scoped workspace/computer tools are intentionally not listed as requiring
+    // per-call approval; external/irreversible actions are handled by stop boundaries.
+    requires_approval: [],
+    stop_boundaries: ['captcha_or_human_verification', 'credential_or_secret_use', 'external_messages_or_email', 'payments_or_terms_acceptance', 'third_party_uploads_or_submissions', 'irreversible_or_destructive_actions']
   });
 }
 
@@ -19,6 +23,6 @@ function allowedTools(workspace: Workspace): string[] {
   if (workspace.allow_patch) base.push('propose_patch', 'apply_patch');
   if (workspace.allow_tests) base.push('run_command', 'run_configured_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process');
   if (workspace.allow_screen) base.push('observe_screen', 'browser_tab_screenshot', 'browser_tab_snapshot');
-  if (workspace.allow_mouse_keyboard) base.push('open_browser_tab', 'navigate_browser_tab', 'click_browser_tab', 'type_browser_tab', 'fill_browser_tab_field', 'select_browser_tab_option', 'submit_browser_tab_form', 'press_browser_tab_key', 'scroll_browser_tab', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch', 'activate_browser_tab', 'close_browser_tab');
+  if (workspace.allow_mouse_keyboard) base.push('computer_click', 'computer_type_text', 'computer_press_key', 'computer_hotkey', 'computer_cua_call', 'open_browser_tab', 'navigate_browser_tab', 'click_browser_tab', 'type_browser_tab', 'fill_browser_tab_field', 'select_browser_tab_option', 'submit_browser_tab_form', 'press_browser_tab_key', 'scroll_browser_tab', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch', 'activate_browser_tab', 'close_browser_tab');
   return base;
 }

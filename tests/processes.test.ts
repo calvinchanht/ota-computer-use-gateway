@@ -2,7 +2,6 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { recordApproval } from '../src/core/approval.js';
 import { processKill, processList, processLog, processStart, processWrite } from '../src/tools/processes.js';
 import type { AppConfig } from '../src/config/schema.js';
 import type { Workspace } from '../src/core/workspaces.js';
@@ -14,14 +13,8 @@ const config: AppConfig = {
 };
 
 describe('process tools', () => {
-  it('requires approval to start a process', async () => {
-    const workspace = await fixtureWorkspace(true);
-    await expect(processStart(config, workspace, 'printf nope')).rejects.toThrow('missing approval');
-  });
-
   it('captures background process output', async () => {
     const workspace = await fixtureWorkspace(true);
-    await recordApproval(workspace, { id: 'ok', action: 'start_process', created_at: new Date().toISOString() });
     const started = await processStart(config, workspace, 'printf background-ok');
     const processId = String(started.data?.process_id);
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -31,7 +24,6 @@ describe('process tools', () => {
 
   it('writes stdin to running processes', async () => {
     const workspace = await fixtureWorkspace(true);
-    await recordApproval(workspace, { id: 'ok', action: 'start_process', created_at: new Date().toISOString() });
     const started = await processStart(config, workspace, 'cat');
     const processId = String(started.data?.process_id);
     processWrite(processId, 'stdin-ok', true);
@@ -41,7 +33,6 @@ describe('process tools', () => {
 
   it('kills running processes', async () => {
     const workspace = await fixtureWorkspace(true);
-    await recordApproval(workspace, { id: 'ok', action: 'start_process', created_at: new Date().toISOString() });
     const started = await processStart(config, workspace, 'sleep 30');
     const processId = String(started.data?.process_id);
     expect(processKill(processId).data).toMatchObject({ killed: true });

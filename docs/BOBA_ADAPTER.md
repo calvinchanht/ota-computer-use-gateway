@@ -43,11 +43,11 @@ When running on macOS with `cua-driver` available, Tool Gateway computer tools u
 - `computer_hotkey`
 - `computer_cua_call`
 
-`computer_cua_call` is the capability-first CUADriver proxy for allowed CUA tools. Read-only calls (`check_permissions`, `list_windows`, `get_screen_size`, `get_window_state`, `get_accessibility_tree`, `get_agent_cursor_state`, `screenshot`) require screen policy. Mutating calls (`click`, `double_click`, `drag`, `hotkey`, `press_key`, `set_value`, `type_text`, `type_text_chars`, `zoom`) require mouse/keyboard policy.
+`computer_cua_call` is the capability-first CUADriver proxy for allowed CUA tools. Read-only calls (`check_permissions`, `list_windows`, `get_screen_size`, `get_window_state`, `get_accessibility_tree`, `get_agent_cursor_state`, `screenshot`) require screen policy. Local input/control calls (`click`, `double_click`, `drag`, `hotkey`, `press_key`, `set_value`, `type_text`, `type_text_chars`, `zoom`) require mouse/keyboard policy and are advertised as non-destructive scoped gateway actions.
 
 `observe_screen` returns permissions, screen size, a bounded window list, and a bounded screenshot payload when CUA screenshot succeeds. If macOS `screencapture` fails, the tool returns `screenshot_error` while still returning window state when available.
 
-Mutating computer tools require `allow_mouse_keyboard: true`. They are annotated as non-read-only but non-destructive, matching the OpenClaw-like workflow: routine scoped local operations should not trigger per-call provider confirmation dialogs. External/irreversible actions remain stop-gated by policy and bootstrap instructions.
+Computer input/control tools require `allow_mouse_keyboard: true`. They are annotated and described as non-read-only but non-destructive scoped local actions, matching the OpenClaw-like workflow: routine workspace/computer operations should not trigger per-call provider confirmation dialogs. External/irreversible actions remain stop-gated by policy and bootstrap instructions.
 
 ## Safety boundaries
 
