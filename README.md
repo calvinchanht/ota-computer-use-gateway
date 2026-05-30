@@ -50,9 +50,36 @@ The gateway exposes explicit snake_case MCP primitives for agent runtime work:
 `exec` and old `process_*` names exist only as deprecated compatibility aliases. Use `get_tool_profile` for machine-readable canonical names and aliases.
 
 See `docs/PRIMITIVE_RUNTIME.md` for the runtime surface, safety model, and validation gate.
-See `docs/CONTEXT_PICKUP.md` for the chat-thread bootstrap/checkpoint model used by issue #4.
+See `docs/CONTEXT_PICKUP.md` for the chat-thread bootstrap/checkpoint model used by issue #4 and the Mickey provider-thread proof used by issue #11.
 See `docs/SKILLS.md` for the progressive skill/runbook discovery model used by issue #5.
 See `docs/COMPUTER_USE.md` for the observe/act and `observe_after` foundation used by issue #6.
+
+## Mickey provider-thread proof
+
+Mickey is the first proof workspace for OpenClaw-like provider chat-thread agents.
+A fresh provider thread should be able to call `get_agent_bootstrap`, read the `mickey-pickup` skill, inspect policy/tool/browser posture, and write a continuity checkpoint through the public MCP connector.
+
+Key Mickey startup artifacts live under `.agent/`:
+
+- `.agent/AGENT_START_HERE.md`
+- `.agent/PROVIDER_THREAD_PROMPT.md`
+- `.agent/MICKEY_PROVIDER_ACCEPTANCE.md`
+- `.agent/skills/mickey-pickup/SKILL.md`
+
+Focused live/public validation:
+
+```bash
+export OTA_GATEWAY_SMOKE_URL="https://mickey-mcp.example.com/mcp"
+export OTA_GATEWAY_SMOKE_TOKEN="..."
+npm run smoke:mickey-acceptance
+```
+
+With explicit checkpoint-write opt-in:
+
+```bash
+export OTA_GATEWAY_ACCEPTANCE_WRITE=1
+npm run smoke:mickey-acceptance
+```
 
 Validation:
 
