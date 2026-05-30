@@ -7,7 +7,7 @@ import type { Workspace } from '../core/workspaces.js';
 
 const ROOT_CONTEXT = ['AGENTS.md', 'AGENTS.override.md', 'README.md'];
 const AGENT_CONTEXT = [
-  'AGENT_START_HERE.md', 'PROVIDER_THREAD_PROMPT.md', 'MICKEY_PROVIDER_ACCEPTANCE.md',
+  'AGENT_START_HERE.md', 'PROVIDER_THREAD_PROMPT.md', 'MICKEY_PROVIDER_ACCEPTANCE.md', 'CATALYST_PROVIDER_ACCEPTANCE.md',
   'SOUL.md', 'USER.md', 'TOOLS.md', 'ESTATE_CONTEXT.md',
   'PROJECT_CONTEXT.md', 'CURRENT_TASK.md', 'DECISIONS.md', 'HANDOFF.md', 'PROGRESS.md', 'CHECKPOINTS.md'
 ];
@@ -26,7 +26,7 @@ export async function agentBootstrap(workspace: Workspace) {
     operating_model: chatThreadOperatingModel(),
     agent_start_here: snapshot.continuity['AGENT_START_HERE.md'],
     provider_thread_prompt: snapshot.continuity['PROVIDER_THREAD_PROMPT.md'],
-    provider_acceptance: snapshot.continuity['MICKEY_PROVIDER_ACCEPTANCE.md'],
+    provider_acceptance: providerAcceptance(snapshot.continuity, workspace),
     agent_profile: {
       soul: snapshot.continuity['SOUL.md'],
       user: snapshot.continuity['USER.md'],
@@ -100,11 +100,17 @@ function workspaceCapabilities(workspace: Workspace) {
   };
 }
 
+function providerAcceptance(continuity: Record<string, string>, workspace: Workspace) {
+  const workspaceSpecific = `${workspace.id.toUpperCase()}_PROVIDER_ACCEPTANCE.md`;
+  return continuity[workspaceSpecific] || continuity['MICKEY_PROVIDER_ACCEPTANCE.md'] || '';
+}
+
 function chatThreadOperatingModel() {
   return [
     'Use this bootstrap once at thread start or pickup.',
     'Behave like an OpenClaw-style workspace agent, not a stateless tool caller.',
     'Use retrieval tools when more local context is needed.',
+    'Use browser_cdp_call/browser_cdp_batch for page DOM scripting and Chrome/CDP automation when browser control is enabled.',
     'Do not expect Tool Gateway to inject full context every turn.',
     'Checkpoint progress, decisions, current task, and handoff outward to the workspace.'
   ];
@@ -114,6 +120,7 @@ function bootstrapNextActions() {
   return [
     'Read agent_start_here, current_task, recent_handoff, recent_progress, and recent_checkpoints.',
     'Call get_workspace_policy and get_tool_profile if tool/capability posture is unclear.',
+    'Use browser_cdp_call/browser_cdp_batch for custom DOM inspection, Runtime.evaluate scripts, and CDP automation when browser control is enabled.',
     'Call list_skills/read_skill for relevant workspace runbooks.',
     'Call memory_search/read_file for details only when needed.',
     'Call checkpoint_thread or record_handoff before stopping or switching threads.'
