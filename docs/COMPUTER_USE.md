@@ -13,6 +13,7 @@ Issue #6 adds provider-neutral browser/computer-use primitives in small, safe la
 - `open_browser_tab` — opens a URL through Chrome CDP `/json/new`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback.
 - `navigate_browser_tab` — navigates an existing Chrome target/tab through `Page.navigate`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback.
 - `click_browser_tab` — dispatches a left mouse click at viewport coordinates through `Input.dispatchMouseEvent`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback.
+- `type_browser_tab` — inserts bounded text into the focused element through `Input.insertText`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback.
 - `activate_browser_tab` — focuses an existing Chrome target through CDP `/json/activate/<target_id>`.
 - `close_browser_tab` — closes an existing Chrome target through CDP `/json/close/<target_id>`.
 - `computer_status` — returns workspace computer-use capability posture and adapter status.

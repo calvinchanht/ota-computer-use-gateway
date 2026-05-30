@@ -72,6 +72,14 @@ export async function clickBrowserTab(workspace: Workspace, targetId: string, x:
   return ok('browser tab clicked', await actionPayload(workspace, profile, { target_id: targetId, click: point }, observeAfter));
 }
 
+export async function typeBrowserTab(workspace: Workspace, targetId: string, text: string, label?: string, observeAfter?: ObserveAfter) {
+  assertBrowserControl(workspace);
+  const { profile, tab } = await websocketTarget(workspace, targetId, label);
+  const boundedText = boundedInputText(text);
+  await cdpCommand(tab.webSocketDebuggerUrl, 'Input.insertText', { text: boundedText });
+  return ok('browser tab typed text', await actionPayload(workspace, profile, { target_id: targetId, text_chars: boundedText.length }, observeAfter));
+}
+
 export async function activateBrowserTab(workspace: Workspace, targetId: string, label?: string, observeAfter?: ObserveAfter) {
   assertBrowserControl(workspace);
   const profile = selectedBrowserProfile(workspace, label);
@@ -237,6 +245,11 @@ async function dispatchMouseClick(url: string, point: { x: number; y: number }) 
 function boundedCoordinate(value: number) {
   if (!Number.isFinite(value)) throw new Error('browser click coordinates must be finite numbers');
   return Math.min(Math.max(Math.trunc(value), 0), 100_000);
+}
+
+function boundedInputText(value: string) {
+  if (value.length > 10_000) throw new Error('browser typed text exceeds 10000 character limit');
+  return value;
 }
 
 async function cdpCommand<T>(url: string, method: string, params: Record<string, unknown>) {
