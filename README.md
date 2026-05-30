@@ -40,6 +40,7 @@ See GitHub issue #1 for the source-of-truth implementation plan.
 The gateway exposes explicit snake_case MCP primitives for agent runtime work:
 
 - discovery and policy: `heartbeat`, `workspace_status`, `get_workspace_policy`, `get_tool_profile`
+- computer-use foundation: `computer_status`, `observe_screen`
 - filesystem: `list_dir`, `stat_path`, `tree`, `read_file`, `write_file`, `read_binary_file`, `write_binary_file`, `edit_file`, `search_files`
 - patches: `propose_patch`, `apply_patch`
 - commands: `run_command`, `run_configured_command`
@@ -51,6 +52,7 @@ The gateway exposes explicit snake_case MCP primitives for agent runtime work:
 See `docs/PRIMITIVE_RUNTIME.md` for the runtime surface, safety model, and validation gate.
 See `docs/CONTEXT_PICKUP.md` for the chat-thread bootstrap/checkpoint model used by issue #4.
 See `docs/SKILLS.md` for the progressive skill/runbook discovery model used by issue #5.
+See `docs/COMPUTER_USE.md` for the observe/act and `observe_after` foundation used by issue #6.
 
 Validation:
 

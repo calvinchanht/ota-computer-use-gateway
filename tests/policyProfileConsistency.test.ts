@@ -31,8 +31,8 @@ function fixtureWorkspace(): Workspace {
     allow_write: true,
     allow_patch: true,
     allow_tests: true,
-    allow_screen: false,
-    allow_mouse_keyboard: false,
+    allow_screen: true,
+    allow_mouse_keyboard: true,
     commands: { test: 'npm test' }
   };
 }

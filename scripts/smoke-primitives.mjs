@@ -16,6 +16,7 @@ try {
   await waitForHealth(port);
   const sessionId = await initialize(port);
   await call(port, sessionId, 'get_tool_profile', {});
+  await expectText(port, sessionId, 'computer_status', { workspace_id: 'smoke' }, 'observe_after');
   await exerciseFiles(port, sessionId);
   await exerciseContext(port, sessionId);
   await exerciseSkills(port, sessionId);
