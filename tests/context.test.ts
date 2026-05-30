@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { contextSnapshot, recordProgress } from '../src/tools/context.js';
+import { checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../src/tools/context.js';
 import type { Workspace } from '../src/core/workspaces.js';
 
 describe('context tools', () => {
@@ -23,10 +23,21 @@ describe('context tools', () => {
   it('records progress and handoff notes', async () => {
     const workspace = await fixtureWorkspace();
     await recordProgress(workspace, 'Progress', 'made progress');
-    await recordProgress(workspace, 'Handoff', 'handoff details', true);
+    await recordHandoff(workspace, 'Handoff', 'handoff details');
 
     await expect(readFile(path.join(workspace.realRoot, '.agent', 'PROGRESS.md'), 'utf8')).resolves.toContain('made progress');
     await expect(readFile(path.join(workspace.realRoot, '.agent', 'HANDOFF.md'), 'utf8')).resolves.toContain('handoff details');
+  });
+
+  it('records decisions, current task, and checkpoints', async () => {
+    const workspace = await fixtureWorkspace();
+    await recordDecision(workspace, 'Decision', 'use checkpoint export');
+    await updateCurrentTask(workspace, 'Current Task', 'continue issue #4');
+    await checkpointThread(workspace, 'Checkpoint', 'thread summary', ['next thing']);
+
+    await expect(readFile(path.join(workspace.realRoot, '.agent', 'DECISIONS.md'), 'utf8')).resolves.toContain('use checkpoint export');
+    await expect(readFile(path.join(workspace.realRoot, '.agent', 'CURRENT_TASK.md'), 'utf8')).resolves.toContain('continue issue #4');
+    await expect(readFile(path.join(workspace.realRoot, '.agent', 'CHECKPOINTS.md'), 'utf8')).resolves.toContain('next thing');
   });
 });
 
