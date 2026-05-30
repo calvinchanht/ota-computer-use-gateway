@@ -38,6 +38,7 @@ export async function agentBootstrap(workspace: Workspace) {
     recent_handoff: snapshot.continuity['HANDOFF.md'],
     recent_progress: snapshot.continuity['PROGRESS.md'],
     recent_checkpoints: snapshot.continuity['CHECKPOINTS.md'],
+    artifacts_hint: 'Call list_artifacts to find durable outputs from prior provider-thread work; call record_artifact after creating important files.',
     skills_hint: 'Call list_skills, then read_skill for relevant runbooks only when needed.',
     next_actions: bootstrapNextActions()
   });
@@ -112,6 +113,7 @@ function chatThreadOperatingModel() {
     'Use retrieval tools when more local context is needed.',
     'Use browser_cdp_call/browser_cdp_batch for page DOM scripting and Chrome/CDP automation when browser control is enabled.',
     'Do not expect Tool Gateway to inject full context every turn.',
+    'Record important generated files with record_artifact so future threads can find them.',
     'Checkpoint progress, decisions, current task, and handoff outward to the workspace.'
   ];
 }
@@ -121,6 +123,7 @@ function bootstrapNextActions() {
     'Read agent_start_here, current_task, recent_handoff, recent_progress, and recent_checkpoints.',
     'Call get_workspace_policy and get_tool_profile if tool/capability posture is unclear.',
     'Use browser_cdp_call/browser_cdp_batch for custom DOM inspection, Runtime.evaluate scripts, and CDP automation when browser control is enabled.',
+    'Call list_artifacts to discover prior outputs, and record_artifact after creating important files.',
     'Call list_skills/read_skill for relevant workspace runbooks.',
     'Call memory_search/read_file for details only when needed.',
     'Call checkpoint_thread or record_handoff before stopping or switching threads.'

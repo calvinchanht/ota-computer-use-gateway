@@ -23,8 +23,8 @@ if (writeProof) await checkpointAcceptance(sessionId);
 console.log(`${workspaceId} acceptance smoke ok (${writeProof ? 'with checkpoint' : 'read-only'})`);
 
 async function expectToolSurface(sessionId) {
-  const registeredRuntimeTools = ['browser_cdp_browser_call', 'browser_cdp_call', 'run_command', 'start_process', 'memory_search', 'get_project_context'];
-  const policyRuntimeTools = ['run_command', 'start_process', 'memory_search', 'get_project_context'];
+  const registeredRuntimeTools = ['browser_cdp_browser_call', 'browser_cdp_call', 'run_command', 'start_process', 'memory_search', 'get_project_context', 'list_artifacts'];
+  const policyRuntimeTools = ['run_command', 'start_process', 'memory_search', 'get_project_context', 'list_artifacts'];
   await expectText('get_tool_profile', {}, 'mcp_explicit', sessionId);
   for (const tool of registeredRuntimeTools) await expectText('get_tool_profile', {}, tool, sessionId);
   for (const tool of policyRuntimeTools) await expectText('get_workspace_policy', { workspace_id: workspaceId }, tool, sessionId);

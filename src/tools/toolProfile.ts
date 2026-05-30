@@ -24,7 +24,7 @@ function canonicalTools(): string[] {
     'run_command', 'run_configured_command', 'list_dir', 'stat_path', 'tree', 'search_files',
     'git_status', 'git_diff', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',
     'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'memory_search', 'memory_write',
-    'list_skills', 'read_skill', 'approval_status',
+    'list_skills', 'read_skill', 'approval_status', 'list_artifacts', 'record_artifact',
     'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread'
   ];
 }
