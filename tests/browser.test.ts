@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { activateBrowserTab, browserCdpBatch, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, fillBrowserTabField, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, pressBrowserTabKey, scrollBrowserTab, typeBrowserTab } from '../src/tools/browser.js';
+import { activateBrowserTab, browserCdpBatch, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, fillBrowserTabField, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, pressBrowserTabKey, scrollBrowserTab, selectBrowserTabOption, typeBrowserTab } from '../src/tools/browser.js';
 
 describe('browser profile tools', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -143,6 +143,16 @@ describe('browser profile tools', () => {
     expect(sends[0]).toContain('querySelector');
   });
 
+  it('selects native select options through scoped runtime evaluation', async () => {
+    mockFetch([{ id: '1', type: 'page', webSocketDebuggerUrl: 'ws://cdp/1' }]);
+    const sends = mockWebSocket({ result: { value: { ok: true, selected: 'remote' } } });
+    const data = (await selectBrowserTabOption(controlWorkspace(), '1', 'select[name="location"]', 'remote')).data as any;
+    expect(data.selector).toBe('select[name="location"]');
+    expect(data.value).toBe('remote');
+    expect(sends[0]).toContain('Runtime.evaluate');
+    expect(sends[0]).toContain('option_not_found');
+  });
+
   it('presses keys through CDP websocket', async () => {
     mockFetch([{ id: '1', type: 'page', webSocketDebuggerUrl: 'ws://cdp/1' }]);
     const sends = mockWebSocket({});
@@ -195,6 +205,7 @@ describe('browser profile tools', () => {
     await expect(clickBrowserTab(fixtureWorkspace(), '1', 1, 1)).rejects.toThrow('browser control is not enabled');
     await expect(typeBrowserTab(fixtureWorkspace(), '1', 'x')).rejects.toThrow('browser control is not enabled');
     await expect(fillBrowserTabField(fixtureWorkspace(), '1', 'input', 'x')).rejects.toThrow('browser control is not enabled');
+    await expect(selectBrowserTabOption(fixtureWorkspace(), '1', 'select', 'x')).rejects.toThrow('browser control is not enabled');
     await expect(pressBrowserTabKey(fixtureWorkspace(), '1', 'Enter')).rejects.toThrow('browser control is not enabled');
     await expect(scrollBrowserTab(fixtureWorkspace(), '1', 0, 100)).rejects.toThrow('browser control is not enabled');
     await expect(browserCdpCall(fixtureWorkspace(), '1', 'Runtime.evaluate')).rejects.toThrow('browser control is not enabled');

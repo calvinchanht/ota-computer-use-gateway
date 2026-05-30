@@ -98,6 +98,18 @@ export async function fillBrowserTabField(workspace: Workspace, targetId: string
   return ok('browser tab field filled', await actionPayload(workspace, profile, { target_id: tab.id, target_ref: targetId, selector: boundedSelectorValue, value_chars: boundedValue.length, element: filled.tag ?? null }, observeAfter));
 }
 
+export async function selectBrowserTabOption(workspace: Workspace, targetId: string, selector: string, value: string, label?: string, observeAfter?: ObserveAfter) {
+  assertBrowserControl(workspace);
+  const { profile, tab } = await websocketTarget(workspace, targetId, label);
+  const boundedSelectorValue = boundedSelector(selector);
+  const boundedValue = boundedInputText(value);
+  const expression = selectOptionExpression(boundedSelectorValue, boundedValue);
+  const result = await cdpCommand<{ result?: { value?: unknown } }>(tab.webSocketDebuggerUrl, 'Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+  const selected = result.result?.value as { ok?: boolean; reason?: string; selected?: string } | undefined;
+  if (!selected?.ok) throw new Error(`browser select failed: ${selected?.reason ?? 'unknown'}`);
+  return ok('browser tab option selected', await actionPayload(workspace, profile, { target_id: tab.id, target_ref: targetId, selector: boundedSelectorValue, value: selected.selected ?? boundedValue }, observeAfter));
+}
+
 export async function pressBrowserTabKey(workspace: Workspace, targetId: string, key: string, label?: string, observeAfter?: ObserveAfter) {
   assertBrowserControl(workspace);
   const { profile, tab } = await websocketTarget(workspace, targetId, label);
@@ -459,6 +471,24 @@ function fillFieldExpression(selector: string, value: string) {
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
     return { ok: true, tag };
+  })()`;
+}
+
+function selectOptionExpression(selector: string, value: string) {
+  return `(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return { ok: false, reason: 'not_found' };
+    if (String(el.tagName || '').toLowerCase() !== 'select') return { ok: false, reason: 'not_select' };
+    const wanted = ${JSON.stringify(value)};
+    const options = Array.from(el.options || []);
+    const option = options.find((item) => item.value === wanted) || options.find((item) => item.textContent?.trim() === wanted);
+    if (!option) return { ok: false, reason: 'option_not_found' };
+    el.focus();
+    el.value = option.value;
+    option.selected = true;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true, selected: option.value };
   })()`;
 }
 
