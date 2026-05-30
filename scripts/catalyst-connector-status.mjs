@@ -1,0 +1,20 @@
+const endpoint = 'https://catalyst-mcp.unrealize.com/mcp';
+const health = 'https://catalyst-mcp.unrealize.com/healthz';
+
+console.log('Catalyst provider connector status');
+console.log('');
+console.log(`MCP endpoint: ${endpoint}`);
+console.log(`Health:       ${health}`);
+console.log('Auth:         API key / bearer token required');
+console.log('Workspace:    catalyst');
+console.log('Skill:        catalyst-pickup');
+console.log('');
+console.log('Secret path on PersonalVPS:');
+console.log('/home/molt/secrets/ota-computer-use-gateway/catalyst-bearer-token');
+console.log('');
+console.log('Do not print or paste the token into chat/logs/issues.');
+console.log('Use it only in the provider connector API-key/secret field.');
+console.log('');
+console.log('First prompt / setup docs:');
+console.log('docs/CATALYST_CONNECTOR.md');
+console.log('docs/CATALYST_PUBLIC_INGRESS.md');

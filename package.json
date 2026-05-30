@@ -17,7 +17,8 @@
     "smoke:public": "node scripts/smoke-public.mjs",
     "smoke:provider-acceptance": "node scripts/smoke-provider-acceptance.mjs",
     "smoke:mickey-acceptance": "node scripts/smoke-provider-acceptance.mjs",
-    "smoke:catalyst-acceptance": "OTA_GATEWAY_SMOKE_WORKSPACE=catalyst OTA_GATEWAY_ACCEPTANCE_SKILL=catalyst-pickup node scripts/smoke-provider-acceptance.mjs"
+    "smoke:catalyst-acceptance": "OTA_GATEWAY_SMOKE_WORKSPACE=catalyst OTA_GATEWAY_ACCEPTANCE_SKILL=catalyst-pickup node scripts/smoke-provider-acceptance.mjs",
+    "status:catalyst-connector": "node scripts/catalyst-connector-status.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
