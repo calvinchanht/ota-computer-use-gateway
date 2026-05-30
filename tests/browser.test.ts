@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { activateBrowserTab, browserCdpBatch, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, typeBrowserTab } from '../src/tools/browser.js';
+import { activateBrowserTab, browserCdpBatch, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, pressBrowserTabKey, scrollBrowserTab, typeBrowserTab } from '../src/tools/browser.js';
 
 describe('browser profile tools', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -133,6 +133,25 @@ describe('browser profile tools', () => {
     expect(sends[0]).toContain('hello');
   });
 
+  it('presses keys through CDP websocket', async () => {
+    mockFetch([{ id: '1', type: 'page', webSocketDebuggerUrl: 'ws://cdp/1' }]);
+    const sends = mockWebSocket({});
+    const data = (await pressBrowserTabKey(controlWorkspace(), '1', 'Enter')).data as any;
+    expect(data.key).toBe('Enter');
+    expect(sends[0]).toContain('Input.dispatchKeyEvent');
+    expect(sends[0]).toContain('keyDown');
+    expect(sends[1]).toContain('keyUp');
+  });
+
+  it('scrolls through CDP websocket', async () => {
+    mockFetch([{ id: '1', type: 'page', webSocketDebuggerUrl: 'ws://cdp/1' }]);
+    const sends = mockWebSocket({});
+    const data = (await scrollBrowserTab(controlWorkspace(), '1', 0, 1200)).data as any;
+    expect(data.scroll.delta_y).toBe(1200);
+    expect(sends[0]).toContain('mouseWheel');
+    expect(sends[0]).toContain('1200');
+  });
+
   it('proxies a generic CDP call through the scoped target websocket', async () => {
     mockFetch([{ id: '1', type: 'page', webSocketDebuggerUrl: 'ws://cdp/1' }]);
     const sends = mockWebSocket({ value: 42 });
@@ -165,6 +184,8 @@ describe('browser profile tools', () => {
     await expect(navigateBrowserTab(fixtureWorkspace(), '1', 'https://example.com')).rejects.toThrow('browser control is not enabled');
     await expect(clickBrowserTab(fixtureWorkspace(), '1', 1, 1)).rejects.toThrow('browser control is not enabled');
     await expect(typeBrowserTab(fixtureWorkspace(), '1', 'x')).rejects.toThrow('browser control is not enabled');
+    await expect(pressBrowserTabKey(fixtureWorkspace(), '1', 'Enter')).rejects.toThrow('browser control is not enabled');
+    await expect(scrollBrowserTab(fixtureWorkspace(), '1', 0, 100)).rejects.toThrow('browser control is not enabled');
     await expect(browserCdpCall(fixtureWorkspace(), '1', 'Runtime.evaluate')).rejects.toThrow('browser control is not enabled');
     await expect(closeBrowserTab(fixtureWorkspace(), '1')).rejects.toThrow('browser control is not enabled');
   });

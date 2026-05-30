@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { activateBrowserTab, browserCdpBatch, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, typeBrowserTab } from '../../tools/browser.js';
+import { activateBrowserTab, browserCdpBatch, browserCdpCall, browserStatus, browserTabInfo, browserTabScreenshot, browserTabSnapshot, clickBrowserTab, closeBrowserTab, listBrowserProfiles, listBrowserTabs, navigateBrowserTab, openBrowserTab, pressBrowserTabKey, scrollBrowserTab, typeBrowserTab } from '../../tools/browser.js';
 import { READ_ONLY, RUN_LOCAL } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -15,6 +15,8 @@ export function registerBrowserTools(context: RegisterContext): void {
   registerNavigateBrowserTab(context);
   registerClickBrowserTab(context);
   registerTypeBrowserTab(context);
+  registerPressBrowserTabKey(context);
+  registerScrollBrowserTab(context);
   registerBrowserCdpCall(context);
   registerBrowserCdpBatch(context);
   registerActivateBrowserTab(context);
@@ -59,6 +61,14 @@ function registerClickBrowserTab({ server, workspaces }: RegisterContext): void 
 
 function registerTypeBrowserTab({ server, workspaces }: RegisterContext): void {
   server.registerTool('type_browser_tab', { title: 'Type into browser tab', description: 'Insert text into the focused element of an existing Chrome target/tab through CDP.', inputSchema: { ...targetActionSchema(), text: z.string().max(10000) }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'type_browser_tab', (workspace) => typeBrowserTab(workspace, args.target_id, args.text, args.profile_label, args.observe_after)));
+}
+
+function registerPressBrowserTabKey({ server, workspaces }: RegisterContext): void {
+  server.registerTool('press_browser_tab_key', { title: 'Press browser tab key', description: 'Press a keyboard key in an existing Chrome target/tab through CDP.', inputSchema: { ...targetActionSchema(), key: z.string().regex(/^[A-Za-z0-9+_.:-]{1,64}$/) }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'press_browser_tab_key', (workspace) => pressBrowserTabKey(workspace, args.target_id, args.key, args.profile_label, args.observe_after)));
+}
+
+function registerScrollBrowserTab({ server, workspaces }: RegisterContext): void {
+  server.registerTool('scroll_browser_tab', { title: 'Scroll browser tab', description: 'Dispatch a bounded mouse-wheel scroll in an existing Chrome target/tab through CDP.', inputSchema: { ...targetActionSchema(), delta_x: z.number().optional(), delta_y: z.number().optional() }, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'scroll_browser_tab', (workspace) => scrollBrowserTab(workspace, args.target_id, args.delta_x ?? 0, args.delta_y ?? 0, args.profile_label, args.observe_after)));
 }
 
 function registerBrowserCdpCall({ server, workspaces }: RegisterContext): void {

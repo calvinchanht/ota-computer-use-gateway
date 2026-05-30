@@ -86,6 +86,22 @@ export async function typeBrowserTab(workspace: Workspace, targetId: string, tex
   return ok('browser tab typed text', await actionPayload(workspace, profile, { target_id: tab.id, target_ref: targetId, text_chars: boundedText.length }, observeAfter));
 }
 
+export async function pressBrowserTabKey(workspace: Workspace, targetId: string, key: string, label?: string, observeAfter?: ObserveAfter) {
+  assertBrowserControl(workspace);
+  const { profile, tab } = await websocketTarget(workspace, targetId, label);
+  const normalized = boundedKey(key);
+  await dispatchKeyPress(tab.webSocketDebuggerUrl, normalized);
+  return ok('browser tab key pressed', await actionPayload(workspace, profile, { target_id: tab.id, target_ref: targetId, key: normalized }, observeAfter));
+}
+
+export async function scrollBrowserTab(workspace: Workspace, targetId: string, deltaX = 0, deltaY = 0, label?: string, observeAfter?: ObserveAfter) {
+  assertBrowserControl(workspace);
+  const { profile, tab } = await websocketTarget(workspace, targetId, label);
+  const scroll = { delta_x: boundedScrollDelta(deltaX), delta_y: boundedScrollDelta(deltaY) };
+  await cdpCommand(tab.webSocketDebuggerUrl, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x: 0, y: 0, deltaX: scroll.delta_x, deltaY: scroll.delta_y });
+  return ok('browser tab scrolled', await actionPayload(workspace, profile, { target_id: tab.id, target_ref: targetId, scroll }, observeAfter));
+}
+
 export async function activateBrowserTab(workspace: Workspace, targetId: string, label?: string, observeAfter?: ObserveAfter) {
   assertBrowserControl(workspace);
   const profile = selectedBrowserProfile(workspace, label);
@@ -398,6 +414,11 @@ async function dispatchMouseClick(url: string, point: { x: number; y: number }) 
   await cdpCommand(url, 'Input.dispatchMouseEvent', { type: 'mouseReleased', ...point, button: 'left', clickCount: 1 });
 }
 
+async function dispatchKeyPress(url: string, key: string) {
+  await cdpCommand(url, 'Input.dispatchKeyEvent', { type: 'keyDown', key });
+  await cdpCommand(url, 'Input.dispatchKeyEvent', { type: 'keyUp', key });
+}
+
 function boundedCoordinate(value: number) {
   if (!Number.isFinite(value)) throw new Error('browser click coordinates must be finite numbers');
   return Math.min(Math.max(Math.trunc(value), 0), 100_000);
@@ -406,6 +427,16 @@ function boundedCoordinate(value: number) {
 function boundedInputText(value: string) {
   if (value.length > 10_000) throw new Error('browser typed text exceeds 10000 character limit');
   return value;
+}
+
+function boundedKey(value: string) {
+  if (!/^[A-Za-z0-9+_.:-]{1,64}$/.test(value)) throw new Error('browser key must be 1-64 chars of letters, numbers, +, _, ., :, or -');
+  return value;
+}
+
+function boundedScrollDelta(value: number) {
+  if (!Number.isFinite(value)) throw new Error('browser scroll delta must be finite');
+  return Math.min(Math.max(Math.trunc(value), -10_000), 10_000);
 }
 
 function boundedCdpMethod(method: string) {

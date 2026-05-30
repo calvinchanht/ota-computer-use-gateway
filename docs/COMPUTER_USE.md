@@ -14,6 +14,8 @@ Issue #6 adds provider-neutral browser/computer-use primitives in small, safe la
 - `navigate_browser_tab` — navigates an existing Chrome target/tab through `Page.navigate`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback. `target_id` may be a raw Chrome target id or assigned stable tab key.
 - `click_browser_tab` — dispatches a left mouse click at viewport coordinates through `Input.dispatchMouseEvent`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback. `target_id` may be a raw id or stable key.
 - `type_browser_tab` — inserts bounded text into the focused element through `Input.insertText`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback. `target_id` may be a raw id or stable key.
+- `press_browser_tab_key` — dispatches a bounded keyboard key press/release through `Input.dispatchKeyEvent`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback. `target_id` may be a raw id or stable key.
+- `scroll_browser_tab` — dispatches a bounded mouse-wheel scroll through `Input.dispatchMouseEvent`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback. `target_id` may be a raw id or stable key.
 - `browser_cdp_call` — proxies one Chrome DevTools Protocol method through a scoped target websocket; gated by `allow_mouse_keyboard`. `target_id` may be a raw id or stable key.
 - `browser_cdp_batch` — proxies up to 20 Chrome DevTools Protocol calls through a scoped target websocket; gated by `allow_mouse_keyboard`. `target_id` may be a raw id or stable key.
 - `activate_browser_tab` — focuses an existing Chrome target through CDP `/json/activate/<target_id>`. `target_id` may be a raw id or stable key.
