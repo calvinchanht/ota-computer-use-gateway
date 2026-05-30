@@ -7,6 +7,7 @@ Issue #6 adds provider-neutral browser/computer-use primitives in small, safe la
 - `list_browser_profiles` — lists configured headed Chrome/CDP profiles for a workspace.
 - `browser_status` — returns selected profile metadata, CDP endpoint/reachability, and tab hygiene reminder.
 - `list_browser_tabs` — proxies Chrome CDP `/json/list` and returns page targets/tabs.
+- `open_browser_tab` — opens a URL through Chrome CDP `/json/new`, gated by `allow_mouse_keyboard`, with optional `observe_after.tabs` feedback.
 - `computer_status` — returns workspace computer-use capability posture and adapter status.
 - `observe_screen` — returns the screen observation shape when `allow_screen` is enabled. Platform adapters will fill screenshot/window-tree data in later slices.
 
@@ -46,7 +47,8 @@ UI-mutating actions should accept an optional post-action observation request:
   "observe_after": {
     "delay_ms": 500,
     "screenshot": true,
-    "include_window_tree": true
+    "include_window_tree": true,
+    "tabs": true
   }
 }
 ```

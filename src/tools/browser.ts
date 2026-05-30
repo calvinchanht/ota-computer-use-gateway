@@ -27,12 +27,29 @@ export async function browserStatus(workspace: Workspace, label?: string) {
 export async function listBrowserTabs(workspace: Workspace, label?: string) {
   const profile = selectedBrowserProfile(workspace, label);
   const tabs = await fetchCdpJson<ChromeTarget[]>(profile, '/json/list');
-  return ok(`listed ${tabs.length} browser tabs`, {
+  return ok(`listed ${tabs.length} browser tabs`, browserTabPayload(workspace, profile, tabs));
+}
+
+export async function openBrowserTab(workspace: Workspace, url: string, label?: string, observeAfter?: ObserveAfter) {
+  assertBrowserControl(workspace);
+  const profile = selectedBrowserProfile(workspace, label);
+  const opened = await fetchCdpJson<ChromeTarget>(profile, `/json/new?${encodeURIComponent(url)}`, 'PUT');
+  return ok('browser tab opened', {
     workspace_id: workspace.id,
     reminder: REMINDER,
     profile_label: profile.label,
-    tabs: tabs.filter(isPageTarget).map(tabSummary)
+    opened: tabSummary(opened),
+    observation: await observeBrowserAfter(workspace, profile, observeAfter)
   });
+}
+
+async function observeBrowserAfter(workspace: Workspace, profile: ReturnType<typeof browserProfile>, options?: ObserveAfter) {
+  if (!options) return undefined;
+  const delayMs = clampDelay(options.delay_ms ?? 0);
+  if (delayMs > 0) await delay(delayMs);
+  if (!options.tabs) return { delay_ms: delayMs };
+  const tabs = await fetchCdpJson<ChromeTarget[]>(profile, '/json/list');
+  return { delay_ms: delayMs, ...browserTabPayload(workspace, profile, tabs) };
 }
 
 async function cdpReachable(profile: ReturnType<typeof browserProfile>) {
@@ -42,8 +59,8 @@ async function cdpReachable(profile: ReturnType<typeof browserProfile>) {
   } catch { return false; }
 }
 
-async function fetchCdpJson<T>(profile: ReturnType<typeof browserProfile>, path: string): Promise<T> {
-  const res = await fetch(`${cdpEndpoint(profile)}${path}`);
+async function fetchCdpJson<T>(profile: ReturnType<typeof browserProfile>, path: string, method = 'GET'): Promise<T> {
+  const res = await fetch(`${cdpEndpoint(profile)}${path}`, { method });
   if (!res.ok) throw new Error(`CDP request failed: ${res.status}`);
   return await res.json() as T;
 }
@@ -56,8 +73,16 @@ function isPageTarget(target: ChromeTarget) {
   return target.type === 'page';
 }
 
+function browserTabPayload(workspace: Workspace, profile: ReturnType<typeof browserProfile>, tabs: ChromeTarget[]) {
+  return { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, tabs: tabs.filter(isPageTarget).map(tabSummary) };
+}
+
 function tabSummary(target: ChromeTarget) {
   return { id: target.id, title: target.title ?? '', url: target.url ?? '', type: target.type, attached: target.attached ?? false };
+}
+
+function assertBrowserControl(workspace: Workspace) {
+  if (!workspace.allow_mouse_keyboard) throw new Error('browser control is not enabled for this workspace');
 }
 
 function selectedBrowserProfile(workspace: Workspace, label?: string) {
@@ -86,6 +111,11 @@ function browserProfile(workspace: Workspace, profile: BrowserProfile, index: nu
   };
 }
 
+type ObserveAfter = {
+  delay_ms?: number;
+  tabs?: boolean;
+};
+
 type ChromeTarget = {
   id: string;
   type?: string;
@@ -93,6 +123,14 @@ type ChromeTarget = {
   url?: string;
   attached?: boolean;
 };
+
+function clampDelay(value: number) {
+  return Math.min(Math.max(Math.trunc(value), 0), 5000);
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function defaultProfile(workspace: Workspace): BrowserProfile {
   return {
