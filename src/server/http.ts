@@ -11,6 +11,7 @@ import { RateLimiter } from './rateLimit.js';
 import { installShutdownHooks } from './shutdown.js';
 
 const MCP_PATH = '/mcp';
+const API_DEBUG_REQUEST_CONTEXT_PATH = '/api/v1/debug/request_context';
 
 export async function listenHttp(config: AppConfig): Promise<void> {
   assertSafeHttpBind(config);
@@ -34,12 +35,13 @@ export async function listenHttp(config: AppConfig): Promise<void> {
 
 async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, startedAt: number, req: IncomingMessage, res: ServerResponse) {
   if (isHealth(req)) return sendJson(res, 200, healthPayload(config, startedAt));
-  if (!isMcp(req)) return sendJson(res, 404, { error: 'not_found' });
   if (req.method === 'OPTIONS') return sendCors(res);
+  if (!isMcp(req) && !isApiDebugRequestContext(req)) return sendJson(res, 404, { error: 'not_found' });
   if (!allowedMethod(req.method)) return sendJson(res, 405, { error: 'method_not_allowed' });
   if (!rateLimiter.check(config, req)) return sendJson(res, 429, { error: 'rate_limited' });
   if (requestTooLarge(config, req)) return sendJson(res, 413, { error: 'payload_too_large' });
   if (!isAuthorized(config, req)) return sendAuthError(config, res);
+  if (isApiDebugRequestContext(req)) return handleApiDebugRequestContext(req, res);
 
   applyCors(res);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
@@ -65,6 +67,10 @@ function isHealth(req: IncomingMessage): boolean {
 
 function isMcp(req: IncomingMessage): boolean {
   return req.url?.startsWith(MCP_PATH) ?? false;
+}
+
+function isApiDebugRequestContext(req: IncomingMessage): boolean {
+  return req.url?.split('?')[0] === API_DEBUG_REQUEST_CONTEXT_PATH;
 }
 
 function allowedMethod(method: string | undefined): boolean {
@@ -106,6 +112,59 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
 }
 
+async function handleApiDebugRequestContext(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method !== 'POST' && req.method !== 'GET') return sendJson(res, 405, { error: 'method_not_allowed' });
+  const parsedBody = req.method === 'POST' ? await readJsonBody(req).catch(() => undefined) : undefined;
+  return sendJson(res, 200, {
+    ok: true,
+    summary: 'safe request context captured',
+    request: {
+      method: req.method,
+      path: req.url?.split('?')[0],
+      remote_address: req.socket.remoteAddress,
+      headers: safeRequestHeaders(req),
+      body_thread: safeBodyThread(parsedBody)
+    }
+  });
+}
+
+function safeRequestHeaders(req: IncomingMessage): Record<string, string | undefined> {
+  const names = [
+    'origin',
+    'referer',
+    'referrer',
+    'user-agent',
+    'x-forwarded-for',
+    'x-forwarded-host',
+    'x-forwarded-proto',
+    'cf-connecting-ip',
+    'cf-ipcountry',
+    'openai-conversation-id',
+    'openai-ephemeral-user-id',
+    'openai-gpt-id',
+    'openai-subdivision-1-iso-code',
+    'x-openai-conversation-id',
+    'x-openai-project-id',
+    'x-openai-gpt-id',
+    'x-openai-action-invocation-id'
+  ];
+  return Object.fromEntries(names.map((name) => [name, headerValue(req.headers[name])]).filter(([, value]) => value !== undefined));
+}
+
+function safeBodyThread(body: unknown): unknown {
+  if (!body || typeof body !== 'object') return undefined;
+  const source = body as Record<string, unknown>;
+  return {
+    requestor_url: typeof source.requestor_url === 'string' ? source.requestor_url : undefined,
+    thread: source.thread && typeof source.thread === 'object' ? source.thread : undefined,
+    client_session_id: typeof source.client_session_id === 'string' ? source.client_session_id : undefined
+  };
+}
+
+function headerValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 function sendAuthError(config: AppConfig, res: ServerResponse): void {
   res.setHeader('www-authenticate', 'Bearer');
   sendJson(res, 401, authError(config));
@@ -114,6 +173,6 @@ function sendAuthError(config: AppConfig, res: ServerResponse): void {
 function applyCors(res: ServerResponse): void {
   res.setHeader('access-control-allow-origin', '*');
   res.setHeader('access-control-allow-methods', 'GET,POST,DELETE,OPTIONS');
-  res.setHeader('access-control-allow-headers', 'authorization,content-type,mcp-session-id,mcp-protocol-version');
+  res.setHeader('access-control-allow-headers', 'authorization,content-type,mcp-session-id,mcp-protocol-version,x-openai-conversation-id,x-openai-project-id,x-openai-gpt-id,x-openai-action-invocation-id');
   res.setHeader('access-control-expose-headers', 'mcp-session-id');
 }
