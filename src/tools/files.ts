@@ -1,4 +1,4 @@
-import { access, readdir, readFile, writeFile } from 'node:fs/promises';
+import { access, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileInfo, listEntries, mediaType, readBinary, readTextRange, treeEntries } from '../core/files.js';
 import { ok } from '../core/result.js';
@@ -88,6 +88,25 @@ export async function editFileTool(config: AppConfig, workspace: Workspace, requ
   if (Buffer.byteLength(next, 'utf8') > config.security.max_file_bytes) throw new Error('edited file exceeds max_file_bytes');
   await writeFile(resolved.absolute, next, 'utf8');
   return ok(`edited ${resolved.relative}`, { path: resolved.relative, bytes: Buffer.byteLength(next, 'utf8') });
+}
+
+export async function deleteFileTool(config: AppConfig, workspace: Workspace, requestedPath: string) {
+  if (!workspace.allow_write) throw new Error('workspace does not allow file writes');
+  const resolved = await resolveInside(workspace, requestedPath, config);
+  const info = await stat(resolved.absolute);
+  if (!info.isFile()) throw new Error('delete_file only deletes regular files');
+  await rm(resolved.absolute);
+  return ok(`deleted ${resolved.relative}`, { path: resolved.relative, bytes: info.size });
+}
+
+export async function deletePathTool(config: AppConfig, workspace: Workspace, requestedPath: string, recursive = false) {
+  if (!workspace.allow_write) throw new Error('workspace does not allow file writes');
+  const resolved = await resolveInside(workspace, requestedPath, config);
+  if (resolved.relative === '.') throw new Error('refusing to delete workspace root');
+  const info = await stat(resolved.absolute);
+  if (info.isDirectory() && !recursive) throw new Error('path is a directory; set recursive=true to delete it');
+  await rm(resolved.absolute, { recursive, force: false });
+  return ok(`deleted ${resolved.relative}`, { path: resolved.relative, type: info.isDirectory() ? 'dir' : info.isFile() ? 'file' : 'other', recursive, bytes: info.isFile() ? info.size : undefined });
 }
 
 function assertTextWriteAllowed(config: AppConfig, workspace: Workspace, content: string): void {

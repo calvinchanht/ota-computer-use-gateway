@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
 import { READ_ONLY, WRITE_FILE } from './annotations.js';
-import { editFileTool, listDir, readBinaryFileTool, readFileTool, statPath, treeTool, workspaceInventory, writeBinaryFileTool, writeFileTool } from '../../tools/files.js';
+import { deleteFileTool, deletePathTool, editFileTool, listDir, readBinaryFileTool, readFileTool, statPath, treeTool, workspaceInventory, writeBinaryFileTool, writeFileTool } from '../../tools/files.js';
 import { searchFiles } from '../../tools/search.js';
 import type { RegisterContext } from './types.js';
 
@@ -50,6 +50,14 @@ function registerWriteTools({ server, config, workspaces }: RegisterContext): vo
   server.registerTool('edit_file', editFileSpec(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'edit_file',
     (workspace) => editFileTool(config, workspace, args.path, args.old_text, args.new_text)
+  ));
+  server.registerTool('delete_file', deleteFileSpec(), async (args) => runWorkspaceTool(
+    workspaces, args.workspace_id, 'delete_file',
+    (workspace) => deleteFileTool(config, workspace, args.path)
+  ));
+  server.registerTool('delete_path', deletePathSpec(), async (args) => runWorkspaceTool(
+    workspaces, args.workspace_id, 'delete_path',
+    (workspace) => deletePathTool(config, workspace, args.path, args.recursive)
   ));
 }
 
@@ -137,6 +145,24 @@ function editFileSpec() {
     title: 'Edit file',
     description: 'Replace one exact text occurrence inside a UTF-8 workspace file.',
     inputSchema: { workspace_id: z.string(), path: z.string(), old_text: z.string(), new_text: z.string() },
+    annotations: WRITE_FILE
+  };
+}
+
+function deleteFileSpec() {
+  return {
+    title: 'Delete file',
+    description: 'Delete one regular file inside a workspace.',
+    inputSchema: { workspace_id: z.string(), path: z.string() },
+    annotations: WRITE_FILE
+  };
+}
+
+function deletePathSpec() {
+  return {
+    title: 'Delete path',
+    description: 'Delete a file or, with recursive=true, a directory inside a workspace. Refuses to delete the workspace root.',
+    inputSchema: { workspace_id: z.string(), path: z.string(), recursive: z.boolean().default(false) },
     annotations: WRITE_FILE
   };
 }

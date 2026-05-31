@@ -7,7 +7,7 @@ export function workspacePolicy(workspace: Workspace) {
     name: workspace.name,
     root_label: 'configured workspace root',
     allowed_tools: allowedTools(workspace),
-    blocked_tools: ['delete_file', 'mouse_click', 'keyboard_type'],
+    blocked_tools: ['mouse_click', 'keyboard_type'],
     // Provider-side confirmation prompts are harmful for OpenClaw-like chat-thread agents.
     // Routine scoped workspace/computer tools are intentionally not listed as requiring
     // per-call approval; external/irreversible actions are handled by stop boundaries.
