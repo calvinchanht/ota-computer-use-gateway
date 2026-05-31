@@ -12,6 +12,7 @@ type HttpAuditEntry = {
   duration_ms: number;
   client: string;
   content_length?: string;
+  headers?: Record<string, string | undefined>;
 };
 
 export function auditHttpRequest(workspace: Workspace | null, req: IncomingMessage, res: ServerResponse, startedAt = Date.now()): void {
@@ -29,7 +30,8 @@ function entryFor(req: IncomingMessage, res: ServerResponse, startedAt: number):
     status_code: res.statusCode,
     duration_ms: Date.now() - startedAt,
     client: clientKey(req),
-    content_length: headerValue(req.headers['content-length'])
+    content_length: headerValue(req.headers['content-length']),
+    headers: safeRequestHeaders(req)
   };
 }
 
@@ -41,6 +43,30 @@ async function writeHttpAudit(workspace: Workspace, entry: HttpAuditEntry): Prom
 
 function requestPath(req: IncomingMessage): string | undefined {
   return req.url?.split('?')[0];
+}
+
+function safeRequestHeaders(req: IncomingMessage): Record<string, string | undefined> | undefined {
+  const names = [
+    'origin',
+    'referer',
+    'referrer',
+    'user-agent',
+    'x-forwarded-for',
+    'x-forwarded-host',
+    'x-forwarded-proto',
+    'cf-connecting-ip',
+    'cf-ipcountry',
+    'openai-conversation-id',
+    'openai-ephemeral-user-id',
+    'openai-gpt-id',
+    'openai-subdivision-1-iso-code',
+    'x-openai-conversation-id',
+    'x-openai-project-id',
+    'x-openai-gpt-id',
+    'x-openai-action-invocation-id'
+  ];
+  const entries = names.map((name) => [name, headerValue(req.headers[name])] as const).filter(([, value]) => value !== undefined);
+  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 function headerValue(value: string | string[] | undefined): string | undefined {
