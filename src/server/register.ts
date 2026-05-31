@@ -12,11 +12,13 @@ import { registerPatchTools } from './register/patch.js';
 import { registerProcessTools } from './register/processes.js';
 import { registerSkillTools } from './register/skills.js';
 import { registerWorkspaceTools } from './register/workspace.js';
+import { setToolAnnotationMode } from './register/annotations.js';
 import type { RegisterContext } from './register/types.js';
 
 export type WorkspaceMap = Map<string, Workspace>;
 
 export function registerTools(server: McpServer, config: AppConfig, workspaces: WorkspaceMap): void {
+  setToolAnnotationMode(config.server.tool_annotations.mode);
   const context: RegisterContext = { server, config, workspaces };
   registerWorkspaceTools(context);
   registerArtifactTools(context);

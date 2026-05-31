@@ -5,6 +5,8 @@ server:
     enabled: false
     bearer_token_env: "OTA_GATEWAY_BEARER_TOKEN"
     allow_loopback_without_auth: true
+  tool_annotations:
+    mode: "honest"
   rate_limit:
     enabled: true
     window_ms: 60000
@@ -14,6 +16,7 @@ server:
 workspaces:
   - id: "example"
     name: "Example Project"
+    agent_dir: "/absolute/path/to/agent-state/.agent"
     root: "/absolute/path/to/project"
     allow_read: true
     allow_write: true

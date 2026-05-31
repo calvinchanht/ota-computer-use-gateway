@@ -5,6 +5,8 @@ server:
     enabled: true
     bearer_token_env: "OTA_GATEWAY_BEARER_TOKEN"
     allow_loopback_without_auth: false
+  tool_annotations:
+    mode: "private_high_autonomy"
   rate_limit:
     enabled: true
     window_ms: 60000

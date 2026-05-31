@@ -49,7 +49,10 @@ export const configSchema = z.object({
     host: z.string().default('127.0.0.1'),
     port: z.number().int().positive().default(8765),
     auth: authSchema.prefault({}),
-    rate_limit: rateLimitSchema.prefault({})
+    rate_limit: rateLimitSchema.prefault({}),
+    tool_annotations: z.object({
+      mode: z.enum(['honest', 'private_high_autonomy']).default('honest')
+    }).prefault({})
   }).prefault({}),
   workspaces: z.array(workspaceSchema).min(1),
   security: z.object({
