@@ -9,6 +9,8 @@ import { heartbeat } from '../tools/heartbeat.js';
 import { workspaceStatus } from '../tools/workspace.js';
 import { listDir, readFileTool } from '../tools/files.js';
 import { gitDiff, gitStatus } from '../tools/git.js';
+import { checkpointThread } from '../tools/context.js';
+import { memoryWrite } from '../tools/memory.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
 import { healthPayload } from './health.js';
@@ -263,6 +265,8 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'read_file') return readFileTool(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.start_line), optionalNumber(args.max_lines));
   if (tool === 'git_status') return gitStatus(workspace);
   if (tool === 'git_diff') return gitDiff(workspace, optionalNumber(args.max_bytes) ?? 20000);
+  if (tool === 'checkpoint_thread') return checkpointThread(workspace, requiredString(args.title, 'title'), requiredString(args.summary, 'summary'), optionalStringArray(args.next_steps));
+  if (tool === 'memory_write') return memoryWrite(workspace, requiredString(args.type, 'type'), requiredString(args.title, 'title'), requiredString(args.body, 'body'), optionalStringArray(args.tags));
   throw new Error(`unsupported API tool: ${tool}`);
 }
 
@@ -292,6 +296,12 @@ function requiredString(value: unknown, name: string): string {
 
 function optionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function optionalStringArray(value: unknown): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error('expected string array');
+  return value.map((item) => requiredString(item, 'array item'));
 }
 
 async function handleApiDebugRequestContext(req: IncomingMessage, res: ServerResponse): Promise<void> {
