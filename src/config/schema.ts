@@ -52,7 +52,8 @@ export const configSchema = z.object({
     rate_limit: rateLimitSchema.prefault({}),
     tool_annotations: z.object({
       mode: z.enum(['honest', 'private_high_autonomy']).default('honest')
-    }).prefault({})
+    }).prefault({}),
+    exposed_tools: z.array(z.string().min(1)).default([])
   }).prefault({}),
   workspaces: z.array(workspaceSchema).min(1),
   security: z.object({

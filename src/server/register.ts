@@ -19,7 +19,7 @@ export type WorkspaceMap = Map<string, Workspace>;
 
 export function registerTools(server: McpServer, config: AppConfig, workspaces: WorkspaceMap): void {
   setToolAnnotationMode(config.server.tool_annotations.mode);
-  const context: RegisterContext = { server, config, workspaces };
+  const context: RegisterContext = { server: filteredServer(server, config), config, workspaces };
   registerWorkspaceTools(context);
   registerArtifactTools(context);
   registerBrowserTools(context);
@@ -31,4 +31,18 @@ export function registerTools(server: McpServer, config: AppConfig, workspaces: 
   registerPatchTools(context);
   registerApprovalTools(context);
   registerProcessTools(context);
+}
+
+function filteredServer(server: McpServer, config: AppConfig): McpServer {
+  const exposed = new Set(config.server.exposed_tools ?? []);
+  if (exposed.size === 0) return server;
+  return new Proxy(server, {
+    get(target, prop, receiver) {
+      if (prop !== 'registerTool') return Reflect.get(target, prop, receiver);
+      return (name: string, ...args: unknown[]) => {
+        if (!exposed.has(name)) return undefined;
+        return (target.registerTool as (...registerArgs: unknown[]) => unknown).call(target, name, ...args);
+      };
+    }
+  }) as McpServer;
 }
