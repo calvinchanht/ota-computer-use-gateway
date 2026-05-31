@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { Workspace } from './workspaces.js';
 
 export function agentPath(workspace: Workspace, ...parts: string[]): string {
-  return path.join(workspace.realRoot, '.agent', ...parts);
+  return path.join(workspace.realAgentDir ?? path.join(workspace.realRoot, '.agent'), ...parts);
 }
 
 export async function ensureAgentDir(workspace: Workspace): Promise<void> {

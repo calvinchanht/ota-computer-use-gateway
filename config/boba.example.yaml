@@ -14,7 +14,8 @@ server:
 workspaces:
   - id: "boba"
     name: "Boba"
-    root: "/Users/calvinc/.openclaw/workspace"
+    agent_dir: "/Users/calvinc/.openclaw/workspace/.agent"
+    root: "/"
     allow_read: true
     allow_write: true
     allow_patch: true
@@ -32,17 +33,5 @@ security:
   max_request_bytes: 1000000
   max_search_results: 50
   max_exec_ms: 120000
-  protect_secret_paths: true
-  denied_globs:
-    - ".env"
-    - ".env.*"
-    - "**/*.pem"
-    - "**/*.key"
-    - "**/id_rsa"
-    - "**/id_ed25519"
-    - "**/.ssh/**"
-    - "**/.gnupg/**"
-    - "**/.aws/**"
-    - "**/.kube/**"
-    - "**/*token*"
-    - "**/*secret*"
+  protect_secret_paths: false
+  denied_globs: []

@@ -19,6 +19,7 @@ export const workspaceSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   root: z.string().min(1),
+  agent_dir: z.string().min(1).optional(),
   allow_read: z.boolean().default(true),
   allow_write: z.boolean().default(false),
   allow_patch: z.boolean().default(false),

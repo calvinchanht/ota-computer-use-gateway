@@ -2,7 +2,7 @@ import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { AppConfig, WorkspaceConfig } from '../config/schema.js';
 
-export type Workspace = WorkspaceConfig & { realRoot: string };
+export type Workspace = WorkspaceConfig & { realRoot: string; realAgentDir: string };
 
 export async function buildWorkspaces(config: AppConfig): Promise<Map<string, Workspace>> {
   const entries = await Promise.all(config.workspaces.map(resolveWorkspace));
@@ -11,7 +11,9 @@ export async function buildWorkspaces(config: AppConfig): Promise<Map<string, Wo
 
 async function resolveWorkspace(workspace: WorkspaceConfig): Promise<Workspace> {
   if (!path.isAbsolute(workspace.root)) throw new Error(`workspace root must be absolute: ${workspace.id}`);
-  return { ...workspace, realRoot: await realpath(workspace.root) };
+  const realRoot = await realpath(workspace.root);
+  const realAgentDir = workspace.agent_dir ? path.resolve(workspace.agent_dir) : path.join(realRoot, '.agent');
+  return { ...workspace, realRoot, realAgentDir };
 }
 
 export function getWorkspace(workspaces: Map<string, Workspace>, id: string): Workspace {
