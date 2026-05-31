@@ -73,6 +73,28 @@ describe('browser CDP proxy tools', () => {
     expect(sends[1]).toContain('Runtime.enable');
   });
 
+
+
+  it('supports delay steps in CDP batches', async () => {
+    mockFetch([{ id: '1', type: 'page', webSocketDebuggerUrl: 'ws://cdp/1' }]);
+    const sends = mockWebSocket({ ok: true });
+    const data = (await browserCdpBatch(controlWorkspace(), '1', [{ method: 'Page.enable' }, { delay_ms: 1 } as any, { method: 'Runtime.enable' }])).data as any;
+    expect(data.results[1].kind).toBe('delay');
+    expect(data.results[1].delay_ms).toBe(1);
+    expect(sends[0]).toContain('Page.enable');
+    expect(sends[1]).toContain('Runtime.enable');
+  });
+
+  it('supports page load waits on page-target CDP batch command steps', async () => {
+    mockFetch([{ id: '1', type: 'page', webSocketDebuggerUrl: 'ws://cdp/1' }]);
+    const sends = mockWebSocket({ frameId: 'frame-1' }, 'Page.loadEventFired');
+    const data = (await browserCdpBatch(controlWorkspace(), '1', [{ method: 'Page.navigate', params: { url: 'https://example.com' }, wait_for: 'page_load', timeout_ms: 1000 } as any])).data as any;
+    expect(data.results[0].wait.wait_for).toBe('page_load');
+    expect(data.results[0].wait.ok).toBe(true);
+    expect(sends[0]).toContain('Page.enable');
+    expect(sends[1]).toContain('Page.navigate');
+  });
+
   it('requires browser CDP control for CDP calls', async () => {
     await expect(browserCdpBrowserCall(fixtureWorkspace(), 'Browser.getVersion')).rejects.toThrow('browser CDP control is not enabled');
     await expect(browserCdpCall(fixtureWorkspace(), '1', 'Runtime.evaluate')).rejects.toThrow('browser CDP control is not enabled');
@@ -95,7 +117,7 @@ function response(body: unknown) {
   return { ok: true, json: async () => body, text: async () => String(body) };
 }
 
-function mockWebSocket(result: unknown) {
+function mockWebSocket(result: unknown, eventMethod?: string) {
   const sends: string[] = [];
   class MockWebSocket extends EventTarget {
     close = vi.fn();
@@ -107,7 +129,10 @@ function mockWebSocket(result: unknown) {
       sends.push(message);
       const id = JSON.parse(message).id;
       const event = new MessageEvent('message', { data: JSON.stringify({ id, result }) });
-      setTimeout(() => this.dispatchEvent(event), 0);
+      setTimeout(() => {
+        this.dispatchEvent(event);
+        if (eventMethod) this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ method: eventMethod, params: {} }) }));
+      }, 0);
     });
   }
   vi.stubGlobal('WebSocket', MockWebSocket);

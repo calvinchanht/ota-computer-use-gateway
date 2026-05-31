@@ -31,7 +31,7 @@ function registerBrowserCdpBrowserCall({ server, workspaces }: RegisterContext):
 }
 
 function registerBrowserCdpBrowserBatch({ server, workspaces }: RegisterContext): void {
-  server.registerTool('browser_cdp_browser_batch', { title: 'Browser-level CDP batch', description: 'Call multiple Chrome DevTools Protocol methods on the scoped browser websocket for a configured profile.', inputSchema: { ...profileSchema(), calls: z.array(cdpCallItemSchema()).min(1).max(20) }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_cdp_browser_batch', (workspace) => browserCdpBrowserBatch(workspace, args.calls, args.profile_label)));
+  server.registerTool('browser_cdp_browser_batch', { title: 'Browser-level CDP batch', description: 'Send a sequence of raw Chrome DevTools Protocol commands to the scoped browser websocket. This is gateway-side transport batching, not a browser action wrapper. Supports raw CDP command steps and delay_ms steps.', inputSchema: { ...profileSchema(), calls: z.array(cdpBatchStepSchema(false)).min(1).max(20) }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_cdp_browser_batch', (workspace) => browserCdpBrowserBatch(workspace, args.calls as any, args.profile_label)));
 }
 
 function registerBrowserCdpCall({ server, workspaces }: RegisterContext): void {
@@ -39,7 +39,7 @@ function registerBrowserCdpCall({ server, workspaces }: RegisterContext): void {
 }
 
 function registerBrowserCdpBatch({ server, workspaces }: RegisterContext): void {
-  server.registerTool('browser_cdp_batch', { title: 'Browser CDP batch', description: 'Call multiple Chrome DevTools Protocol methods on a scoped page target websocket.', inputSchema: { ...targetInfoSchema(), calls: z.array(cdpCallItemSchema()).min(1).max(20) }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_cdp_batch', (workspace) => browserCdpBatch(workspace, args.target_id, args.calls, args.profile_label)));
+  server.registerTool('browser_cdp_batch', { title: 'Browser CDP batch', description: 'Send a sequence of raw Chrome DevTools Protocol commands to a scoped page-target websocket. This is gateway-side transport sequencing, not a browser action wrapper. Supports raw CDP command steps, delay_ms steps, and command wait_for page_load/dom_content_loaded.', inputSchema: { ...targetInfoSchema(), calls: z.array(cdpBatchStepSchema(true)).min(1).max(20) }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_cdp_batch', (workspace) => browserCdpBatch(workspace, args.target_id, args.calls as any, args.profile_label)));
 }
 
 function profileSchema() {
@@ -58,8 +58,17 @@ function cdpCallSchema() {
   return { ...targetInfoSchema(), method: cdpMethodSchema(), params: z.record(z.string(), z.unknown()).optional() };
 }
 
-function cdpCallItemSchema() {
-  return z.object({ method: cdpMethodSchema(), params: z.record(z.string(), z.unknown()).optional() });
+function cdpBatchStepSchema(allowPageWait: boolean) {
+  const command = z.object({
+    method: cdpMethodSchema().describe('Raw CDP method name, e.g. Runtime.evaluate, Page.navigate, Input.dispatchMouseEvent.'),
+    params: z.record(z.string(), z.unknown()).optional().describe('Raw CDP params for the method.'),
+    ...(allowPageWait ? {
+      wait_for: z.enum(['page_load', 'dom_content_loaded']).optional().describe('Gateway sequencing helper: arm the CDP Page event listener before sending this command, then wait for the event after the command response.'),
+      timeout_ms: z.number().int().min(1).max(60000).optional().describe('Timeout for wait_for in milliseconds; default 10000.')
+    } : {})
+  });
+  const delayStep = z.object({ delay_ms: z.number().int().min(0).max(60000).describe('Gateway sequencing helper: wait before the next raw CDP command.') });
+  return z.union([command, delayStep]);
 }
 
 function cdpMethodSchema() {

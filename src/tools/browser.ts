@@ -5,10 +5,20 @@ const REMINDER = 'Use CDP directly through browser_cdp_* tools.';
 
 type BrowserProfile = NonNullable<Workspace['browser']>['profiles'][number];
 
+type CdpWaitFor = 'page_load' | 'dom_content_loaded';
+
 type CdpBatchCall = {
   method: string;
   params?: Record<string, unknown>;
+  wait_for?: CdpWaitFor;
+  timeout_ms?: number;
 };
+
+type CdpBatchDelay = {
+  delay_ms: number;
+};
+
+type CdpBatchStep = CdpBatchCall | CdpBatchDelay;
 
 type ChromeTarget = {
   id: string;
@@ -52,13 +62,13 @@ export async function browserCdpBrowserCall(workspace: Workspace, method: string
   return ok('browser-level CDP call completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, method, result: boundedJson(result) });
 }
 
-export async function browserCdpBrowserBatch(workspace: Workspace, calls: CdpBatchCall[], label?: string) {
+export async function browserCdpBrowserBatch(workspace: Workspace, calls: CdpBatchStep[], label?: string) {
   assertBrowserControl(workspace);
   const profile = selectedBrowserProfile(workspace, label);
   const url = await browserWebSocketUrl(profile);
   const boundedCalls = calls.slice(0, 20);
   const results = [];
-  for (const call of boundedCalls) results.push(await oneCdpBatchCall(url, call));
+  for (let index = 0; index < boundedCalls.length; index++) results.push(await oneCdpBatchCall(url, boundedCalls[index], index, false));
   return ok('browser-level CDP batch completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, results });
 }
 
@@ -69,12 +79,12 @@ export async function browserCdpCall(workspace: Workspace, targetId: string, met
   return ok('browser CDP call completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, target: targetSummary(target), method, result: boundedJson(result) });
 }
 
-export async function browserCdpBatch(workspace: Workspace, targetId: string, calls: CdpBatchCall[], label?: string) {
+export async function browserCdpBatch(workspace: Workspace, targetId: string, calls: CdpBatchStep[], label?: string) {
   assertBrowserControl(workspace);
   const { profile, target } = await websocketTarget(workspace, targetId, label);
   const boundedCalls = calls.slice(0, 20);
   const results = [];
-  for (const call of boundedCalls) results.push(await oneCdpBatchCall(target.webSocketDebuggerUrl, call));
+  for (let index = 0; index < boundedCalls.length; index++) results.push(await oneCdpBatchCall(target.webSocketDebuggerUrl, boundedCalls[index], index, true));
   return ok('browser CDP batch completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, target: targetSummary(target), results });
 }
 
@@ -167,10 +177,22 @@ function boundedCdpParams(params: Record<string, unknown>) {
   return params;
 }
 
-async function oneCdpBatchCall(url: string, call: CdpBatchCall) {
-  const method = boundedCdpMethod(call.method);
-  const result = await cdpCommand(url, method, boundedCdpParams(call.params ?? {}));
-  return { method, result: boundedJson(result) };
+async function oneCdpBatchCall(url: string, step: CdpBatchStep, index: number, allowPageWait: boolean) {
+  if ('delay_ms' in step) {
+    const delayMs = boundedDelayMs(step.delay_ms);
+    const started = Date.now();
+    await delay(delayMs);
+    return { index, kind: 'delay', delay_ms: delayMs, elapsed_ms: Date.now() - started };
+  }
+  const method = boundedCdpMethod(step.method);
+  const params = boundedCdpParams(step.params ?? {});
+  const waitFor = step.wait_for ? boundedWaitFor(step.wait_for, allowPageWait) : undefined;
+  const timeoutMs = boundedTimeoutMs(step.timeout_ms ?? 10000);
+  const started = Date.now();
+  const { result, wait } = waitFor
+    ? await cdpCommandWithWait(url, method, params, waitFor, timeoutMs)
+    : { result: await cdpCommand(url, method, params), wait: undefined };
+  return { index, kind: 'cdp', method, result: boundedJson(result), wait, elapsed_ms: Date.now() - started };
 }
 
 async function cdpCommand<T>(url: string, method: string, params: Record<string, unknown>) {
@@ -183,6 +205,40 @@ async function cdpCommand<T>(url: string, method: string, params: Record<string,
   });
 }
 
+async function cdpCommandWithWait<T>(url: string, method: string, params: Record<string, unknown>, waitFor: CdpWaitFor, timeoutMs: number) {
+  return await new Promise<{ result: T; wait: { wait_for: CdpWaitFor; ok: boolean; setup_method: 'Page.enable'; elapsed_ms: number } }>((resolve, reject) => {
+    const ws = new WebSocket(url);
+    const started = Date.now();
+    let commandResult: T | undefined;
+    let eventSeen = false;
+    const timer = setTimeout(() => { ws.close(); reject(new Error(`CDP wait timed out: ${waitFor}`)); }, timeoutMs);
+    const finish = () => {
+      if (commandResult === undefined || !eventSeen) return;
+      clearTimeout(timer);
+      ws.close();
+      resolve({ result: commandResult, wait: { wait_for: waitFor, ok: true, setup_method: 'Page.enable', elapsed_ms: Date.now() - started } });
+    };
+    ws.addEventListener('open', () => {
+      ws.send(JSON.stringify({ id: 0, method: 'Page.enable', params: {} }));
+      ws.send(JSON.stringify({ id: 1, method, params }));
+    });
+    ws.addEventListener('error', () => { clearTimeout(timer); reject(new Error('CDP websocket error')); });
+    ws.addEventListener('message', (event) => {
+      const message = JSON.parse(String(event.data));
+      if (message.id === 1) {
+        if (message.error) { clearTimeout(timer); ws.close(); reject(new Error(message.error.message ?? 'CDP command failed')); return; }
+        commandResult = message.result as T;
+        finish();
+        return;
+      }
+      if (message.method === waitEventMethod(waitFor)) {
+        eventSeen = true;
+        finish();
+      }
+    });
+  });
+}
+
 function handleCdpMessage<T>(data: unknown, resolve: (value: T) => void, reject: (error: Error) => void, timer: NodeJS.Timeout, ws: WebSocket) {
   const message = JSON.parse(String(data));
   if (message.id !== 1) return;
@@ -190,6 +246,30 @@ function handleCdpMessage<T>(data: unknown, resolve: (value: T) => void, reject:
   ws.close();
   if (message.error) reject(new Error(message.error.message ?? 'CDP command failed'));
   else resolve(message.result as T);
+}
+
+function boundedDelayMs(value: number) {
+  if (!Number.isFinite(value)) throw new Error('delay_ms must be finite');
+  return Math.min(Math.max(Math.trunc(value), 0), 60000);
+}
+
+function boundedTimeoutMs(value: number) {
+  if (!Number.isFinite(value)) throw new Error('timeout_ms must be finite');
+  return Math.min(Math.max(Math.trunc(value), 1), 60000);
+}
+
+function boundedWaitFor(value: CdpWaitFor, allowPageWait: boolean) {
+  if (!allowPageWait) throw new Error('wait_for is only supported for page-target CDP batches');
+  if (value !== 'page_load' && value !== 'dom_content_loaded') throw new Error(`unsupported CDP wait_for: ${value}`);
+  return value;
+}
+
+function waitEventMethod(waitFor: CdpWaitFor) {
+  return waitFor === 'page_load' ? 'Page.loadEventFired' : 'Page.domContentEventFired';
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function defaultProfile(workspace: Workspace): BrowserProfile {
