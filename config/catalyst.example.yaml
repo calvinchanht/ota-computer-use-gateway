@@ -39,6 +39,9 @@ workspaces:
     commands:
       check: "npm run check"
       smoke: "npm run smoke:stdio"
+      # Push current branch of Catalyst career-control-panel using a local secret.
+      # The script must not print or log the PAT.
+      push_career_control_panel: "bin/push-career-control-panel.sh"
 
 security:
   max_file_bytes: 200000
