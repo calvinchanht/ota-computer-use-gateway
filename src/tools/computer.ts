@@ -7,6 +7,7 @@ import type { Workspace } from '../core/workspaces.js';
 const execFileAsync = promisify(execFile);
 const CUA_DRIVER = process.env.CUA_DRIVER_BIN || 'cua-driver';
 const MAX_SCREENSHOT_BASE64 = 40000;
+const MAX_BATCH_STEPS = 25;
 const READ_ONLY_CUA_TOOLS = new Set([
   'check_permissions',
   'list_windows',
@@ -29,119 +30,76 @@ const MUTATING_CUA_TOOLS = new Set([
 ]);
 const ALLOWED_CUA_TOOLS = new Set([...READ_ONLY_CUA_TOOLS, ...MUTATING_CUA_TOOLS]);
 
-export type ObserveAfter = {
-  delay_ms?: number;
-  screenshot?: boolean;
-  include_window_tree?: boolean;
-};
+export type CuaDriverBatchStep =
+  | { method: string; params?: Record<string, unknown> }
+  | { delay_ms: number };
 
-export async function computerStatus(workspace: Workspace) {
+export async function cuaDriverStatus(workspace: Workspace) {
   const adapter = await cuaAdapterStatus(workspace);
-  return ok('computer status', {
+  return ok('cua driver status', {
     workspace_id: workspace.id,
     platform: platformInfo(),
+    driver: 'cua-driver',
+    executable: CUA_DRIVER,
     capabilities: {
       screen: workspace.allow_screen,
       mouse_keyboard: workspace.allow_mouse_keyboard,
-      observe_after: true
+      batch_delay_steps: true
     },
-    adapters: {
-      screen: workspace.allow_screen ? adapter.screen : 'disabled',
-      mouse_keyboard: workspace.allow_mouse_keyboard ? adapter.mouse_keyboard : 'disabled',
-      cua_driver: adapter
+    allowed_methods: {
+      read_only: [...READ_ONLY_CUA_TOOLS],
+      mutating: [...MUTATING_CUA_TOOLS]
+    },
+    adapter
+  });
+}
+
+export async function cuaDriverCall(workspace: Workspace, method: string, params: Record<string, unknown> = {}) {
+  const readOnly = authorizeCuaMethod(workspace, method);
+  const result = await cuaCall(method, sanitizeCuaArgs(params));
+  return ok('cua driver call', { method, read_only: readOnly, result: boundCuaResult(method, result) });
+}
+
+export async function cuaDriverBatch(workspace: Workspace, calls: CuaDriverBatchStep[]) {
+  if (!Array.isArray(calls) || calls.length === 0) throw new Error('cua driver batch requires at least one step');
+  if (calls.length > MAX_BATCH_STEPS) throw new Error(`cua driver batch supports at most ${MAX_BATCH_STEPS} steps`);
+
+  const results: Record<string, unknown>[] = [];
+  for (const [index, step] of calls.entries()) {
+    const started = Date.now();
+    if ('delay_ms' in step) {
+      const delayMs = clampDelay(step.delay_ms);
+      await delay(delayMs);
+      results.push({ index, kind: 'delay', delay_ms: delayMs, elapsed_ms: Date.now() - started });
+      continue;
     }
-  });
+
+    const method = step.method;
+    const params = sanitizeCuaArgs(step.params ?? {});
+    let readOnly: boolean | undefined;
+    try {
+      readOnly = authorizeCuaMethod(workspace, method);
+      const result = await cuaCall(method, params);
+      results.push({ index, kind: 'cua_driver', method, read_only: readOnly, result: boundCuaResult(method, result), elapsed_ms: Date.now() - started });
+    } catch (error) {
+      results.push({ index, kind: 'cua_driver', method, read_only: readOnly, error: error instanceof Error ? error.message : String(error), elapsed_ms: Date.now() - started });
+      break;
+    }
+  }
+
+  const failed = results.find((row) => 'error' in row);
+  return ok(failed ? 'cua driver batch stopped on error' : 'cua driver batch completed', { results, stopped_on_error: failed ?? null });
 }
 
-export async function observeScreen(workspace: Workspace) {
-  if (!workspace.allow_screen) throw new Error('screen observation is not enabled for this workspace');
-  if (process.platform !== 'darwin') return pendingObservation(workspace, 'cua-driver screen adapter is only active on macOS hosts');
-  const status = await cuaAdapterStatus(workspace);
-  if (status.status !== 'ready') return pendingObservation(workspace, status.error || 'cua-driver is not ready');
-
-  const [screenSize, windows, screenshot] = await Promise.all([
-    safeCuaCall('get_screen_size', {}),
-    safeCuaCall('list_windows', {}),
-    safeCuaCall('screenshot', { format: 'jpeg', quality: 45 })
-  ]);
-  return ok('screen observation', {
-    workspace_id: workspace.id,
-    platform: platformInfo(),
-    adapter_status: 'ready',
-    permissions: status.permissions,
-    screen_size: screenSize.ok ? screenSize.data : null,
-    screen_size_error: screenSize.ok ? null : screenSize.error,
-    window_tree: windows.ok ? boundWindows(windows.data) : null,
-    window_tree_error: windows.ok ? null : windows.error,
-    screenshot: screenshot.ok ? boundedScreenshot(screenshot.data) : null,
-    screenshot_error: screenshot.ok ? null : screenshot.error
-  });
-}
-
-export async function computerClick(workspace: Workspace, pid: number, x: number, y: number, windowId?: number, observe?: ObserveAfter) {
-  ensureMouseKeyboard(workspace);
-  const args: Record<string, unknown> = { pid, x, y };
-  if (windowId !== undefined) args.window_id = windowId;
-  const result = await cuaCall('click', args);
-  return ok('computer click', { result, observe_after: await observeAfter(workspace, observe) });
-}
-
-export async function computerTypeText(workspace: Workspace, pid: number, text: string, windowId?: number, elementIndex?: number, delayMs?: number, observe?: ObserveAfter) {
-  ensureMouseKeyboard(workspace);
-  const args: Record<string, unknown> = { pid, text };
-  if (windowId !== undefined) args.window_id = windowId;
-  if (elementIndex !== undefined) args.element_index = elementIndex;
-  if (delayMs !== undefined) args.delay_ms = clampDelay(delayMs);
-  const result = await cuaCall('type_text_chars', args);
-  return ok('computer typed text', { result, observe_after: await observeAfter(workspace, observe) });
-}
-
-export async function computerPressKey(workspace: Workspace, pid: number, key: string, windowId?: number, modifiers?: string[], elementIndex?: number, observe?: ObserveAfter) {
-  ensureMouseKeyboard(workspace);
-  const args: Record<string, unknown> = { pid, key };
-  if (windowId !== undefined) args.window_id = windowId;
-  if (modifiers?.length) args.modifiers = modifiers;
-  if (elementIndex !== undefined) args.element_index = elementIndex;
-  const result = await cuaCall('press_key', args);
-  return ok('computer pressed key', { result, observe_after: await observeAfter(workspace, observe) });
-}
-
-export async function computerHotkey(workspace: Workspace, pid: number, keys: string[], windowId?: number, observe?: ObserveAfter) {
-  ensureMouseKeyboard(workspace);
-  const args: Record<string, unknown> = { pid, keys };
-  if (windowId !== undefined) args.window_id = windowId;
-  const result = await cuaCall('hotkey', args);
-  return ok('computer hotkey', { result, observe_after: await observeAfter(workspace, observe) });
-}
-
-export async function computerCuaCall(workspace: Workspace, tool: string, args: Record<string, unknown> = {}, observe?: ObserveAfter) {
-  if (!ALLOWED_CUA_TOOLS.has(tool)) throw new Error(`cua tool is not allowed: ${tool}`);
-  const readOnly = READ_ONLY_CUA_TOOLS.has(tool);
+function authorizeCuaMethod(workspace: Workspace, method: string) {
+  if (!ALLOWED_CUA_TOOLS.has(method)) throw new Error(`cua driver method is not allowed: ${method}`);
+  const readOnly = READ_ONLY_CUA_TOOLS.has(method);
   if (readOnly) {
     if (!workspace.allow_screen) throw new Error('screen observation is not enabled for this workspace');
   } else {
     ensureMouseKeyboard(workspace);
   }
-  const result = await cuaCall(tool, sanitizeCuaArgs(args));
-  return ok('cua tool call', { tool, read_only: readOnly, result: boundCuaResult(tool, result), observe_after: await observeAfter(workspace, observe) });
-}
-
-export async function observeAfter(workspace: Workspace, options?: ObserveAfter) {
-  if (!options) return undefined;
-  const delayMs = clampDelay(options.delay_ms ?? 0);
-  if (delayMs > 0) await delay(delayMs);
-  if (options.screenshot || options.include_window_tree) return (await observeScreen(workspace)).data;
-  return { delay_ms: delayMs };
-}
-
-function sanitizeCuaArgs(args: Record<string, unknown>) {
-  return JSON.parse(JSON.stringify(args ?? {})) as Record<string, unknown>;
-}
-
-function boundCuaResult(tool: string, result: unknown) {
-  if (tool === 'list_windows') return boundWindows(result);
-  if (tool === 'screenshot') return boundedScreenshot(result);
-  return result;
+  return readOnly;
 }
 
 function ensureMouseKeyboard(workspace: Workspace) {
@@ -162,24 +120,13 @@ async function cuaAdapterStatus(workspace: Workspace) {
   };
 }
 
-function pendingObservation(workspace: Workspace, note: string) {
-  return ok('screen observation adapter pending', {
-    workspace_id: workspace.id,
-    platform: platformInfo(),
-    screenshot: null,
-    window_tree: null,
-    adapter_status: 'pending',
-    note
-  });
-}
-
-async function safeCuaCall(tool: string, args: Record<string, unknown>) {
-  try { return { ok: true, data: await cuaCall(tool, args) }; }
+async function safeCuaCall(method: string, params: Record<string, unknown>) {
+  try { return { ok: true, data: await cuaCall(method, params) }; }
   catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
 }
 
-async function cuaCall(tool: string, args: Record<string, unknown>) {
-  const { stdout, stderr } = await execFileAsync(CUA_DRIVER, ['call', tool, JSON.stringify(args)], {
+async function cuaCall(method: string, params: Record<string, unknown>) {
+  const { stdout, stderr } = await execFileAsync(CUA_DRIVER, ['call', method, JSON.stringify(params)], {
     timeout: 15000,
     maxBuffer: 5 * 1024 * 1024,
     env: {
@@ -191,6 +138,16 @@ async function cuaCall(tool: string, args: Record<string, unknown>) {
   if (!output && stderr.trim()) return stderr.trim();
   try { return JSON.parse(output); }
   catch { return output; }
+}
+
+function sanitizeCuaArgs(args: Record<string, unknown>) {
+  return JSON.parse(JSON.stringify(args ?? {})) as Record<string, unknown>;
+}
+
+function boundCuaResult(method: string, result: unknown) {
+  if (method === 'list_windows') return boundWindows(result);
+  if (method === 'screenshot') return boundedScreenshot(result);
+  return result;
 }
 
 function boundWindows(data: unknown) {

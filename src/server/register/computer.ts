@@ -1,85 +1,43 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { computerClick, computerCuaCall, computerHotkey, computerPressKey, computerStatus, computerTypeText, observeScreen } from '../../tools/computer.js';
+import { cuaDriverBatch, cuaDriverCall, cuaDriverStatus } from '../../tools/computer.js';
 import { READ_ONLY, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
-const observeAfterSchema = z.object({
-  delay_ms: z.number().int().min(0).max(5000).optional(),
-  screenshot: z.boolean().optional(),
-  include_window_tree: z.boolean().optional()
-}).optional();
+const cuaBatchStepSchema = z.union([
+  z.object({ method: z.string().min(1).max(80), params: z.record(z.string(), z.unknown()).default({}) }),
+  z.object({ delay_ms: z.number().int().min(0).max(5000) })
+]);
 
 export function registerComputerTools(context: RegisterContext): void {
-  registerComputerStatus(context);
-  registerObserveScreen(context);
-  registerComputerClick(context);
-  registerComputerTypeText(context);
-  registerComputerPressKey(context);
-  registerComputerHotkey(context);
-  registerComputerCuaCall(context);
+  registerCuaDriverStatus(context);
+  registerCuaDriverCall(context);
+  registerCuaDriverBatch(context);
 }
 
-function registerComputerStatus({ server, workspaces }: RegisterContext): void {
-  server.registerTool('computer_status', {
-    title: 'Computer status',
-    description: 'Return local computer-use capability status for a workspace.',
+function registerCuaDriverStatus({ server, workspaces }: RegisterContext): void {
+  server.registerTool('cua_driver_status', {
+    title: 'Cua Driver status',
+    description: 'Return Cua Driver availability, permissions, adapter path, allowed methods, and Mac computer-use posture for a workspace.',
     inputSchema: { workspace_id: z.string() },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
-  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_status', computerStatus));
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'cua_driver_status', cuaDriverStatus));
 }
 
-function registerObserveScreen({ server, workspaces }: RegisterContext): void {
-  server.registerTool('observe_screen', {
-    title: 'Observe screen',
-    description: 'Return a bounded screen observation when a platform adapter is enabled.',
-    inputSchema: { workspace_id: z.string() },
-    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
-  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'observe_screen', observeScreen));
-}
-
-function registerComputerClick({ server, workspaces }: RegisterContext): void {
-  server.registerTool('computer_click', {
-    title: 'Computer click',
-    description: 'Click screen/window coordinates through the scoped local computer-use adapter. Routine local action; requires workspace mouse/keyboard policy.',
-    inputSchema: { workspace_id: z.string(), pid: z.number().int().positive(), x: z.number(), y: z.number(), window_id: z.number().int().positive().optional(), observe_after: observeAfterSchema },
+function registerCuaDriverCall({ server, workspaces }: RegisterContext): void {
+  server.registerTool('cua_driver_call', {
+    title: 'Cua Driver call',
+    description: 'Call one raw Cua Driver command for Mac computer use. Gateway only provides auth, workspace scoping, policy, audit, limits, and bounded output; use Cua Driver method names and params directly.',
+    inputSchema: { workspace_id: z.string(), method: z.string().min(1).max(80), params: z.record(z.string(), z.unknown()).default({}) },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
-  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_click', (workspace) => computerClick(workspace, args.pid, args.x, args.y, args.window_id, args.observe_after)));
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'cua_driver_call', (workspace) => cuaDriverCall(workspace, args.method, args.params)));
 }
 
-function registerComputerTypeText({ server, workspaces }: RegisterContext): void {
-  server.registerTool('computer_type_text', {
-    title: 'Computer type text',
-    description: 'Type text through the scoped local computer-use adapter. Routine local action; requires workspace mouse/keyboard policy.',
-    inputSchema: { workspace_id: z.string(), pid: z.number().int().positive(), text: z.string().max(10000), window_id: z.number().int().positive().optional(), element_index: z.number().int().nonnegative().optional(), delay_ms: z.number().int().min(0).max(5000).optional(), observe_after: observeAfterSchema },
+function registerCuaDriverBatch({ server, workspaces }: RegisterContext): void {
+  server.registerTool('cua_driver_batch', {
+    title: 'Cua Driver batch',
+    description: 'Send a sequence of raw Cua Driver commands for Mac computer use. Supports gateway-side { delay_ms } sequencing steps. This is transport sequencing around native Cua Driver calls, not a semantic computer-use wrapper.',
+    inputSchema: { workspace_id: z.string(), calls: z.array(cuaBatchStepSchema).min(1).max(25) },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
-  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_type_text', (workspace) => computerTypeText(workspace, args.pid, args.text, args.window_id, args.element_index, args.delay_ms, args.observe_after)));
-}
-
-function registerComputerPressKey({ server, workspaces }: RegisterContext): void {
-  server.registerTool('computer_press_key', {
-    title: 'Computer press key',
-    description: 'Press one key through the scoped local computer-use adapter. Routine local action; requires workspace mouse/keyboard policy.',
-    inputSchema: { workspace_id: z.string(), pid: z.number().int().positive(), key: z.string().min(1).max(64), window_id: z.number().int().positive().optional(), modifiers: z.array(z.string().min(1).max(32)).max(8).optional(), element_index: z.number().int().nonnegative().optional(), observe_after: observeAfterSchema },
-    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
-  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_press_key', (workspace) => computerPressKey(workspace, args.pid, args.key, args.window_id, args.modifiers, args.element_index, args.observe_after)));
-}
-
-function registerComputerHotkey({ server, workspaces }: RegisterContext): void {
-  server.registerTool('computer_hotkey', {
-    title: 'Computer hotkey',
-    description: 'Press a key combination through the scoped local computer-use adapter. Routine local action; requires workspace mouse/keyboard policy.',
-    inputSchema: { workspace_id: z.string(), pid: z.number().int().positive(), keys: z.array(z.string().min(1).max(32)).min(2).max(8), window_id: z.number().int().positive().optional(), observe_after: observeAfterSchema },
-    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
-  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_hotkey', (workspace) => computerHotkey(workspace, args.pid, args.keys, args.window_id, args.observe_after)));
-}
-
-
-function registerComputerCuaCall({ server, workspaces }: RegisterContext): void {
-  server.registerTool('computer_cua_call', {
-    title: 'Computer CUA call',
-    description: 'Call an allowed scoped CUADriver tool directly. Observation calls require screen policy; local input/control calls require mouse/keyboard policy and are non-destructive gateway actions.',
-    inputSchema: { workspace_id: z.string(), tool: z.string().min(1).max(80), args: z.record(z.string(), z.unknown()).default({}), observe_after: observeAfterSchema },
-    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
-  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_cua_call', (workspace) => computerCuaCall(workspace, args.tool, args.args, args.observe_after)));
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'cua_driver_batch', (workspace) => cuaDriverBatch(workspace, args.calls)));
 }

@@ -30,19 +30,15 @@ Examples of CDP methods provider-thread agents may use directly:
 
 The gateway scopes access to the configured profile/target and keeps it behind MCP auth/policy. It does not expose a naked remote debugging port publicly.
 
-## Non-CDP computer tools
+## Mac/Cua Driver tools
 
-These remain because they are not browser-CDP features:
+The Mac computer-use layer is Cua Driver proxying. It does not expose gateway semantic wrappers for Cua Driver features. Use Cua Driver method names and params directly.
 
-- `computer_status`
-- `observe_screen`
-- `computer_click`
-- `computer_type_text`
-- `computer_press_key`
-- `computer_hotkey`
-- `computer_cua_call`
+- `cua_driver_status` — return Cua Driver availability, permissions, adapter path, allowed methods, and Mac computer-use posture.
+- `cua_driver_call` — call one raw Cua Driver method through the scoped gateway.
+- `cua_driver_batch` — send a sequence of raw Cua Driver command steps; also supports gateway-side `{ "delay_ms": number }` sequencing steps.
 
-Use these only for OS-level computer use outside Chrome/CDP.
+The gateway provides auth, workspace scoping, policy checks, audit, limits, and bounded output around Cua Driver. It does not present a fake higher-level “safer” computer abstraction.
 
 ## Browser profile defaults
 
@@ -97,3 +93,35 @@ Supported page-target waits:
 - `dom_content_loaded` → waits for `Page.domContentEventFired`
 
 `wait_for` is only supported by `browser_cdp_batch`, because those events belong to page targets. `browser_cdp_browser_batch` supports raw CDP command steps and delay steps only.
+
+
+## Cua Driver batch sequencing
+
+`cua_driver_batch` runs steps sequentially. It does not fire all commands at once.
+
+Raw Cua Driver command step:
+
+```json
+{ "method": "list_windows", "params": {} }
+```
+
+Delay step:
+
+```json
+{ "delay_ms": 500 }
+```
+
+Example:
+
+```json
+{
+  "workspace_id": "boba",
+  "calls": [
+    { "method": "check_permissions", "params": {} },
+    { "delay_ms": 500 },
+    { "method": "list_windows", "params": {} }
+  ]
+}
+```
+
+Read-only Cua Driver methods require screen policy. Local input/control methods require mouse/keyboard policy.

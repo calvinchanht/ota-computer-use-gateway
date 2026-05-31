@@ -16,7 +16,7 @@ function canonicalTools(): string[] {
   return [
     'list_browser_profiles', 'browser_status', 'list_browser_tabs',
     'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch',
-    'computer_status', 'observe_screen', 'computer_click', 'computer_type_text', 'computer_press_key', 'computer_hotkey', 'computer_cua_call',
+    'cua_driver_status', 'cua_driver_call', 'cua_driver_batch',
     'workspace_inventory', 'read_file', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
     'run_command', 'run_configured_command', 'list_dir', 'stat_path', 'tree', 'search_files',
     'git_status', 'git_diff', 'git_push_current_branch', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',

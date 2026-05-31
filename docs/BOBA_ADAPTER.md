@@ -31,23 +31,19 @@ The MVP workspace enables:
 - screen observation;
 - mouse/keyboard control through CUA Driver.
 
-## Computer tools
+## Cua Driver tools
 
-When running on macOS with `cua-driver` available, Tool Gateway computer tools use CUA Driver:
+Boba/Mac computer use is exposed as a scoped Cua Driver proxy, not as gateway semantic wrapper tools. Provider-facing agents should recognize and use Cua Driver directly:
 
-- `computer_status`
-- `observe_screen`
-- `computer_click`
-- `computer_type_text`
-- `computer_press_key`
-- `computer_hotkey`
-- `computer_cua_call`
+- `cua_driver_status`
+- `cua_driver_call`
+- `cua_driver_batch`
 
-`computer_cua_call` is the capability-first CUADriver proxy for allowed CUA tools. Read-only calls (`check_permissions`, `list_windows`, `get_screen_size`, `get_window_state`, `get_accessibility_tree`, `get_agent_cursor_state`, `screenshot`) require screen policy. Local input/control calls (`click`, `double_click`, `drag`, `hotkey`, `press_key`, `set_value`, `type_text`, `type_text_chars`, `zoom`) require mouse/keyboard policy and are advertised as non-destructive scoped gateway actions.
+`cua_driver_call` calls one allowed Cua Driver method with native Cua Driver params. Read-only methods (`check_permissions`, `list_windows`, `get_screen_size`, `get_window_state`, `get_accessibility_tree`, `get_agent_cursor_state`, `screenshot`) require screen policy. Local input/control methods (`click`, `double_click`, `drag`, `hotkey`, `press_key`, `set_value`, `type_text`, `type_text_chars`, `zoom`) require mouse/keyboard policy.
 
-`observe_screen` returns permissions, screen size, a bounded window list, and a bounded screenshot payload when CUA screenshot succeeds. If macOS `screencapture` fails, the tool returns `screenshot_error` while still returning window state when available.
+`cua_driver_batch` runs raw Cua Driver command steps sequentially and supports gateway-side `{ "delay_ms": number }` steps. This is transport sequencing only, not a semantic computer-use wrapper.
 
-Computer input/control tools require `allow_mouse_keyboard: true`. They are annotated and described as non-read-only but non-destructive scoped local actions, matching the OpenClaw-like workflow: routine workspace/computer operations should not trigger per-call provider confirmation dialogs. External/irreversible actions remain stop-gated by policy and bootstrap instructions.
+The gateway provides auth, workspace scoping, policy gates, audit, bounded outputs, and limits. It should not expose wrapper soup such as `computer_click`, `computer_type_text`, `computer_press_key`, or `computer_hotkey` when Cua Driver already provides those capabilities. External/irreversible actions remain stop-gated by policy and bootstrap instructions.
 
 ## Safety boundaries
 
@@ -70,11 +66,11 @@ On 2026-05-30, Genesis verified:
 - Mac OpenClaw/CUA audit passed: Accessibility and Screen Recording were true; CUA `list_windows` worked; Roblox/Roblox Studio/CUA app were installed.
 - Direct CUA Terminal mutation proof succeeded by typing a command into Terminal and reading back `/Users/calvinc/Desktop/boba-cua-terminal-proof.txt`.
 - Local Boba Tool Gateway was cloned/built on the Mac and run on `127.0.0.1:8768` with `config/boba.local.yaml`.
-- Public-style local MCP tool discovery exposed the computer tools above.
-- Added `computer_cua_call` so Boba can use the real scoped CUADriver surface rather than being trapped behind a tiny toy wrapper.
-- `computer_status` reported CUA ready for screen and mouse/keyboard.
-- `observe_screen` returned screen size and window list; screenshot failed with `screencapture failed for main display`, so screenshot remains a live Mac display/TCC/screencapture blocker.
-- Gateway-mediated CUA mutation proof succeeded via `computer_type_text` + `computer_press_key` against Terminal, creating `/Users/calvinc/Desktop/boba-gateway-cua-proof.txt` with the expected marker.
+- Public-style local MCP tool discovery originally exposed the old computer wrapper tools; the current direction is the Cua Driver proxy surface above.
+- Added direct Cua Driver proxy direction so Boba can use the real scoped Cua Driver surface rather than being trapped behind toy wrappers.
+- Old `computer_status` reported CUA ready for screen and mouse/keyboard.
+- Old `observe_screen` returned screen size and window list; screenshot failed with `screencapture failed for main display`, so screenshot remains a live Mac display/TCC/screencapture blocker.
+- Gateway-mediated CUA mutation proof previously succeeded via wrapper tools against Terminal, creating `/Users/calvinc/Desktop/boba-gateway-cua-proof.txt` with the expected marker; future proof should use `cua_driver_call` / `cua_driver_batch`.
 
 ## Next steps
 
