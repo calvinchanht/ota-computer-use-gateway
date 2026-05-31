@@ -22,7 +22,7 @@ async function walkInventory(config: AppConfig, root: string, relative: string, 
   for (const child of children) {
     if (output.length >= maxEntries) return;
     const childPath = relative === '.' ? child.name : path.posix.join(relative.replaceAll('\\', '/'), child.name);
-    const reason = deniedPath(childPath, config.security.denied_globs) || sensitiveNameReason(child.name);
+    const reason = deniedPath(childPath, config.security.denied_globs, config.security.protect_secret_paths) || sensitiveNameReason(child.name);
     const item = { path: childPath, name: child.name, type: child.isDirectory() ? 'dir' : child.isFile() ? 'file' : 'other', ...(reason ? { protected: true, reason } : {}) };
     output.push(item);
     if (child.isDirectory() && !reason) await walkInventory(config, root, childPath, output, maxEntries);

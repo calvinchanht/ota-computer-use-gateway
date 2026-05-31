@@ -56,6 +56,7 @@ export const configSchema = z.object({
     max_request_bytes: z.number().int().positive().default(1000000),
     max_search_results: z.number().int().positive().default(50),
     max_exec_ms: z.number().int().positive().default(120000),
+    protect_secret_paths: z.boolean().default(true),
     denied_globs: z.array(z.string()).default([])
   }).prefault({})
 });

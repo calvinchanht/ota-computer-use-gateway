@@ -42,6 +42,7 @@ security:
   max_request_bytes: 1000000
   max_search_results: 50
   max_exec_ms: 120000
+  protect_secret_paths: true
   denied_globs:
     - ".env"
     - ".env.*"

@@ -12,7 +12,7 @@ export async function resolveInside(workspace: Workspace, requested: string, con
   const real = await realpath(joined);
   assertInside(workspace.realRoot, real);
   const relative = path.relative(workspace.realRoot, real) || '.';
-  const denied = deniedPath(relative, config.security.denied_globs);
+  const denied = deniedPath(relative, config.security.denied_globs, config.security.protect_secret_paths);
   if (denied) throw new Error(denied);
   return { absolute: real, relative };
 }
@@ -22,7 +22,7 @@ export async function resolveWritableInside(workspace: Workspace, requested: str
   const absolute = path.resolve(workspace.realRoot, requested);
   assertInside(workspace.realRoot, absolute);
   const relative = path.relative(workspace.realRoot, absolute) || '.';
-  const denied = deniedPath(relative, config.security.denied_globs);
+  const denied = deniedPath(relative, config.security.denied_globs, config.security.protect_secret_paths);
   if (denied) throw new Error(denied);
   await mkdir(path.dirname(absolute), { recursive: true });
   return { absolute, relative };
