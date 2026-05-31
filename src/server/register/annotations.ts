@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 
 export const READ_ONLY: ToolAnnotations = {
@@ -57,3 +58,11 @@ export function setToolAnnotationMode(mode: ToolAnnotationMode): void {
   Object.assign(WRITE_FILE, write);
   Object.assign(RUN_LOCAL, run);
 }
+
+export const TOOL_RESULT_OUTPUT_SCHEMA = {
+  ok: z.boolean(),
+  summary: z.string(),
+  data: z.unknown().optional(),
+  truncated: z.boolean().optional(),
+  warnings: z.array(z.string()).optional()
+};

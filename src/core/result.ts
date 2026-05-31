@@ -15,5 +15,8 @@ export function fail(summary: string, warnings: string[] = []): ToolResult {
 }
 
 export function asText(result: ToolResult) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+  return {
+    structuredContent: result as Record<string, unknown>,
+    content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }]
+  };
 }

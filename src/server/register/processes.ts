@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { asText } from '../../core/result.js';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { READ_ONLY, RUN_LOCAL } from './annotations.js';
+import { READ_ONLY, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import { processKill, processList, processLog, processStart, processWrite } from '../../tools/processes.js';
 import { runConfiguredCommand, runShellTool } from '../../tools/runCommand.js';
 import type { RegisterContext } from './types.js';
@@ -56,7 +56,7 @@ function commandTool() {
     title: 'Run command',
     description: 'Run a scoped local shell command in the workspace root.',
     inputSchema: { workspace_id: z.string(), command: z.string() },
-    annotations: RUN_LOCAL
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
   };
 }
 
@@ -65,7 +65,7 @@ function configuredTool() {
     title: 'Run configured command',
     description: 'Run an allowlisted workspace command by id.',
     inputSchema: { workspace_id: z.string(), command_id: z.string() },
-    annotations: RUN_LOCAL
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
   };
 }
 
@@ -74,7 +74,7 @@ function execTool() {
     title: 'Exec (deprecated)',
     description: 'Deprecated OpenClaw-compatible alias for run_command.',
     inputSchema: { workspace_id: z.string(), command: z.string() },
-    annotations: RUN_LOCAL
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
   };
 }
 
@@ -83,7 +83,7 @@ function startProcessTool(deprecated = false) {
     title: deprecated ? 'Process start (deprecated)' : 'Start process',
     description: deprecated ? 'Deprecated alias for start_process.' : 'Start a scoped local background shell command.',
     inputSchema: { workspace_id: z.string(), command: z.string() },
-    annotations: RUN_LOCAL
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
   };
 }
 
@@ -92,7 +92,7 @@ function listProcessTool(deprecated: boolean) {
     title: deprecated ? 'Process list (deprecated)' : 'List processes',
     description: deprecated ? 'Deprecated alias for list_processes.' : 'List managed background processes.',
     inputSchema: {},
-    annotations: READ_ONLY
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   };
 }
 
@@ -101,7 +101,7 @@ function readProcessTool(deprecated: boolean) {
     title: deprecated ? 'Process log (deprecated)' : 'Read process',
     description: deprecated ? 'Deprecated alias for read_process.' : 'Read buffered output for a managed process.',
     inputSchema: { process_id: z.string(), max_bytes: z.number().optional() },
-    annotations: READ_ONLY
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   };
 }
 
@@ -110,7 +110,7 @@ function writeProcessTool() {
     title: 'Write process',
     description: 'Write UTF-8 input to a managed background process stdin.',
     inputSchema: { process_id: z.string(), input: z.string(), close_stdin: z.boolean().default(false) },
-    annotations: RUN_LOCAL
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
   };
 }
 
@@ -119,6 +119,6 @@ function stopProcessTool(deprecated: boolean) {
     title: deprecated ? 'Process kill (deprecated)' : 'Stop process',
     description: deprecated ? 'Deprecated alias for stop_process.' : 'Terminate a managed background process.',
     inputSchema: { process_id: z.string() },
-    annotations: RUN_LOCAL
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
   };
 }

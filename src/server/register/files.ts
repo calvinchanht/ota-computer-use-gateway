@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { READ_ONLY, WRITE_FILE } from './annotations.js';
+import { READ_ONLY, WRITE_FILE, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import { deleteFileTool, deletePathTool, editFileTool, listDir, readBinaryFileTool, readFileTool, statPath, treeTool, workspaceInventory, writeBinaryFileTool, writeFileTool } from '../../tools/files.js';
 import { searchFiles } from '../../tools/search.js';
 import type { RegisterContext } from './types.js';
@@ -73,7 +73,7 @@ function workspaceInventoryTool() {
     title: 'Workspace inventory',
     description: 'List a bounded workspace inventory with names and metadata only, including protected/sensitive-looking entries without reading their contents.',
     inputSchema: { workspace_id: z.string(), max_entries: z.number().optional() },
-    annotations: READ_ONLY
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   };
 }
 
@@ -82,7 +82,7 @@ function listDirTool() {
     title: 'List directory',
     description: 'List files in a workspace directory.',
     inputSchema: { workspace_id: z.string(), path: z.string().default('.'), max_entries: z.number().optional() },
-    annotations: READ_ONLY
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   };
 }
 
@@ -91,7 +91,7 @@ function statPathTool() {
     title: 'Stat path',
     description: 'Return file metadata for a workspace path.',
     inputSchema: { workspace_id: z.string(), path: z.string() },
-    annotations: READ_ONLY
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   };
 }
 
@@ -100,7 +100,7 @@ function treeToolSpec() {
     title: 'Tree',
     description: 'Return a bounded recursive tree for a workspace directory.',
     inputSchema: { workspace_id: z.string(), path: z.string().default('.'), max_entries: z.number().optional() },
-    annotations: READ_ONLY
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   };
 }
 
@@ -109,7 +109,7 @@ function readFileSpec() {
     title: 'Read file',
     description: 'Read a text file inside a workspace.',
     inputSchema: { workspace_id: z.string(), path: z.string(), start_line: z.number().optional(), max_lines: z.number().optional() },
-    annotations: READ_ONLY
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   };
 }
 
@@ -118,7 +118,7 @@ function readBinaryFileSpec() {
     title: 'Read binary file',
     description: 'Read a bounded binary file inside a workspace as base64 with metadata.',
     inputSchema: { workspace_id: z.string(), path: z.string() },
-    annotations: READ_ONLY
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   };
 }
 
@@ -127,7 +127,7 @@ function writeFileSpec() {
     title: 'Write file',
     description: 'Create or overwrite a UTF-8 text file inside a workspace.',
     inputSchema: { workspace_id: z.string(), path: z.string(), content: z.string(), overwrite: z.boolean().default(false) },
-    annotations: WRITE_FILE
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: WRITE_FILE
   };
 }
 
@@ -136,7 +136,7 @@ function writeBinaryFileSpec() {
     title: 'Write binary file',
     description: 'Create or overwrite a bounded binary file from base64 content inside a workspace.',
     inputSchema: { workspace_id: z.string(), path: z.string(), base64: z.string(), overwrite: z.boolean().default(false) },
-    annotations: WRITE_FILE
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: WRITE_FILE
   };
 }
 
@@ -145,7 +145,7 @@ function editFileSpec() {
     title: 'Edit file',
     description: 'Replace one exact text occurrence inside a UTF-8 workspace file.',
     inputSchema: { workspace_id: z.string(), path: z.string(), old_text: z.string(), new_text: z.string() },
-    annotations: WRITE_FILE
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: WRITE_FILE
   };
 }
 
@@ -154,7 +154,7 @@ function deleteFileSpec() {
     title: 'Delete file',
     description: 'Delete one regular file inside a workspace.',
     inputSchema: { workspace_id: z.string(), path: z.string() },
-    annotations: WRITE_FILE
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: WRITE_FILE
   };
 }
 
@@ -163,7 +163,7 @@ function deletePathSpec() {
     title: 'Delete path',
     description: 'Delete a file or, with recursive=true, a directory inside a workspace. Refuses to delete the workspace root.',
     inputSchema: { workspace_id: z.string(), path: z.string(), recursive: z.boolean().default(false) },
-    annotations: WRITE_FILE
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: WRITE_FILE
   };
 }
 
@@ -172,6 +172,6 @@ function searchFilesSpec() {
     title: 'Search files',
     description: 'Search text in workspace files.',
     inputSchema: { workspace_id: z.string(), query: z.string(), path: z.string().default('.') },
-    annotations: READ_ONLY
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   };
 }

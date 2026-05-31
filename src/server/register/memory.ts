@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
 import { agentBootstrap, checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../../tools/context.js';
 import { getProjectContext, memorySearch, memoryWrite } from '../../tools/memory.js';
-import { READ_ONLY, WRITE_FILE } from './annotations.js';
+import { READ_ONLY, WRITE_FILE, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
 export function registerMemoryTools(context: RegisterContext): void {
@@ -86,29 +86,29 @@ function registerThreadCheckpoint({ server, workspaces }: RegisterContext): void
 }
 
 function memorySearchSpec() {
-  return { title: 'Memory search', description: 'Search project-local memory files.', inputSchema: { workspace_id: z.string(), query: z.string(), max_results: z.number().optional() }, annotations: READ_ONLY };
+  return { title: 'Memory search', description: 'Search project-local memory files.', inputSchema: { workspace_id: z.string(), query: z.string(), max_results: z.number().optional() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY };
 }
 
 function memoryWriteSpec() {
-  return { title: 'Memory write', description: 'Append a project-local memory entry after secret checks.', inputSchema: { workspace_id: z.string(), type: z.string(), title: z.string(), body: z.string(), tags: z.array(z.string()).optional() }, annotations: WRITE_FILE };
+  return { title: 'Memory write', description: 'Append a project-local memory entry after secret checks.', inputSchema: { workspace_id: z.string(), type: z.string(), title: z.string(), body: z.string(), tags: z.array(z.string()).optional() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: WRITE_FILE };
 }
 
 function projectContextSpec() {
-  return { title: 'Get project context', description: 'Return compact project context files from .agent.', inputSchema: { workspace_id: z.string() }, annotations: READ_ONLY };
+  return { title: 'Get project context', description: 'Return compact project context files from .agent.', inputSchema: { workspace_id: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY };
 }
 
 function contextSnapshotSpec() {
-  return { title: 'Get context snapshot', description: 'Return workspace identity, project instructions, continuity files, and recent memory tail.', inputSchema: { workspace_id: z.string() }, annotations: READ_ONLY };
+  return { title: 'Get context snapshot', description: 'Return workspace identity, project instructions, continuity files, and recent memory tail.', inputSchema: { workspace_id: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY };
 }
 
 function bootstrapSpec() {
-  return { title: 'Get agent bootstrap', description: 'Return an ordered startup packet for a fresh or resumed chat-thread agent.', inputSchema: { workspace_id: z.string() }, annotations: READ_ONLY };
+  return { title: 'Get agent bootstrap', description: 'Return an ordered startup packet for a fresh or resumed chat-thread agent.', inputSchema: { workspace_id: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY };
 }
 
 function noteSpec(title: string, description: string) {
-  return { title, description, inputSchema: { workspace_id: z.string(), title: z.string(), body: z.string() }, annotations: WRITE_FILE };
+  return { title, description, inputSchema: { workspace_id: z.string(), title: z.string(), body: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: WRITE_FILE };
 }
 
 function checkpointSpec() {
-  return { title: 'Checkpoint thread', description: 'Append a structured chat-thread checkpoint for future pickup.', inputSchema: { workspace_id: z.string(), title: z.string(), summary: z.string(), next_steps: z.array(z.string()).default([]) }, annotations: WRITE_FILE };
+  return { title: 'Checkpoint thread', description: 'Append a structured chat-thread checkpoint for future pickup.', inputSchema: { workspace_id: z.string(), title: z.string(), summary: z.string(), next_steps: z.array(z.string()).default([]) }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: WRITE_FILE };
 }
