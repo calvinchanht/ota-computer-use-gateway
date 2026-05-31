@@ -92,3 +92,7 @@ npm test
 npm run build
 npm run smoke:primitives
 ```
+
+## Mickey / provider runtime
+
+- [Mickey no-App bridge](docs/MICKEY_NO_APP_BRIDGE.md) — ChatGPT Project as source shell + scoped Gateway JSON API runtime.

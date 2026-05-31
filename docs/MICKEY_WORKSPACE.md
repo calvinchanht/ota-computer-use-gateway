@@ -52,3 +52,7 @@ The normal project gates also pass:
 npm run check
 npm run smoke:stdio
 ```
+
+## No-App bridge runtime
+
+Mickey no longer uses OpenAI Apps/MCP as the core runtime path. The ChatGPT Project is the identity/source/current-task shell; the external bridge/orchestrator calls the scoped Gateway JSON API. See [`MICKEY_NO_APP_BRIDGE.md`](MICKEY_NO_APP_BRIDGE.md).

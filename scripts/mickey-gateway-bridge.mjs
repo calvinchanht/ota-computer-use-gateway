@@ -14,6 +14,16 @@ const DEFAULT_THREAD = {
 const args = parseArgs(process.argv.slice(2));
 const baseUrl = args.baseUrl ?? process.env.MICKEY_GATEWAY_BASE_URL ?? DEFAULT_BASE_URL;
 const token = await loadToken(args.tokenFile ?? process.env.MICKEY_GATEWAY_TOKEN_FILE ?? DEFAULT_TOKEN_FILE);
+if (args.intentFile) {
+  const packet = JSON.parse(await readFile(args.intentFile, 'utf8'));
+  const calls = Array.isArray(packet.calls) ? packet.calls : [];
+  if (calls.length === 0) throw new Error('intent file requires a calls array');
+  args.mode = 'batch';
+  args.steps = JSON.stringify(calls.map((call) => ({ tool: call.tool, arguments: call.arguments ?? {} })));
+  args.idempotencyKey ??= packet.idempotency_key;
+  args.thread ??= packet.thread ? JSON.stringify(packet.thread) : undefined;
+}
+
 const mode = args.mode ?? (args.steps ? 'batch' : 'tool');
 
 if (args.getRun) {
@@ -85,6 +95,7 @@ function parseArgs(argv) {
     else if (arg === '--tool') out.tool = required(argv, ++i, arg);
     else if (arg === '--arguments') out.arguments = required(argv, ++i, arg);
     else if (arg === '--steps') out.steps = required(argv, ++i, arg);
+    else if (arg === '--intent-file') out.intentFile = required(argv, ++i, arg);
     else if (arg === '--thread') out.thread = required(argv, ++i, arg);
     else if (arg === '--idempotency-key') out.idempotencyKey = required(argv, ++i, arg);
     else if (arg === '--get-run') out.getRun = required(argv, ++i, arg);
@@ -116,6 +127,7 @@ function usage() {
   console.log(`Usage:
   node scripts/mickey-gateway-bridge.mjs [--tool workspace_status] [--arguments '{...}']
   node scripts/mickey-gateway-bridge.mjs --batch [--steps '[...]']
+  node scripts/mickey-gateway-bridge.mjs --intent-file bridge-intent.json
   node scripts/mickey-gateway-bridge.mjs --get-run <run_id>
 
 Environment:
