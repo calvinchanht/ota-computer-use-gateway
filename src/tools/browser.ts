@@ -107,12 +107,18 @@ function targetSummary(target: ChromeTarget, includeUrl = true) {
   const url = target.url ?? '';
   return {
     id: target.id,
-    title: target.title ?? '',
+    title: safeTargetTitle(target.title ?? '', includeUrl),
     ...(includeUrl ? { url } : { url_origin: safeUrlOrigin(url) }),
     type: target.type,
     attached: target.attached ?? false,
     has_websocket: Boolean(target.webSocketDebuggerUrl)
   };
+}
+
+function safeTargetTitle(title: string, includeUrl: boolean) {
+  if (includeUrl) return title;
+  try { return new URL(title).origin; }
+  catch { return title.slice(0, 160); }
 }
 
 function safeUrlOrigin(url: string) {
