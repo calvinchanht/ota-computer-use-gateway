@@ -44,6 +44,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GatewayResult'
+  /api/v1/runs/{run_id}:
+    get:
+      operationId: get_gateway_run
+      summary: Retrieve a completed Mickey Gateway API run by run_id after provider stream failure or retry
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stored run result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunLookupResult'
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResult'
   /api/v1/debug/request_context:
     post:
       operationId: debug_request_context
@@ -136,9 +161,30 @@ components:
         summary:
           type: string
         data: {}
+        api:
+          type: object
+          additionalProperties: true
+          properties:
+            transport:
+              type: string
+            run_id:
+              type: string
+            status:
+              type: string
         truncated:
           type: boolean
         warnings:
           type: array
           items:
             type: string
+    RunLookupResult:
+      type: object
+      additionalProperties: true
+      properties:
+        ok:
+          type: boolean
+        summary:
+          type: string
+        run:
+          type: object
+          additionalProperties: true
