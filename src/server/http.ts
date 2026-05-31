@@ -20,6 +20,24 @@ const MCP_PATH = '/mcp';
 const API_TOOL_PATH = '/api/v1/tool';
 const API_BATCH_PATH = '/api/v1/batch';
 const API_DEBUG_REQUEST_CONTEXT_PATH = '/api/v1/debug/request_context';
+const API_RUNS_PREFIX = '/api/v1/runs/';
+const MAX_RUN_RECORDS = 200;
+
+type ApiRunRecord = {
+  run_id: string;
+  idempotency_key?: string;
+  kind: 'tool' | 'batch';
+  status: 'completed';
+  ok: boolean;
+  summary: string;
+  created_at: string;
+  completed_at: string;
+  request: { tool?: string; steps?: Array<{ tool: string }>; thread?: unknown };
+  response: unknown;
+};
+
+const apiRunRecords = new Map<string, ApiRunRecord>();
+const apiRunByIdempotency = new Map<string, string>();
 
 export async function listenHttp(config: AppConfig): Promise<void> {
   assertSafeHttpBind(config);
@@ -50,6 +68,7 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
   if (requestTooLarge(config, req)) return sendJson(res, 413, { error: 'payload_too_large' });
   if (!isAuthorized(config, req)) return sendAuthError(config, res);
   if (isApiDebugRequestContext(req)) return handleApiDebugRequestContext(req, res);
+  if (isApiRunPath(req)) return handleApiRun(req, res);
   if (isApiTool(req)) return handleApiTool(config, req, res);
   if (isApiBatch(req)) return handleApiBatch(config, req, res);
 
@@ -81,8 +100,13 @@ function isMcp(req: IncomingMessage): boolean {
 
 function isApi(req: IncomingMessage): boolean {
   const path = req.url?.split('?')[0];
-  return path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || path === API_BATCH_PATH;
+  return path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || path === API_BATCH_PATH || isApiRunPath(req);
 }
+
+function isApiRunPath(req: IncomingMessage): boolean {
+  return req.url?.split('?')[0]?.startsWith(API_RUNS_PREFIX) ?? false;
+}
+
 
 function isApiDebugRequestContext(req: IncomingMessage): boolean {
   return req.url?.split('?')[0] === API_DEBUG_REQUEST_CONTEXT_PATH;
@@ -138,21 +162,80 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 async function handleApiTool(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
   const parsedBody = await readJsonBody(req).catch(() => undefined);
+  const idempotencyKey = idempotencyKeyFor(req, parsedBody);
+  const existing = existingRun(idempotencyKey);
+  if (existing) return sendJson(res, 200, existing.response);
   const request = parseApiToolRequest(parsedBody);
   const result = await runApiTool(config, request.tool, request.arguments ?? {});
-  return sendJson(res, 200, { ...result, api: { transport: 'http-json', tool: request.tool, thread: safeBodyThread(parsedBody) } });
+  const response = { ...result, api: { transport: 'http-json', tool: request.tool, thread: safeBodyThread(parsedBody) } };
+  const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool: request.tool, thread: safeBodyThread(parsedBody) } });
+  return sendJson(res, 200, attachRun(response, record));
 }
 
 async function handleApiBatch(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
   const parsedBody = await readJsonBody(req).catch(() => undefined);
+  const idempotencyKey = idempotencyKeyFor(req, parsedBody);
+  const existing = existingRun(idempotencyKey);
+  if (existing) return sendJson(res, 200, existing.response);
   const steps = parseApiBatchRequest(parsedBody).steps.slice(0, 20);
   const results = [];
   for (let index = 0; index < steps.length; index++) {
     const step = steps[index];
     results.push({ index, tool: step.tool, result: await runApiTool(config, step.tool, step.arguments ?? {}) });
   }
-  return sendJson(res, 200, { ok: results.every((step) => step.result.ok), summary: `completed ${results.length} API batch steps`, data: { results }, api: { transport: 'http-json', thread: safeBodyThread(parsedBody) } });
+  const ok = results.every((step) => step.result.ok);
+  const response = { ok, summary: `completed ${results.length} API batch steps`, data: { results }, api: { transport: 'http-json', thread: safeBodyThread(parsedBody) } };
+  const record = storeApiRun({ kind: 'batch', ok, summary: response.summary, response, idempotency_key: idempotencyKey, request: { steps: steps.map((step) => ({ tool: step.tool })), thread: safeBodyThread(parsedBody) } });
+  return sendJson(res, 200, attachRun(response, record));
+}
+
+
+function handleApiRun(req: IncomingMessage, res: ServerResponse): void {
+  if (req.method !== 'GET') return sendJson(res, 405, { error: 'method_not_allowed' });
+  const path = req.url?.split('?')[0] ?? '';
+  const runId = decodeURIComponent(path.slice(API_RUNS_PREFIX.length));
+  const record = apiRunRecords.get(runId);
+  if (!record) return sendJson(res, 404, { ok: false, error: 'run_not_found', run_id: runId });
+  return sendJson(res, 200, { ok: true, summary: record.summary, run: record });
+}
+
+function idempotencyKeyFor(req: IncomingMessage, body: unknown): string | undefined {
+  const header = headerValue(req.headers['idempotency-key']);
+  if (header) return header.slice(0, 200);
+  if (body && typeof body === 'object') {
+    const value = (body as Record<string, unknown>).idempotency_key;
+    if (typeof value === 'string' && value) return value.slice(0, 200);
+  }
+  return undefined;
+}
+
+function existingRun(idempotencyKey: string | undefined): ApiRunRecord | undefined {
+  if (!idempotencyKey) return undefined;
+  const runId = apiRunByIdempotency.get(idempotencyKey);
+  return runId ? apiRunRecords.get(runId) : undefined;
+}
+
+function storeApiRun(input: Omit<ApiRunRecord, 'run_id' | 'status' | 'created_at' | 'completed_at'>): ApiRunRecord {
+  const now = new Date().toISOString();
+  const record: ApiRunRecord = { run_id: randomUUID(), status: 'completed', created_at: now, completed_at: now, ...input };
+  record.response = attachRun(record.response, record);
+  apiRunRecords.set(record.run_id, record);
+  if (record.idempotency_key) apiRunByIdempotency.set(record.idempotency_key, record.run_id);
+  while (apiRunRecords.size > MAX_RUN_RECORDS) {
+    const oldest = apiRunRecords.keys().next().value;
+    if (!oldest) break;
+    const removed = apiRunRecords.get(oldest);
+    apiRunRecords.delete(oldest);
+    if (removed?.idempotency_key) apiRunByIdempotency.delete(removed.idempotency_key);
+  }
+  return record;
+}
+
+function attachRun<T>(response: T, record: Pick<ApiRunRecord, 'run_id' | 'status'>): T & { api: Record<string, unknown> } {
+  if (!response || typeof response !== 'object' || Array.isArray(response)) return response as T & { api: Record<string, unknown> };
+  const source = response as T & { api?: Record<string, unknown> };
+  return { ...source, api: { ...(source.api ?? {}), run_id: record.run_id, status: record.status } } as T & { api: Record<string, unknown> };
 }
 
 async function runApiTool(config: AppConfig, tool: string, args: Record<string, unknown>): Promise<ToolResult> {
@@ -272,6 +355,6 @@ function sendAuthError(config: AppConfig, res: ServerResponse): void {
 function applyCors(res: ServerResponse): void {
   res.setHeader('access-control-allow-origin', '*');
   res.setHeader('access-control-allow-methods', 'GET,POST,DELETE,OPTIONS');
-  res.setHeader('access-control-allow-headers', 'authorization,content-type,mcp-session-id,mcp-protocol-version,x-openai-conversation-id,x-openai-project-id,x-openai-gpt-id,x-openai-action-invocation-id');
+  res.setHeader('access-control-allow-headers', 'authorization,content-type,idempotency-key,mcp-session-id,mcp-protocol-version,x-openai-conversation-id,x-openai-project-id,x-openai-gpt-id,x-openai-action-invocation-id');
   res.setHeader('access-control-expose-headers', 'mcp-session-id');
 }
