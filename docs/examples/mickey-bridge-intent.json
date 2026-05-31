@@ -1,6 +1,6 @@
 {
   "objective": "Refresh Mickey project status from the no-App bridge path.",
-  "idempotency_key": "example-mickey-bridge-intent-chat-format-001",
+  "idempotency_key": "example-mickey-bridge-output-file-001",
   "thread": {
     "provider": "chatgpt",
     "project_id": "g-p-6a1cac252ea88191a6d0e6522a429765-mickey",

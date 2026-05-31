@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 
 const DEFAULT_BASE_URL = 'https://mickey-mcp.unrealize.com';
 const DEFAULT_TOKEN_FILE = '/home/genesis/secrets/ota-computer-use-gateway/mickey-bearer-token';
@@ -28,7 +29,7 @@ const mode = args.mode ?? (args.steps ? 'batch' : 'tool');
 
 if (args.getRun) {
   const result = await requestJson(`${baseUrl}/api/v1/runs/${encodeURIComponent(args.getRun)}`, { method: 'GET', token });
-  printResult(result, args.format);
+  await outputResult(result, args);
   process.exit(result.ok ? 0 : 1);
 }
 
@@ -42,7 +43,7 @@ if (mode === 'batch') {
     token,
     body: { thread, steps, idempotency_key: idempotencyKey }
   });
-  printResult(result, args.format);
+  await outputResult(result, args);
   process.exit(result.ok ? 0 : 1);
 }
 
@@ -53,7 +54,7 @@ const result = await requestJson(`${baseUrl}/api/v1/tool`, {
   token,
   body: { thread, tool, arguments: toolArgs, idempotency_key: idempotencyKey }
 });
-printResult(result, args.format);
+await outputResult(result, args);
 process.exit(result.ok ? 0 : 1);
 
 function defaultSteps() {
@@ -100,6 +101,7 @@ function parseArgs(argv) {
     else if (arg === '--idempotency-key') out.idempotencyKey = required(argv, ++i, arg);
     else if (arg === '--get-run') out.getRun = required(argv, ++i, arg);
     else if (arg === '--format') out.format = required(argv, ++i, arg);
+    else if (arg === '--output-file') out.outputFile = required(argv, ++i, arg);
     else if (arg === '--base-url') out.baseUrl = required(argv, ++i, arg);
     else if (arg === '--token-file') out.tokenFile = required(argv, ++i, arg);
     else if (arg === '--help') usage();
@@ -114,11 +116,20 @@ function required(argv, index, flag) {
   return value;
 }
 
-function printResult(result, format = 'json') {
+async function outputResult(result, args) {
+  const text = formatResult(result, args.format);
+  if (args.outputFile) {
+    await mkdir(path.dirname(args.outputFile), { recursive: true });
+    await writeFile(args.outputFile, `${text}\n`);
+  }
+  console.log(text);
+}
+
+function formatResult(result, format = 'json') {
   const safe = safeResult(result);
-  if (format === 'chat') return printChatSummary(safe);
+  if (format === 'chat') return chatSummary(safe);
   if (format !== 'json') throw new Error(`unsupported format: ${format}`);
-  console.log(JSON.stringify(safe, null, 2));
+  return JSON.stringify(safe, null, 2);
 }
 
 function safeResult(result) {
@@ -131,7 +142,7 @@ function safeResult(result) {
   return summary;
 }
 
-function printChatSummary(result) {
+function chatSummary(result) {
   const lines = [];
   lines.push(`Gateway run ${result.ok ? 'succeeded' : 'failed'}: ${result.summary ?? '(no summary)'}`);
   if (result.api?.run_id) lines.push(`run_id: ${result.api.run_id}`);
@@ -154,7 +165,7 @@ function printChatSummary(result) {
     lines.push('data:');
     lines.push(indentBlock(excerpt(JSON.stringify(result.data, null, 2), 2000)));
   }
-  console.log(lines.filter(Boolean).join('\n'));
+  return lines.filter(Boolean).join('\n');
 }
 
 function excerpt(text, max) {
@@ -173,6 +184,7 @@ function usage() {
   node scripts/mickey-gateway-bridge.mjs --intent-file bridge-intent.json
   node scripts/mickey-gateway-bridge.mjs --get-run <run_id>
   node scripts/mickey-gateway-bridge.mjs --intent-file bridge-intent.json --format chat
+  node scripts/mickey-gateway-bridge.mjs --intent-file bridge-intent.json --format chat --output-file .agent/bridge/latest-response.md
 
 Environment:
   MICKEY_GATEWAY_BASE_URL    Defaults to ${DEFAULT_BASE_URL}

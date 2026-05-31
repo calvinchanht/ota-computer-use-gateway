@@ -92,6 +92,15 @@ Paste-friendly result summary for sending back to the Project chat:
 node scripts/mickey-gateway-bridge.mjs --intent-file docs/examples/mickey-bridge-intent.json --format chat
 ```
 
+Save the exact paste-back artifact for an orchestrator or operator:
+
+```bash
+node scripts/mickey-gateway-bridge.mjs \
+  --intent-file docs/examples/mickey-bridge-intent.json \
+  --format chat \
+  --output-file .agent/bridge/latest-response.md
+```
+
 The intent file shape is:
 
 ```json
