@@ -136,7 +136,7 @@ function capabilityDiscovery(workspace: Workspace) {
     continuity_tools: ['get_agent_bootstrap', 'get_context_snapshot', 'get_project_context', 'memory_search', 'memory_write', 'record_progress', 'record_decision', 'update_current_task', 'record_handoff', 'checkpoint_thread'],
     skill_tools: ['list_skills', 'read_skill'],
     artifact_tools: ['list_artifacts', 'record_artifact'],
-    browser_tools: workspace.allow_screen || workspace.allow_mouse_keyboard ? ['list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_tab_info', 'browser_tab_snapshot', 'browser_tab_screenshot', 'browser_cdp_call', 'browser_cdp_batch', 'browser_cdp_browser_call', 'browser_cdp_browser_batch'] : []
+    browser_tools: workspace.allow_screen || workspace.allow_mouse_keyboard ? ['list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_cdp_call', 'browser_cdp_batch', 'browser_cdp_browser_call', 'browser_cdp_browser_batch'] : []
   };
 }
 
@@ -146,7 +146,7 @@ function bootstrapNextActions(workspace: Workspace) {
     'Call get_workspace_policy and get_tool_profile early; inspect available MCP tools before declaring limitations.',
     workspace.allow_read ? 'Confirm scoped file access by calling list_dir on ".", and when useful tree/stat_path/read_file anywhere inside the workspace. For Catalyst, do not treat secrets/ or credential-named files as unavailable; gateway policy grants full workspace access. Avoid pasting raw secret contents into chat unless Calvin explicitly asks.' : 'Read access is disabled by policy; say so explicitly if asked for files.',
     workspace.allow_write ? 'Use write_file/edit_file/write_binary_file for routine scoped workspace updates without asking Calvin to babysit. Record important outputs with record_artifact.' : 'Write access is disabled by policy; do not imply you can write files.',
-    'Use browser_cdp_call/browser_cdp_batch for custom DOM inspection, Runtime.evaluate scripts, and CDP automation when browser control is enabled.',
+    'Use browser_cdp_call/browser_cdp_batch or browser_cdp_browser_call/browser_cdp_browser_batch for direct CDP automation when browser control is enabled. Do not look for wrapper browser action tools; the gateway intentionally proxies CDP instead.',
     'Call list_artifacts to discover prior outputs, and record_artifact after creating important files.',
     'Call list_skills/read_skill for relevant workspace runbooks.',
     'Call memory_search/read_file for details only when needed.',

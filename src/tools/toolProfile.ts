@@ -14,11 +14,8 @@ export function toolProfile() {
 
 function canonicalTools(): string[] {
   return [
-    'list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_tab_info',
-    'browser_tab_screenshot', 'browser_tab_snapshot', 'open_browser_tab', 'navigate_browser_tab',
-    'click_browser_tab', 'type_browser_tab', 'fill_browser_tab_field', 'select_browser_tab_option',
-    'submit_browser_tab_form', 'press_browser_tab_key', 'scroll_browser_tab',
-    'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch', 'activate_browser_tab', 'close_browser_tab',
+    'list_browser_profiles', 'browser_status', 'list_browser_tabs',
+    'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch',
     'computer_status', 'observe_screen', 'computer_click', 'computer_type_text', 'computer_press_key', 'computer_hotkey', 'computer_cua_call',
     'workspace_inventory', 'read_file', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
     'run_command', 'run_configured_command', 'list_dir', 'stat_path', 'tree', 'search_files',

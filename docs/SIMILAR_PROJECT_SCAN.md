@@ -133,7 +133,7 @@ Why it matters here:
 
 Current status:
 
-- `browser_tab_snapshot` exists.
+- `[removed browser wrapper]` exists.
 - Snapshot ergonomics can still mature.
 
 Recommended change:
@@ -156,14 +156,14 @@ Why it matters here:
 
 Current status:
 
-- `click_browser_tab` and `type_browser_tab` exist.
+- `[removed browser wrapper]` and `[removed browser wrapper]` exist.
 - Generic CDP proxy can power advanced behavior, but high-level helpers are missing.
 
 Recommended change:
 
 - Add convenience tools after Catalyst connector proof:
-  - `press_browser_tab_key`
-  - `scroll_browser_tab`
+  - `[removed browser wrapper]`
+  - `[removed browser wrapper]`
   - `fill_browser_form`
   - `select_browser_option`
 - Keep generic CDP proxy for capability-first escape hatches.
