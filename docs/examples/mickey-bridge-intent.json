@@ -1,6 +1,6 @@
 {
   "objective": "Refresh Mickey project status from the no-App bridge path.",
-  "idempotency_key": "example-mickey-bridge-intent-001",
+  "idempotency_key": "example-mickey-bridge-intent-chat-format-001",
   "thread": {
     "provider": "chatgpt",
     "project_id": "g-p-6a1cac252ea88191a6d0e6522a429765-mickey",
@@ -8,8 +8,23 @@
     "thread_url": "https://chatgpt.com/g/g-p-6a1cac252ea88191a6d0e6522a429765-mickey/c/6a1cad6a-6ae8-8329-b312-eddfa767ac30"
   },
   "calls": [
-    { "tool": "workspace_status", "arguments": {} },
-    { "tool": "read_file", "arguments": { "workspace_id": "mickey", "path": "chatgpt-projects/mickey/CURRENT_TASK.md", "max_lines": 80 } },
-    { "tool": "git_status", "arguments": { "workspace_id": "mickey" } }
+    {
+      "tool": "workspace_status",
+      "arguments": {}
+    },
+    {
+      "tool": "read_file",
+      "arguments": {
+        "workspace_id": "mickey",
+        "path": "chatgpt-projects/mickey/CURRENT_TASK.md",
+        "max_lines": 80
+      }
+    },
+    {
+      "tool": "git_status",
+      "arguments": {
+        "workspace_id": "mickey"
+      }
+    }
   ]
 }

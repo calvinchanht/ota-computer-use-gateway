@@ -28,7 +28,7 @@ const mode = args.mode ?? (args.steps ? 'batch' : 'tool');
 
 if (args.getRun) {
   const result = await requestJson(`${baseUrl}/api/v1/runs/${encodeURIComponent(args.getRun)}`, { method: 'GET', token });
-  printSafe(result);
+  printResult(result, args.format);
   process.exit(result.ok ? 0 : 1);
 }
 
@@ -42,7 +42,7 @@ if (mode === 'batch') {
     token,
     body: { thread, steps, idempotency_key: idempotencyKey }
   });
-  printSafe(result);
+  printResult(result, args.format);
   process.exit(result.ok ? 0 : 1);
 }
 
@@ -53,7 +53,7 @@ const result = await requestJson(`${baseUrl}/api/v1/tool`, {
   token,
   body: { thread, tool, arguments: toolArgs, idempotency_key: idempotencyKey }
 });
-printSafe(result);
+printResult(result, args.format);
 process.exit(result.ok ? 0 : 1);
 
 function defaultSteps() {
@@ -99,6 +99,7 @@ function parseArgs(argv) {
     else if (arg === '--thread') out.thread = required(argv, ++i, arg);
     else if (arg === '--idempotency-key') out.idempotencyKey = required(argv, ++i, arg);
     else if (arg === '--get-run') out.getRun = required(argv, ++i, arg);
+    else if (arg === '--format') out.format = required(argv, ++i, arg);
     else if (arg === '--base-url') out.baseUrl = required(argv, ++i, arg);
     else if (arg === '--token-file') out.tokenFile = required(argv, ++i, arg);
     else if (arg === '--help') usage();
@@ -113,15 +114,57 @@ function required(argv, index, flag) {
   return value;
 }
 
-function printSafe(result) {
+function printResult(result, format = 'json') {
+  const safe = safeResult(result);
+  if (format === 'chat') return printChatSummary(safe);
+  if (format !== 'json') throw new Error(`unsupported format: ${format}`);
+  console.log(JSON.stringify(safe, null, 2));
+}
+
+function safeResult(result) {
   const summary = {
     ok: result.ok,
     summary: result.summary,
     api: result.api ?? (result.run ? { run_id: result.run.run_id, status: result.run.status } : undefined),
     data: result.data ?? (result.run ? { kind: result.run.kind, request: result.run.request, response: result.run.response } : undefined)
   };
-  console.log(JSON.stringify(summary, null, 2));
+  return summary;
 }
+
+function printChatSummary(result) {
+  const lines = [];
+  lines.push(`Gateway run ${result.ok ? 'succeeded' : 'failed'}: ${result.summary ?? '(no summary)'}`);
+  if (result.api?.run_id) lines.push(`run_id: ${result.api.run_id}`);
+  const rows = result.data?.results;
+  if (Array.isArray(rows)) {
+    lines.push('results:');
+    for (const row of rows) {
+      const r = row.result ?? {};
+      lines.push(`- ${row.tool}: ${r.ok ? 'ok' : 'failed'} — ${r.summary ?? ''}`.trim());
+      const text = r.data?.text;
+      if (typeof text === 'string') lines.push(indentBlock(excerpt(text, 1200)));
+      const stdout = r.data?.stdout;
+      if (typeof stdout === 'string' && stdout.trim()) lines.push(indentBlock(excerpt(stdout.trim(), 800)));
+      const entries = r.data?.entries;
+      if (Array.isArray(entries)) lines.push(indentBlock(entries.slice(0, 20).map((entry) => `- ${entry.name} (${entry.type})`).join('\n')));
+    }
+  } else if (result.data?.text) {
+    lines.push(indentBlock(excerpt(result.data.text, 1600)));
+  } else if (result.data) {
+    lines.push('data:');
+    lines.push(indentBlock(excerpt(JSON.stringify(result.data, null, 2), 2000)));
+  }
+  console.log(lines.filter(Boolean).join('\n'));
+}
+
+function excerpt(text, max) {
+  return text.length > max ? `${text.slice(0, max)}… [truncated ${text.length - max} chars]` : text;
+}
+
+function indentBlock(text) {
+  return text.split('\n').map((line) => `  ${line}`).join('\n');
+}
+
 
 function usage() {
   console.log(`Usage:
@@ -129,6 +172,7 @@ function usage() {
   node scripts/mickey-gateway-bridge.mjs --batch [--steps '[...]']
   node scripts/mickey-gateway-bridge.mjs --intent-file bridge-intent.json
   node scripts/mickey-gateway-bridge.mjs --get-run <run_id>
+  node scripts/mickey-gateway-bridge.mjs --intent-file bridge-intent.json --format chat
 
 Environment:
   MICKEY_GATEWAY_BASE_URL    Defaults to ${DEFAULT_BASE_URL}

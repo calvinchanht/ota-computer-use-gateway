@@ -86,6 +86,12 @@ Intent packet from a Project chat or operator:
 node scripts/mickey-gateway-bridge.mjs --intent-file docs/examples/mickey-bridge-intent.json
 ```
 
+Paste-friendly result summary for sending back to the Project chat:
+
+```bash
+node scripts/mickey-gateway-bridge.mjs --intent-file docs/examples/mickey-bridge-intent.json --format chat
+```
+
 The intent file shape is:
 
 ```json
