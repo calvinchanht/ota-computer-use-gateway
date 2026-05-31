@@ -1,0 +1,144 @@
+openapi: 3.1.0
+info:
+  title: Mickey Gateway API
+  version: 0.1.0
+  description: Scoped JSON API lane for the Mickey workspace validation project.
+servers:
+  - url: https://mickey-mcp.unrealize.com
+paths:
+  /api/v1/tool:
+    post:
+      operationId: gateway_request
+      summary: Call one scoped Mickey gateway tool
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolRequest'
+      responses:
+        '200':
+          description: Tool result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResult'
+  /api/v1/batch:
+    post:
+      operationId: gateway_batch
+      summary: Call several scoped Mickey gateway tools sequentially
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchRequest'
+      responses:
+        '200':
+          description: Batch result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResult'
+  /api/v1/debug/request_context:
+    post:
+      operationId: debug_request_context
+      summary: Return safe request metadata for validation; never echoes auth secrets
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Safe request metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResult'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    ThreadContext:
+      type: object
+      additionalProperties: false
+      properties:
+        provider:
+          type: string
+          default: chatgpt
+        project_id:
+          type: string
+          description: ChatGPT Project id or stable project label.
+        thread_id:
+          type: string
+          description: ChatGPT chat/thread id if known; otherwise a generated client_session_id.
+        thread_url:
+          type: string
+          description: Full ChatGPT thread URL if known.
+    ToolRequest:
+      type: object
+      additionalProperties: false
+      required: [tool]
+      properties:
+        thread:
+          $ref: '#/components/schemas/ThreadContext'
+        tool:
+          type: string
+          enum: [heartbeat, workspace_status, list_dir, read_file, git_status, git_diff]
+        arguments:
+          type: object
+          additionalProperties: true
+          description: Tool arguments. For workspace tools, use workspace_id=mickey until API-key scoping removes this.
+        idempotency_key:
+          type: string
+    BatchStep:
+      type: object
+      additionalProperties: false
+      required: [tool]
+      properties:
+        tool:
+          type: string
+          enum: [heartbeat, workspace_status, list_dir, read_file, git_status, git_diff]
+        arguments:
+          type: object
+          additionalProperties: true
+    BatchRequest:
+      type: object
+      additionalProperties: false
+      required: [steps]
+      properties:
+        thread:
+          $ref: '#/components/schemas/ThreadContext'
+        steps:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/BatchStep'
+        idempotency_key:
+          type: string
+    GatewayResult:
+      type: object
+      additionalProperties: true
+      properties:
+        ok:
+          type: boolean
+        summary:
+          type: string
+        data: {}
+        truncated:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
