@@ -34,7 +34,7 @@ function entryFor(req: IncomingMessage, res: ServerResponse, startedAt: number):
 }
 
 async function writeHttpAudit(workspace: Workspace, entry: HttpAuditEntry): Promise<void> {
-  const dir = path.join(workspace.realRoot, '.agent', 'audit');
+  const dir = path.join(workspace.realAgentDir ?? path.join(workspace.realRoot, '.agent'), 'audit');
   await mkdir(dir, { recursive: true });
   await appendFile(path.join(dir, 'http_requests.jsonl'), JSON.stringify(entry) + '\n');
 }
