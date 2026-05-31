@@ -2,7 +2,13 @@ import { createServer as createHttpServer, type IncomingMessage, type ServerResp
 import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { AppConfig } from '../config/schema.js';
-import { buildWorkspaces } from '../core/workspaces.js';
+import { buildWorkspaces, getWorkspace, type Workspace } from '../core/workspaces.js';
+import { audit } from '../core/audit.js';
+import { fail, type ToolResult } from '../core/result.js';
+import { heartbeat } from '../tools/heartbeat.js';
+import { workspaceStatus } from '../tools/workspace.js';
+import { listDir, readFileTool } from '../tools/files.js';
+import { gitDiff, gitStatus } from '../tools/git.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
 import { healthPayload } from './health.js';
@@ -11,6 +17,8 @@ import { RateLimiter } from './rateLimit.js';
 import { installShutdownHooks } from './shutdown.js';
 
 const MCP_PATH = '/mcp';
+const API_TOOL_PATH = '/api/v1/tool';
+const API_BATCH_PATH = '/api/v1/batch';
 const API_DEBUG_REQUEST_CONTEXT_PATH = '/api/v1/debug/request_context';
 
 export async function listenHttp(config: AppConfig): Promise<void> {
@@ -36,12 +44,14 @@ export async function listenHttp(config: AppConfig): Promise<void> {
 async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, startedAt: number, req: IncomingMessage, res: ServerResponse) {
   if (isHealth(req)) return sendJson(res, 200, healthPayload(config, startedAt));
   if (req.method === 'OPTIONS') return sendCors(res);
-  if (!isMcp(req) && !isApiDebugRequestContext(req)) return sendJson(res, 404, { error: 'not_found' });
+  if (!isMcp(req) && !isApi(req)) return sendJson(res, 404, { error: 'not_found' });
   if (!allowedMethod(req.method)) return sendJson(res, 405, { error: 'method_not_allowed' });
   if (!rateLimiter.check(config, req)) return sendJson(res, 429, { error: 'rate_limited' });
   if (requestTooLarge(config, req)) return sendJson(res, 413, { error: 'payload_too_large' });
   if (!isAuthorized(config, req)) return sendAuthError(config, res);
   if (isApiDebugRequestContext(req)) return handleApiDebugRequestContext(req, res);
+  if (isApiTool(req)) return handleApiTool(config, req, res);
+  if (isApiBatch(req)) return handleApiBatch(config, req, res);
 
   applyCors(res);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
@@ -69,8 +79,21 @@ function isMcp(req: IncomingMessage): boolean {
   return req.url?.startsWith(MCP_PATH) ?? false;
 }
 
+function isApi(req: IncomingMessage): boolean {
+  const path = req.url?.split('?')[0];
+  return path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || path === API_BATCH_PATH;
+}
+
 function isApiDebugRequestContext(req: IncomingMessage): boolean {
   return req.url?.split('?')[0] === API_DEBUG_REQUEST_CONTEXT_PATH;
+}
+
+function isApiTool(req: IncomingMessage): boolean {
+  return req.url?.split('?')[0] === API_TOOL_PATH;
+}
+
+function isApiBatch(req: IncomingMessage): boolean {
+  return req.url?.split('?')[0] === API_BATCH_PATH;
 }
 
 function allowedMethod(method: string | undefined): boolean {
@@ -110,6 +133,82 @@ function sendCors(res: ServerResponse): void {
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   applyCors(res);
   res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
+}
+
+async function handleApiTool(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
+  const parsedBody = await readJsonBody(req).catch(() => undefined);
+  const request = parseApiToolRequest(parsedBody);
+  const result = await runApiTool(config, request.tool, request.arguments ?? {});
+  return sendJson(res, 200, { ...result, api: { transport: 'http-json', tool: request.tool, thread: safeBodyThread(parsedBody) } });
+}
+
+async function handleApiBatch(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
+  const parsedBody = await readJsonBody(req).catch(() => undefined);
+  const steps = parseApiBatchRequest(parsedBody).steps.slice(0, 20);
+  const results = [];
+  for (let index = 0; index < steps.length; index++) {
+    const step = steps[index];
+    results.push({ index, tool: step.tool, result: await runApiTool(config, step.tool, step.arguments ?? {}) });
+  }
+  return sendJson(res, 200, { ok: results.every((step) => step.result.ok), summary: `completed ${results.length} API batch steps`, data: { results }, api: { transport: 'http-json', thread: safeBodyThread(parsedBody) } });
+}
+
+async function runApiTool(config: AppConfig, tool: string, args: Record<string, unknown>): Promise<ToolResult> {
+  const started = Date.now();
+  let workspace: Workspace | null = null;
+  try {
+    const workspaces = await buildWorkspaces(config);
+    const workspaceId = String(args.workspace_id ?? (workspaces.size === 1 ? [...workspaces.keys()][0] : ''));
+    workspace = workspaceId ? getWorkspace(workspaces, workspaceId) : null;
+    const result = await callApiTool(config, workspaces, workspace, tool, args);
+    await audit(workspace, { timestamp: new Date().toISOString(), tool: `api:${tool}`, ok: result.ok, summary: result.summary, duration_ms: Date.now() - started });
+    return result;
+  } catch (error) {
+    const summary = error instanceof Error ? error.message : String(error);
+    await audit(workspace, { timestamp: new Date().toISOString(), tool: `api:${tool}`, ok: false, summary, duration_ms: Date.now() - started });
+    return fail(summary);
+  }
+}
+
+async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typeof buildWorkspaces>>, workspace: Workspace | null, tool: string, args: Record<string, unknown>): Promise<ToolResult> {
+  if (tool === 'heartbeat') return heartbeat(workspaces);
+  if (tool === 'workspace_status') return workspaceStatus(workspaces);
+  if (!workspace) throw new Error('workspace_id is required');
+  if (tool === 'list_dir') return listDir(config, workspace, String(args.path ?? '.'), optionalNumber(args.max_entries));
+  if (tool === 'read_file') return readFileTool(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.start_line), optionalNumber(args.max_lines));
+  if (tool === 'git_status') return gitStatus(workspace);
+  if (tool === 'git_diff') return gitDiff(workspace, optionalNumber(args.max_bytes) ?? 20000);
+  throw new Error(`unsupported API tool: ${tool}`);
+}
+
+function parseApiToolRequest(body: unknown): { tool: string; arguments?: Record<string, unknown> } {
+  if (!body || typeof body !== 'object') throw new Error('JSON object body is required');
+  const source = body as Record<string, unknown>;
+  return { tool: requiredString(source.tool, 'tool'), arguments: recordArg(source.arguments, 'arguments') };
+}
+
+function parseApiBatchRequest(body: unknown): { steps: Array<{ tool: string; arguments?: Record<string, unknown> }> } {
+  if (!body || typeof body !== 'object') throw new Error('JSON object body is required');
+  const steps = (body as Record<string, unknown>).steps;
+  if (!Array.isArray(steps)) throw new Error('steps array is required');
+  return { steps: steps.map((step) => parseApiToolRequest(step)) };
+}
+
+function recordArg(value: unknown, name: string): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${name} must be an object`);
+  return value as Record<string, unknown>;
+}
+
+function requiredString(value: unknown, name: string): string {
+  if (typeof value !== 'string' || !value) throw new Error(`${name} is required`);
+  return value;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 async function handleApiDebugRequestContext(req: IncomingMessage, res: ServerResponse): Promise<void> {
