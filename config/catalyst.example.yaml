@@ -36,6 +36,8 @@ workspaces:
           headed: true
           default: true
           launch: false
+    git:
+      github_token_file: "/absolute/path/to/catalyst/workspace/secrets/catalyst_github_pat.txt"
     commands:
       check: "npm run check"
       smoke: "npm run smoke:stdio"

@@ -2,9 +2,9 @@ import { spawn } from 'node:child_process';
 
 export type CommandResult = { code: number | null; stdout: string; stderr: string };
 
-export async function runCommand(cmd: string, args: string[], cwd: string, timeoutMs = 10000): Promise<CommandResult> {
+export async function runCommand(cmd: string, args: string[], cwd: string, timeoutMs = 10000, env: NodeJS.ProcessEnv = {}): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { cwd, env: safeEnv() });
+    const child = spawn(cmd, args, { cwd, env: { ...safeEnv(), ...env } });
     const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
     let stdout = '';
     let stderr = '';

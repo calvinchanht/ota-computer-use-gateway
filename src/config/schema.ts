@@ -27,7 +27,8 @@ export const workspaceSchema = z.object({
   allow_screen: z.boolean().default(false),
   allow_mouse_keyboard: z.boolean().default(false),
   browser: browserSchema,
-  commands: z.record(z.string(), z.string()).default({})
+  commands: z.record(z.string(), z.string()).default({}),
+  git: z.object({ github_token_file: z.string().min(1).optional() }).default({})
 });
 
 export const authSchema = z.object({
