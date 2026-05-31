@@ -29,13 +29,21 @@ describe('browser CDP proxy tools', () => {
     expect(data.cdp.reachable).toBe(true);
   });
 
-  it('lists Chrome debugging targets', async () => {
-    mockFetch([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com', attached: true, webSocketDebuggerUrl: 'ws://cdp/1' }, { id: '2', type: 'service_worker' }]);
+  it('lists Chrome target ids without full URLs by default', async () => {
+    mockFetch([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com/path?token=secret', attached: true, webSocketDebuggerUrl: 'ws://cdp/1' }, { id: '2', type: 'service_worker' }]);
     const data = (await listBrowserTabs(fixtureWorkspace())).data as any;
+    expect(data.urls_included).toBe(false);
     expect(data.targets).toEqual([
-      { id: '1', type: 'page', title: 'Home', url: 'https://example.com', attached: true, has_websocket: true },
-      { id: '2', type: 'service_worker', title: '', url: '', attached: false, has_websocket: false }
+      { id: '1', type: 'page', title: 'Home', url_origin: 'https://example.com', attached: true, has_websocket: true },
+      { id: '2', type: 'service_worker', title: '', url_origin: '', attached: false, has_websocket: false }
     ]);
+  });
+
+  it('can include full Chrome target URLs when requested', async () => {
+    mockFetch([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com/path?token=secret', attached: true, webSocketDebuggerUrl: 'ws://cdp/1' }]);
+    const data = (await listBrowserTabs(fixtureWorkspace(), undefined, true)).data as any;
+    expect(data.urls_included).toBe(true);
+    expect(data.targets[0].url).toBe('https://example.com/path?token=secret');
   });
 
   it('proxies a browser-level CDP call through the scoped browser websocket', async () => {

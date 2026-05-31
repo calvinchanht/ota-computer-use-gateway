@@ -49,10 +49,16 @@ export async function browserStatus(workspace: Workspace, label?: string) {
   });
 }
 
-export async function listBrowserTabs(workspace: Workspace, label?: string) {
+export async function listBrowserTabs(workspace: Workspace, label?: string, includeUrls = false) {
   const profile = selectedBrowserProfile(workspace, label);
   const tabs = await fetchCdpJson<ChromeTarget[]>(profile, '/json/list');
-  return ok(`listed ${tabs.length} browser targets`, { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, targets: tabs.map(targetSummary) });
+  return ok(`listed ${tabs.length} browser targets`, {
+    workspace_id: workspace.id,
+    reminder: REMINDER,
+    profile_label: profile.label,
+    urls_included: includeUrls,
+    targets: tabs.map((target) => targetSummary(target, includeUrls))
+  });
 }
 
 export async function browserCdpBrowserCall(workspace: Workspace, method: string, params: Record<string, unknown> = {}, label?: string) {
@@ -97,15 +103,21 @@ async function websocketTarget(workspace: Workspace, targetId: string, label?: s
   return { profile, target: target as ChromeTarget & { webSocketDebuggerUrl: string } };
 }
 
-function targetSummary(target: ChromeTarget) {
+function targetSummary(target: ChromeTarget, includeUrl = true) {
+  const url = target.url ?? '';
   return {
     id: target.id,
     title: target.title ?? '',
-    url: target.url ?? '',
+    ...(includeUrl ? { url } : { url_origin: safeUrlOrigin(url) }),
     type: target.type,
     attached: target.attached ?? false,
     has_websocket: Boolean(target.webSocketDebuggerUrl)
   };
+}
+
+function safeUrlOrigin(url: string) {
+  try { return new URL(url).origin; }
+  catch { return url && !url.startsWith('about:') ? '[non-url]' : url; }
 }
 
 async function cdpReachable(profile: ReturnType<typeof browserProfile>) {

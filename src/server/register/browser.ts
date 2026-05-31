@@ -23,7 +23,13 @@ function registerBrowserStatus({ server, workspaces }: RegisterContext): void {
 }
 
 function registerListBrowserTabs({ server, workspaces }: RegisterContext): void {
-  server.registerTool('list_browser_tabs', { title: 'List browser tabs', description: 'List Chrome page targets through the configured CDP debug port.', inputSchema: profileSchema(), outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'list_browser_tabs', (workspace) => listBrowserTabs(workspace, args.profile_label)));
+  server.registerTool('list_browser_tabs', {
+    title: 'List browser target ids',
+    description: 'Read-only list of existing Chrome target ids for the configured profile. Does not navigate, click, type, or expose full page URLs unless include_urls is true.',
+    inputSchema: { ...profileSchema(), include_urls: z.boolean().default(false) },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+    annotations: READ_ONLY
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'list_browser_tabs', (workspace) => listBrowserTabs(workspace, args.profile_label, args.include_urls)));
 }
 
 function registerBrowserCdpBrowserCall({ server, workspaces }: RegisterContext): void {
