@@ -11,6 +11,7 @@ import { listDir, readFileTool, writeFileTool } from '../tools/files.js';
 import { gitDiff, gitStatus } from '../tools/git.js';
 import { checkpointThread } from '../tools/context.js';
 import { memoryWrite } from '../tools/memory.js';
+import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserStatus, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
 import { healthPayload } from './health.js';
@@ -268,6 +269,13 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'git_diff') return gitDiff(workspace, optionalNumber(args.max_bytes) ?? 20000);
   if (tool === 'checkpoint_thread') return checkpointThread(workspace, requiredString(args.title, 'title'), requiredString(args.summary, 'summary'), optionalStringArray(args.next_steps));
   if (tool === 'memory_write') return memoryWrite(workspace, requiredString(args.type, 'type'), requiredString(args.title, 'title'), requiredString(args.body, 'body'), optionalStringArray(args.tags));
+  if (tool === 'list_browser_profiles') return listBrowserProfiles(workspace);
+  if (tool === 'browser_status') return browserStatus(workspace, optionalString(args.profile_label));
+  if (tool === 'list_browser_tabs') return listBrowserTabs(workspace, optionalString(args.profile_label), Boolean(args.include_urls));
+  if (tool === 'browser_cdp_browser_call') return browserCdpBrowserCall(workspace, requiredString(args.method, 'method'), recordArg(args.params, 'params') ?? {}, optionalString(args.profile_label));
+  if (tool === 'browser_cdp_browser_batch') return browserCdpBrowserBatch(workspace, requiredCdpBatchSteps(args.calls) as Parameters<typeof browserCdpBrowserBatch>[1], optionalString(args.profile_label));
+  if (tool === 'browser_cdp_call') return browserCdpCall(workspace, requiredString(args.target_id, 'target_id'), requiredString(args.method, 'method'), recordArg(args.params, 'params') ?? {}, optionalString(args.profile_label));
+  if (tool === 'browser_cdp_batch') return browserCdpBatch(workspace, requiredString(args.target_id, 'target_id'), requiredCdpBatchSteps(args.calls) as Parameters<typeof browserCdpBatch>[2], optionalString(args.profile_label));
   throw new Error(`unsupported API tool: ${tool}`);
 }
 
@@ -297,6 +305,16 @@ function requiredString(value: unknown, name: string): string {
 
 function optionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function optionalString(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  return requiredString(value, 'string value');
+}
+
+function requiredCdpBatchSteps(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value) || value.length === 0) throw new Error('calls array is required');
+  return value.map((item) => recordArg(item, 'calls item') ?? {});
 }
 
 function optionalStringArray(value: unknown): string[] {
