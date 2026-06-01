@@ -147,6 +147,7 @@ components:
         - query_json
         - patch_file_lines
         - update_table_rows
+        - run_command
     GatewayArguments:
       type: object
       additionalProperties: true
@@ -487,6 +488,31 @@ components:
         allow_multiple:
           type: boolean
           default: false
+        cmd:
+          type: array
+          description: Argv-style command, for example ["node", "-e", "console.log(1)"].
+          minItems: 1
+          items:
+            type: string
+        cwd:
+          type: string
+          description: Working directory relative to workspace root.
+          default: .
+        timeout_ms:
+          type: integer
+          minimum: 1
+          maximum: 120000
+          default: 30000
+        max_stdout_bytes:
+          type: integer
+          minimum: 1
+          maximum: 50000
+          default: 20000
+        max_stderr_bytes:
+          type: integer
+          minimum: 1
+          maximum: 50000
+          default: 8000
     GatewayResponse:
       type: object
       properties:

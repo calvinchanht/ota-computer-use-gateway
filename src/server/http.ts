@@ -13,6 +13,7 @@ import { checkpointThread } from '../tools/context.js';
 import { memoryWrite } from '../tools/memory.js';
 import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserStatus, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
 import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable, queryTableAggregate, readAround, readFileChunk, readFileLinesLarge, sampleFile, searchFile, searchFiles, tableProfile, updateTableRows } from '../tools/largeFiles.js';
+import { runArgvTool } from '../tools/runCommand.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
 import { healthPayload } from './health.js';
@@ -291,6 +292,7 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'query_json') return queryJson(config, workspace, requiredString(args.path, 'path'), requiredString(args.query, 'query'), optionalNumber(args.max_bytes) ?? 50000);
   if (tool === 'patch_file_lines') return patchFileLines(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.start_line) ?? 1, optionalNumber(args.end_line) ?? optionalNumber(args.start_line) ?? 1, requiredString(args.replacement, 'replacement'), optionalString(args.expected_sha256), args.dry_run !== false);
   if (tool === 'update_table_rows') return updateTableRows(config, workspace, requiredString(args.path, 'path'), recordArg(args.where, 'where') ?? {}, stringRecordArg(args.set, 'set'), args.dry_run !== false, Boolean(args.allow_multiple));
+  if (tool === 'run_command') return runArgvTool(config, workspace, requiredStringArray(args.cmd, 'cmd'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000, optionalNumber(args.max_stdout_bytes) ?? 20000, optionalNumber(args.max_stderr_bytes) ?? 8000);
   throw new Error(`unsupported API tool: ${tool}`);
 }
 
@@ -334,7 +336,11 @@ function requiredCdpBatchSteps(value: unknown): Array<Record<string, unknown>> {
 
 function optionalStringArray(value: unknown): string[] {
   if (value === undefined) return [];
-  if (!Array.isArray(value)) throw new Error('expected string array');
+  return requiredStringArray(value, 'string array');
+}
+
+function requiredStringArray(value: unknown, name: string): string[] {
+  if (!Array.isArray(value)) throw new Error(`${name} must be an array`);
   return value.map((item) => requiredString(item, 'array item'));
 }
 
