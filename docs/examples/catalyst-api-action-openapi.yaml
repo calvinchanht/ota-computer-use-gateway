@@ -156,7 +156,7 @@ components:
         workspace_id:
           type: string
           enum: [catalyst]
-      description: Tool-specific arguments. For file tools include path; for browser/CDP include method/params/target_id/calls; for large-file tools include query, where, select, group_by, metrics, offsets, and dry_run fields as needed.
+      description: Tool-specific arguments. For browser tab listing, list_browser_tabs defaults to real page targets only; pass type=all and include_iframes/include_workers/include_browser_ui only for raw CDP cleanup/debugging. For file tools include path; for browser/CDP include method/params/target_id/calls; for large-file tools include query, where, select, group_by, metrics, offsets, and dry_run fields as needed.
     WorkspaceStatusArguments:
       type: object
       additionalProperties: false

@@ -245,8 +245,8 @@ async function handleQuotaSaverApiTool(config: AppConfig, res: ServerResponse, t
     response: {
       ok: true,
       summary: `running ${tool}; poll get_gateway_run after ${pollAfterMs}ms`,
-      data: { status: 'running', poll_after_ms: pollAfterMs, instruction: 'Call get_gateway_run after poll_after_ms. Do not retry the original command.' },
-      api: { transport: 'http-json', tool, thread, async_mode: 'quota_saver', status: 'running', poll_after_ms: pollAfterMs }
+      data: { status: 'running', operation_status: 'running', next_poll_after_ms: pollAfterMs, poll_after_ms: pollAfterMs, instruction: 'Call get_gateway_run after poll_after_ms. Do not retry the original command.' },
+      api: { transport: 'http-json', tool, thread, async_mode: 'quota_saver', status: 'running', operation_status: 'running', wait_reason: initialWaitReason(tool), poll_after_ms: pollAfterMs, next_poll_after_ms: pollAfterMs }
     },
     idempotency_key: idempotencyKey,
     request: { tool, thread }
@@ -259,6 +259,12 @@ function shouldUseQuotaSaver(tool: string, args: Record<string, unknown>): boole
   const mode = optionalString(args.async_mode) ?? optionalString(args.browser_async_mode);
   if (mode === 'off' || mode === 'sync') return false;
   return mode === 'quota_saver' || (mode === undefined && (tool.startsWith('browser_cdp') || tool.startsWith('cua_driver_')) && tool !== 'cua_driver_status');
+}
+
+function initialWaitReason(tool: string): string {
+  if (tool.startsWith('browser_cdp')) return 'waiting_for_browser';
+  if (tool.startsWith('cua_driver')) return 'waiting_for_computer';
+  return 'running';
 }
 
 function storeRunningApiRun(input: Omit<ApiRunRecord, 'run_id' | 'status' | 'created_at' | 'completed_at'>): ApiRunRecord {
@@ -320,7 +326,8 @@ function rememberApiRun(record: ApiRunRecord): void {
 function attachRun<T>(response: T, record: Pick<ApiRunRecord, 'run_id' | 'status'>): T & { api: Record<string, unknown> } {
   if (!response || typeof response !== 'object' || Array.isArray(response)) return response as T & { api: Record<string, unknown> };
   const source = response as T & { api?: Record<string, unknown> };
-  return { ...source, api: { ...(source.api ?? {}), run_id: record.run_id, status: record.status } } as T & { api: Record<string, unknown> };
+  const api = source.api ?? {};
+  return { ...source, api: { ...api, run_id: record.run_id, operation_id: record.run_id, status: record.status, operation_status: api.operation_status ?? record.status } } as T & { api: Record<string, unknown> };
 }
 
 async function runApiTool(config: AppConfig, tool: string, args: Record<string, unknown>): Promise<ToolResult> {
@@ -355,7 +362,7 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'memory_write') return memoryWrite(workspace, requiredString(args.type, 'type'), requiredString(args.title, 'title'), requiredString(args.body, 'body'), optionalStringArray(args.tags));
   if (tool === 'list_browser_profiles') return listBrowserProfiles(workspace);
   if (tool === 'browser_status') return browserStatus(workspace, optionalString(args.profile_label));
-  if (tool === 'list_browser_tabs') return listBrowserTabs(workspace, optionalString(args.profile_label), Boolean(args.include_urls));
+  if (tool === 'list_browser_tabs') return listBrowserTabs(workspace, optionalString(args.profile_label), Boolean(args.include_urls), browserTargetFilter(args));
   if (tool === 'browser_cdp_browser_call') return browserCdpBrowserCall(workspace, requiredString(args.method, 'method'), recordArg(args.params, 'params') ?? {}, optionalString(args.profile_label));
   if (tool === 'browser_cdp_browser_batch') return browserCdpBrowserBatch(workspace, requiredCdpBatchSteps(args.calls) as Parameters<typeof browserCdpBrowserBatch>[1], optionalString(args.profile_label));
   if (tool === 'browser_cdp_call') return browserCdpCall(workspace, requiredString(args.target_id, 'target_id'), requiredString(args.method, 'method'), recordArg(args.params, 'params') ?? {}, optionalString(args.profile_label));
@@ -409,6 +416,10 @@ function optionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function optionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
 function optionalString(value: unknown): string | undefined {
   if (value === undefined) return undefined;
   return requiredString(value, 'string value');
@@ -426,6 +437,15 @@ function requiredCuaBatchSteps(value: unknown): CuaDriverBatchStep[] {
     if ('delay_ms' in source) return { delay_ms: optionalNumber(source.delay_ms) ?? 0 };
     return { method: requiredString(source.method, `calls[${index}].method`), params: recordArg(source.params, `calls[${index}].params`) ?? {} };
   });
+}
+
+function browserTargetFilter(args: Record<string, unknown>) {
+  return {
+    type: optionalString(args.type) ?? optionalString(args.target_type),
+    include_iframes: optionalBoolean(args.include_iframes),
+    include_workers: optionalBoolean(args.include_workers),
+    include_browser_ui: optionalBoolean(args.include_browser_ui)
+  };
 }
 
 function optionalStringArray(value: unknown): string[] {

@@ -29,14 +29,32 @@ describe('browser CDP proxy tools', () => {
     expect(data.cdp.reachable).toBe(true);
   });
 
-  it('lists Chrome target ids without full URLs by default', async () => {
-    mockFetch([{ id: '1', type: 'page', title: 'Home', url: 'https://example.com/path?token=secret', attached: true, webSocketDebuggerUrl: 'ws://cdp/1' }, { id: '2', type: 'service_worker' }]);
+  it('lists real page Chrome target ids without full URLs by default', async () => {
+    mockFetch([
+      { id: '1', type: 'page', title: 'Home', url: 'https://example.com/path?token=secret', attached: true, webSocketDebuggerUrl: 'ws://cdp/1' },
+      { id: '2', type: 'service_worker' },
+      { id: '3', type: 'iframe', title: 'tracker', url: 'https://tracker.example/frame' },
+      { id: '4', type: 'page', title: 'Settings', url: 'chrome://settings' }
+    ]);
     const data = (await listBrowserTabs(fixtureWorkspace())).data as any;
     expect(data.urls_included).toBe(false);
+    expect(data.target_filter).toMatchObject({ type: 'page', include_iframes: false, include_workers: false, include_browser_ui: false });
+    expect(data.total_targets).toBe(4);
+    expect(data.filtered_targets).toBe(3);
     expect(data.targets).toEqual([
-      { id: '1', type: 'page', title: 'Home', url_origin: 'https://example.com', attached: true, has_websocket: true },
-      { id: '2', type: 'service_worker', title: '', url_origin: '', attached: false, has_websocket: false }
+      { id: '1', type: 'page', title: 'Home', url_origin: 'https://example.com', attached: true, has_websocket: true }
     ]);
+  });
+
+  it('can opt into raw non-page Chrome targets for cleanup/debugging', async () => {
+    mockFetch([
+      { id: '1', type: 'page', title: 'Home', url: 'https://example.com', webSocketDebuggerUrl: 'ws://cdp/1' },
+      { id: '2', type: 'service_worker', title: 'Worker', url: 'https://example.com/sw.js' },
+      { id: '3', type: 'iframe', title: 'Frame', url: 'https://example.com/frame' },
+      { id: '4', type: 'page', title: 'Settings', url: 'chrome://settings' }
+    ]);
+    const data = (await listBrowserTabs(fixtureWorkspace(), undefined, false, { type: 'all', include_workers: true, include_iframes: true, include_browser_ui: true })).data as any;
+    expect(data.targets.map((target: any) => target.id)).toEqual(['1', '2', '3', '4']);
   });
 
   it('can include full Chrome target URLs when requested', async () => {

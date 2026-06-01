@@ -29,6 +29,13 @@ type ChromeTarget = {
   webSocketDebuggerUrl?: string;
 };
 
+type BrowserTargetFilter = {
+  type?: string;
+  include_iframes?: boolean;
+  include_workers?: boolean;
+  include_browser_ui?: boolean;
+};
+
 export async function listBrowserProfiles(workspace: Workspace) {
   const profiles = configuredProfiles(workspace).map((profile, index) => browserProfile(workspace, profile, index));
   return ok(`listed ${profiles.length} browser profiles`, { workspace_id: workspace.id, reminder: REMINDER, profiles });
@@ -49,15 +56,20 @@ export async function browserStatus(workspace: Workspace, label?: string) {
   });
 }
 
-export async function listBrowserTabs(workspace: Workspace, label?: string, includeUrls = false) {
+export async function listBrowserTabs(workspace: Workspace, label?: string, includeUrls = false, filter: BrowserTargetFilter = {}) {
   const profile = selectedBrowserProfile(workspace, label);
-  const tabs = await fetchCdpJson<ChromeTarget[]>(profile, '/json/list');
-  return ok(`listed ${tabs.length} browser targets`, {
+  const targets = await fetchCdpJson<ChromeTarget[]>(profile, '/json/list');
+  const normalizedFilter = normalizeTargetFilter(filter);
+  const visibleTargets = targets.filter((target) => targetMatchesFilter(target, normalizedFilter));
+  return ok(`listed ${visibleTargets.length} browser targets`, {
     workspace_id: workspace.id,
     reminder: REMINDER,
     profile_label: profile.label,
     urls_included: includeUrls,
-    targets: tabs.map((target) => targetSummary(target, includeUrls))
+    target_filter: normalizedFilter,
+    total_targets: targets.length,
+    filtered_targets: targets.length - visibleTargets.length,
+    targets: visibleTargets.map((target) => targetSummary(target, includeUrls))
   });
 }
 
@@ -101,6 +113,38 @@ async function websocketTarget(workspace: Workspace, targetId: string, label?: s
   if (!target) throw new Error(`browser target not found: ${targetId}`);
   if (!target.webSocketDebuggerUrl) throw new Error(`browser target has no websocket debugger url: ${targetId}`);
   return { profile, target: target as ChromeTarget & { webSocketDebuggerUrl: string } };
+}
+
+function normalizeTargetFilter(filter: BrowserTargetFilter) {
+  return {
+    type: filter.type ?? 'page',
+    include_iframes: filter.include_iframes ?? false,
+    include_workers: filter.include_workers ?? false,
+    include_browser_ui: filter.include_browser_ui ?? false
+  };
+}
+
+function targetMatchesFilter(target: ChromeTarget, filter: ReturnType<typeof normalizeTargetFilter>) {
+  const type = target.type ?? '';
+  if (filter.type !== 'all' && type !== filter.type) return false;
+  if (!filter.include_workers && isWorkerTarget(type)) return false;
+  if (!filter.include_iframes && isIframeLikeTarget(target)) return false;
+  if (!filter.include_browser_ui && isBrowserUiTarget(target)) return false;
+  return true;
+}
+
+function isWorkerTarget(type: string) {
+  return type === 'worker' || type === 'service_worker' || type === 'shared_worker';
+}
+
+function isIframeLikeTarget(target: ChromeTarget) {
+  const type = target.type ?? '';
+  return type === 'iframe' || type === 'other' && /iframe|frame/i.test(`${target.title ?? ''} ${target.url ?? ''}`);
+}
+
+function isBrowserUiTarget(target: ChromeTarget) {
+  const url = target.url ?? '';
+  return url.startsWith('chrome://') || url.startsWith('devtools://') || url.startsWith('chrome-extension://');
 }
 
 function targetSummary(target: ChromeTarget, includeUrl = true) {

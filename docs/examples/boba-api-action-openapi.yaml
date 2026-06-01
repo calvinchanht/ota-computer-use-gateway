@@ -15,7 +15,7 @@ paths:
     post:
       operationId: gateway_request
       summary: Run one scoped Boba gateway tool call.
-      description: Runs a single transparent scoped tool call in workspace_id boba. Use get_tool_profile first. Use unique idempotency_key values for writes/checkpoints/mutations. If api.status is running, poll get_gateway_run with api.run_id after api.poll_after_ms; do not retry the original command.
+      description: Runs a single transparent scoped tool call in workspace_id boba. Use get_tool_profile first. Use unique idempotency_key values for writes/checkpoints/mutations. If api.status is running, poll get_gateway_run with api.run_id after api.poll_after_ms; api.operation_id and api.next_poll_after_ms are aliases; do not retry the original command.
       security:
         - bearerAuth: []
       requestBody:
@@ -35,7 +35,7 @@ paths:
     post:
       operationId: gateway_batch
       summary: Run multiple scoped Boba gateway tool calls.
-      description: Runs up to 20 scoped Boba tool calls in order. Prefer this for multi-step read/read-back and Cua Driver sequences. If api.status is running, poll get_gateway_run with api.run_id after api.poll_after_ms; do not retry the original batch.
+      description: Runs up to 20 scoped Boba tool calls in order. Prefer this for multi-step read/read-back and Cua Driver sequences. If api.status is running, poll get_gateway_run with api.run_id after api.poll_after_ms; api.operation_id and api.next_poll_after_ms are aliases; do not retry the original batch.
       security:
         - bearerAuth: []
       requestBody:
@@ -166,7 +166,7 @@ components:
         workspace_id:
           type: string
           enum: [boba]
-      description: Tool-specific arguments. Always include workspace_id=boba. For Cua Driver use cua_driver_status, cua_driver_call with method/params, or cua_driver_batch with calls including raw Cua method steps or delay_ms steps. For async quota_saver behavior, initial_wait_ms may be set; if api.status=running, poll get_gateway_run instead of retrying. For file tools include path; for browser/CDP include method/params/target_id/calls; for large-file tools include query, where, select, group_by, metrics, offsets, and dry_run fields as needed.
+      description: Tool-specific arguments. Always include workspace_id=boba. For browser tab listing, list_browser_tabs defaults to real page targets only; pass type=all and include_iframes/include_workers/include_browser_ui only for raw CDP cleanup/debugging. For Cua Driver use cua_driver_status, cua_driver_call with method/params, or cua_driver_batch with calls including raw Cua method steps or delay_ms steps. For async quota_saver behavior, initial_wait_ms may be set; if api.status=running, poll get_gateway_run instead of retrying. For file tools include path; for browser/CDP include method/params/target_id/calls; for large-file tools include query, where, select, group_by, metrics, offsets, and dry_run fields as needed.
     WorkspaceStatusArguments:
       type: object
       additionalProperties: false

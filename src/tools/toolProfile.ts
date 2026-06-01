@@ -34,9 +34,19 @@ function apiBehavior() {
     idempotency: 'For writes, browser actions, commands, checkpoints, and other non-idempotent operations, send a stable idempotency_key so retries do not duplicate work.',
     async_polling: {
       running_status: 'api.status=running',
+      operation_status_field: 'api.operation_status',
+      operation_id_field: 'api.run_id',
+      operation_id_alias: 'api.operation_id',
       poll_field: 'api.poll_after_ms',
+      poll_field_alias: 'api.next_poll_after_ms',
       default_poll_after_ms: 5000,
+      statuses: ['queued', 'running', 'waiting_for_navigation', 'waiting_for_dom', 'waiting_for_upload', 'waiting_for_user', 'completed', 'blocked_by_login', 'blocked_by_captcha', 'timed_out', 'failed'],
       instruction: 'When a response has api.status=running, wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. Do not retry the original tool call unless the run is missing or explicitly failed.'
+    },
+    browser_targets: {
+      list_browser_tabs_default: 'real page targets only',
+      filters: ['type/page/all', 'include_iframes', 'include_workers', 'include_browser_ui'],
+      note: 'By default list_browser_tabs hides workers, iframe-like targets, and browser UI targets. Pass type=all or include_* flags for raw CDP target cleanup/debugging.'
     }
   };
 }
@@ -62,6 +72,8 @@ function quotaSaverAsync(surface = 'browser/CDP') {
     initial_wait_ms_default: 5000,
     initial_wait_ms_max: 10000,
     poll_after_ms_min: 5000,
+    response_aliases: { operation_id: 'api.run_id', next_poll_after_ms: 'api.poll_after_ms', operation_status: 'api.status' },
+    possible_operation_statuses: ['running', 'completed', 'timed_out', 'failed', 'waiting_for_navigation', 'waiting_for_dom', 'waiting_for_upload', 'waiting_for_user', 'blocked_by_login', 'blocked_by_captcha'],
     opt_out: 'Pass async_mode=sync or async_mode=off for old fully synchronous behavior.',
     client_rule: `If api.status=running, wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. Do not retry the original ${surface} command.`
   };
