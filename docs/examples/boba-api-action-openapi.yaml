@@ -1,0 +1,542 @@
+openapi: 3.1.0
+info:
+  title: Boba Gateway API Action
+  version: 0.4.0
+  description: |
+    Transparent Boba Gateway JSON API Action for direct private Custom GPT proof.
+
+    Primary target: webchat agent -> scoped Gateway JSON API -> Boba/Mac Cua Driver proxy.
+
+    Important async rule: if any response includes api.status="running", do not retry the original command. Wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. This is normal for Cua Driver/browser-style operations using quota_saver mode.
+servers:
+  - url: https://boba-api.unrealize.com
+paths:
+  /api/v1/tool:
+    post:
+      operationId: gateway_request
+      summary: Run one scoped Boba gateway tool call.
+      description: Runs a single transparent scoped tool call in workspace_id boba. Use get_tool_profile first. Use unique idempotency_key values for writes/checkpoints/mutations. If api.status is running, poll get_gateway_run with api.run_id after api.poll_after_ms; do not retry the original command.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayRequest'
+      responses:
+        '200':
+          description: Gateway tool result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResponse'
+  /api/v1/batch:
+    post:
+      operationId: gateway_batch
+      summary: Run multiple scoped Boba gateway tool calls.
+      description: Runs up to 20 scoped Boba tool calls in order. Prefer this for multi-step read/read-back and Cua Driver sequences. If api.status is running, poll get_gateway_run with api.run_id after api.poll_after_ms; do not retry the original batch.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayBatchRequest'
+      responses:
+        '200':
+          description: Gateway batch result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResponse'
+  /api/v1/runs/{run_id}:
+    get:
+      operationId: get_gateway_run
+      summary: Retrieve a previous Gateway JSON API run.
+      description: Use this after a UI/stream interruption or when a previous response included api.run_id, especially api.status=running async Cua Driver/browser operations.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stored run record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    GatewayBatchRequest:
+      type: object
+      additionalProperties: false
+      required: [steps]
+      properties:
+        idempotency_key:
+          type: string
+          description: Optional stable retry key. Use a unique key for batch writes/checkpoints.
+        thread:
+          type: object
+          additionalProperties: true
+          description: Explicit thread identity metadata.
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/GatewayStep'
+    GatewayStep:
+      type: object
+      additionalProperties: false
+      required: [tool, arguments]
+      properties:
+        tool:
+          $ref: '#/components/schemas/GatewayToolName'
+        arguments:
+          $ref: '#/components/schemas/GatewayArguments'
+    GatewayRequest:
+      type: object
+      additionalProperties: false
+      required: [tool, arguments]
+      properties:
+        idempotency_key:
+          type: string
+          description: Optional stable retry key. Use a unique key for writes/checkpoints.
+        thread:
+          type: object
+          additionalProperties: true
+          description: Explicit thread identity metadata.
+        tool:
+          $ref: '#/components/schemas/GatewayToolName'
+        arguments:
+          $ref: '#/components/schemas/GatewayArguments'
+    GatewayToolName:
+      type: string
+      enum:
+        - workspace_status
+        - get_tool_profile
+        - get_workspace_policy
+        - list_dir
+        - read_file
+        - write_file
+        - git_status
+        - git_diff
+        - checkpoint_thread
+        - memory_write
+        - list_browser_profiles
+        - browser_status
+        - list_browser_tabs
+        - browser_cdp_browser_call
+        - browser_cdp_browser_batch
+        - browser_cdp_call
+        - browser_cdp_batch
+        - cua_driver_status
+        - cua_driver_call
+        - cua_driver_batch
+        - infer_file_structure
+        - sample_file
+        - read_file_chunk
+        - read_file_lines
+        - search_file
+        - search_files
+        - read_around
+        - table_profile
+        - query_table
+        - query_table_aggregate
+        - json_profile
+        - query_json
+        - patch_file_lines
+        - update_table_rows
+        - run_command
+    GatewayArguments:
+      type: object
+      additionalProperties: true
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+      description: Tool-specific arguments. Always include workspace_id=boba. For Cua Driver use cua_driver_status, cua_driver_call with method/params, or cua_driver_batch with calls including raw Cua method steps or delay_ms steps. For async quota_saver behavior, initial_wait_ms may be set; if api.status=running, poll get_gateway_run instead of retrying. For file tools include path; for browser/CDP include method/params/target_id/calls; for large-file tools include query, where, select, group_by, metrics, offsets, and dry_run fields as needed.
+    WorkspaceStatusArguments:
+      type: object
+      additionalProperties: false
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+    ListDirArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, path]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+        path:
+          type: string
+        max_entries:
+          type: integer
+          minimum: 1
+          maximum: 100
+    ReadFileArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, path]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+        path:
+          type: string
+        start_line:
+          type: integer
+          minimum: 1
+        max_lines:
+          type: integer
+          minimum: 1
+          maximum: 120
+    WriteFileArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, path, content]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+        path:
+          type: string
+        content:
+          type: string
+          maxLength: 4000
+        overwrite:
+          type: boolean
+          default: false
+    GitStatusArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+    GitDiffArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+        max_bytes:
+          type: integer
+          minimum: 1
+          maximum: 20000
+    CheckpointThreadArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, title, summary]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+        title:
+          type: string
+          maxLength: 120
+        summary:
+          type: string
+          maxLength: 4000
+        next_steps:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            maxLength: 300
+    MemoryWriteArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, type, title, body]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+        type:
+          type: string
+          enum: [note, decision, progress, handoff]
+        title:
+          type: string
+          maxLength: 120
+        body:
+          type: string
+          maxLength: 4000
+        tags:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            maxLength: 60
+
+    ListBrowserProfilesArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+    BrowserStatusArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+        profile_label:
+          type: string
+    ListBrowserTabsArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+        profile_label:
+          type: string
+        include_urls:
+          type: boolean
+          description: Include full target URLs when true. Default false returns redacted origin-only URL metadata.
+          default: false
+    BrowserCdpBrowserCallArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, method]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+        profile_label:
+          type: string
+        method:
+          type: string
+          description: Raw Chrome DevTools Protocol browser-level method name.
+        params:
+          type: object
+          additionalProperties: true
+          default: {}
+    BrowserCdpBrowserBatchArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, calls]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+        profile_label:
+          type: string
+        calls:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/CdpBatchStep'
+    BrowserCdpCallArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, target_id, method]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+        profile_label:
+          type: string
+        target_id:
+          type: string
+        method:
+          type: string
+          description: Raw Chrome DevTools Protocol page-target method name.
+        params:
+          type: object
+          additionalProperties: true
+          default: {}
+    BrowserCdpBatchArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, target_id, calls]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+        profile_label:
+          type: string
+        target_id:
+          type: string
+        calls:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/CdpBatchStep'
+    CdpBatchStep:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [method]
+          properties:
+            method:
+              type: string
+            params:
+              type: object
+              additionalProperties: true
+              default: {}
+            wait_for:
+              type: string
+              enum: [page_load, dom_content_loaded]
+            timeout_ms:
+              type: integer
+              minimum: 1
+              maximum: 60000
+        - type: object
+          additionalProperties: false
+          required: [delay_ms]
+          properties:
+            delay_ms:
+              type: integer
+              minimum: 0
+              maximum: 60000
+    LargeFileArguments:
+      type: object
+      additionalProperties: true
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [boba]
+        path:
+          type: string
+        root:
+          type: string
+        query:
+          type: string
+        glob:
+          type: string
+        max_bytes:
+          type: integer
+          minimum: 1
+          maximum: 250000
+        max_matches:
+          type: integer
+          minimum: 1
+          maximum: 200
+        context_lines:
+          type: integer
+          minimum: 0
+          maximum: 20
+        start_line:
+          type: integer
+          minimum: 1
+        max_lines:
+          type: integer
+          minimum: 1
+          maximum: 2000
+        line:
+          type: integer
+          minimum: 1
+        before:
+          type: integer
+          minimum: 0
+          maximum: 200
+        after:
+          type: integer
+          minimum: 0
+          maximum: 200
+        select:
+          type: array
+          items:
+            type: string
+        columns:
+          type: array
+          items:
+            type: string
+        where:
+          type: object
+          additionalProperties: true
+        sort:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        group_by:
+          type: array
+          items:
+            type: string
+        metrics:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        replacement:
+          type: string
+        expected_sha256:
+          type: string
+        dry_run:
+          type: boolean
+          default: true
+        set:
+          type: object
+          additionalProperties: true
+        allow_multiple:
+          type: boolean
+          default: false
+        cmd:
+          type: array
+          description: Argv-style command, for example ["node", "-e", "console.log(1)"].
+          minItems: 1
+          items:
+            type: string
+        cwd:
+          type: string
+          description: Working directory relative to workspace root.
+          default: .
+        timeout_ms:
+          type: integer
+          minimum: 1
+          maximum: 120000
+          default: 30000
+        max_stdout_bytes:
+          type: integer
+          minimum: 1
+          maximum: 50000
+          default: 20000
+        max_stderr_bytes:
+          type: integer
+          minimum: 1
+          maximum: 50000
+          default: 8000
+    GatewayResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        summary:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+        run:
+          type: object
+          additionalProperties: true
+        api:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
