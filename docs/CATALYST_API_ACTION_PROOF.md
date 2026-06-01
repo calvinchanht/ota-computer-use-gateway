@@ -132,12 +132,51 @@ Genesis independently verified the written file through the public Catalyst Gate
 }
 ```
 
+## Batch, recovery, and continuity API smoke
+
+The OpenAPI Action schema was expanded to include:
+
+- `gateway_request` -> `POST /api/v1/tool`
+- `gateway_batch` -> `POST /api/v1/batch`
+- `get_gateway_run` -> `GET /api/v1/runs/{run_id}`
+
+The Catalyst public JSON API was then smoke-tested with a batch containing:
+
+1. `workspace_status`
+2. `write_file` to `.agent/smoke/api-action-batch-test.txt`
+3. `read_file` of `.agent/smoke/api-action-batch-test.txt`
+4. `checkpoint_thread`
+
+Result:
+
+```text
+ok: true
+summary: completed 4 API batch steps
+run_id: 87c4ffd8-ff27-4562-80ee-7c7d1e5f7996
+status: completed
+```
+
+Recovery lookup also succeeded through:
+
+```text
+GET /api/v1/runs/87c4ffd8-ff27-4562-80ee-7c7d1e5f7996
+```
+
+Returned:
+
+```text
+ok: true
+kind: batch
+status: completed
+summary: completed 4 API batch steps
+```
+
 ## Remaining proof work
 
-The first Catalyst direct-call proof is successful. Next expand beyond single-tool read/write:
+The first Catalyst direct-call proof and public API batch/recovery/continuity smoke are successful. Next:
 
-1. Test ChatGPT's privacy/always-allow setting for this domain/action.
-2. Add and test `gateway_batch`.
-3. Add and test `GET /api/v1/runs/{run_id}` recovery.
-4. Add and test scoped continuity tools such as `checkpoint_thread`.
+1. Update the private Catalyst Custom GPT Action schema to the expanded v0.2 schema.
+2. Test `gateway_batch` from GPT chat.
+3. Test `get_gateway_run` from GPT chat.
+4. Test ChatGPT's privacy/always-allow setting for this domain/action.
 5. Decide whether this private custom GPT becomes the main Catalyst provider-runtime shell.

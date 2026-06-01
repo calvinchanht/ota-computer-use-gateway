@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: Catalyst Gateway API Action
-  version: 0.1.0
-  description: Minimal transparent read/write API Action for Catalyst Gateway JSON API proof.
+  version: 0.2.0
+  description: Transparent Catalyst Gateway JSON API Action for direct private Custom GPT proof.
 servers:
   - url: https://catalyst-mcp.unrealize.com
 paths:
@@ -10,7 +10,7 @@ paths:
     post:
       operationId: gateway_request
       summary: Run one scoped Catalyst gateway tool call.
-      description: Runs a single transparent scoped tool call. For this proof, use only read_file and write_file in workspace_id catalyst.
+      description: Runs a single transparent scoped tool call in workspace_id catalyst. Use unique idempotency_key values for writes and checkpoints.
       security:
         - bearerAuth: []
       requestBody:
@@ -26,12 +26,79 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GatewayResponse'
+  /api/v1/batch:
+    post:
+      operationId: gateway_batch
+      summary: Run multiple scoped Catalyst gateway tool calls.
+      description: Runs up to 20 scoped Catalyst tool calls in order. Prefer this for multi-step read/write/read-back or checkpoint flows.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayBatchRequest'
+      responses:
+        '200':
+          description: Gateway batch result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResponse'
+  /api/v1/runs/{run_id}:
+    get:
+      operationId: get_gateway_run
+      summary: Retrieve a previous Gateway JSON API run.
+      description: Use this after a UI/stream interruption or when a previous response included api.run_id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stored run record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResponse'
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
   schemas:
+    GatewayBatchRequest:
+      type: object
+      additionalProperties: false
+      required: [steps]
+      properties:
+        idempotency_key:
+          type: string
+          description: Optional stable retry key. Use a unique key for batch writes/checkpoints.
+        thread:
+          type: object
+          additionalProperties: true
+          description: Explicit thread identity metadata.
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/GatewayStep'
+    GatewayStep:
+      type: object
+      additionalProperties: false
+      required: [tool, arguments]
+      properties:
+        tool:
+          $ref: '#/components/schemas/GatewayToolName'
+        arguments:
+          $ref: '#/components/schemas/GatewayArguments'
     GatewayRequest:
       type: object
       additionalProperties: false
@@ -39,18 +106,57 @@ components:
       properties:
         idempotency_key:
           type: string
-          description: Optional stable retry key. Use a unique key for writes.
+          description: Optional stable retry key. Use a unique key for writes/checkpoints.
         thread:
           type: object
           additionalProperties: true
           description: Explicit thread identity metadata.
         tool:
-          type: string
-          enum: [read_file, write_file]
+          $ref: '#/components/schemas/GatewayToolName'
         arguments:
-          oneOf:
-            - $ref: '#/components/schemas/ReadFileArguments'
-            - $ref: '#/components/schemas/WriteFileArguments'
+          $ref: '#/components/schemas/GatewayArguments'
+    GatewayToolName:
+      type: string
+      enum:
+        - workspace_status
+        - list_dir
+        - read_file
+        - write_file
+        - git_status
+        - git_diff
+        - checkpoint_thread
+        - memory_write
+    GatewayArguments:
+      oneOf:
+        - $ref: '#/components/schemas/WorkspaceStatusArguments'
+        - $ref: '#/components/schemas/ListDirArguments'
+        - $ref: '#/components/schemas/ReadFileArguments'
+        - $ref: '#/components/schemas/WriteFileArguments'
+        - $ref: '#/components/schemas/GitStatusArguments'
+        - $ref: '#/components/schemas/GitDiffArguments'
+        - $ref: '#/components/schemas/CheckpointThreadArguments'
+        - $ref: '#/components/schemas/MemoryWriteArguments'
+    WorkspaceStatusArguments:
+      type: object
+      additionalProperties: false
+      properties:
+        workspace_id:
+          type: string
+          enum: [catalyst]
+    ListDirArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, path]
+      properties:
+        workspace_id:
+          type: string
+          enum: [catalyst]
+        path:
+          type: string
+        max_entries:
+          type: integer
+          minimum: 1
+          maximum: 100
     ReadFileArguments:
       type: object
       additionalProperties: false
@@ -84,6 +190,69 @@ components:
         overwrite:
           type: boolean
           default: false
+    GitStatusArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [catalyst]
+    GitDiffArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [catalyst]
+        max_bytes:
+          type: integer
+          minimum: 1
+          maximum: 20000
+    CheckpointThreadArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, title, summary]
+      properties:
+        workspace_id:
+          type: string
+          enum: [catalyst]
+        title:
+          type: string
+          maxLength: 120
+        summary:
+          type: string
+          maxLength: 4000
+        next_steps:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            maxLength: 300
+    MemoryWriteArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, type, title, body]
+      properties:
+        workspace_id:
+          type: string
+          enum: [catalyst]
+        type:
+          type: string
+          enum: [note, decision, progress, handoff]
+        title:
+          type: string
+          maxLength: 120
+        body:
+          type: string
+          maxLength: 4000
+        tags:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            maxLength: 60
     GatewayResponse:
       type: object
       properties:
@@ -92,6 +261,9 @@ components:
         summary:
           type: string
         data:
+          type: object
+          additionalProperties: true
+        run:
           type: object
           additionalProperties: true
         api:
