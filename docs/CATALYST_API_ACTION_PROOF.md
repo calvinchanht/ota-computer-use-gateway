@@ -15,7 +15,7 @@ api-action-catalyst-proof
 ```text
 Private Catalyst custom GPT
   -> OpenAPI Action gateway_request
-  -> POST https://catalyst-mcp.unrealize.com/api/v1/tool
+  -> POST https://catalyst-api.unrealize.com/api/v1/tool
   -> Catalyst Gateway scoped workspace tools
 ```
 
@@ -48,8 +48,11 @@ Catalyst remote checkout was moved onto this branch and rebuilt:
 /home/molt/ota-computer-use-gateway
 branch: api-action-catalyst-proof
 service: catalyst-mcp-http.service
-public base URL: https://catalyst-mcp.unrealize.com
+public API base URL: https://catalyst-api.unrealize.com
+compat MCP/public base URL: https://catalyst-mcp.unrealize.com
 ```
+
+`catalyst-api.unrealize.com` is the preferred Custom GPT/OpenAPI Action hostname. `catalyst-mcp.unrealize.com` remains available for MCP compatibility to avoid breaking older connector paths.
 
 Public JSON API smoke passed with bearer auth:
 
@@ -100,7 +103,7 @@ https://chatgpt.com/g/g-6a1ceac0f6cc8191afb535a5b6bea0ab-catalyst-api-smoke/c/6a
 ChatGPT showed the expected domain confirmation:
 
 ```text
-Catalyst API Smoke wants to talk to catalyst-mcp.unrealize.com
+Catalyst API Smoke wants to talk to catalyst-api.unrealize.com
 Tool call: catalyst_mcp_unrealize_com__jit_plugin.gateway_request
 Confirm / Deny
 ```
@@ -224,6 +227,44 @@ Batch had 4 steps: yes.
 ```
 
 A follow-up `get_gateway_run` call in the same chat executed without another confirmation prompt and returned status completed, confirming that `Always allow` reduces repeated confirmation for this GPT/domain/action context.
+
+## API hostname rename
+
+To avoid confusing the real API Action lane with MCP, the Catalyst tunnel now has an API-specific hostname:
+
+```text
+https://catalyst-api.unrealize.com
+```
+
+Cloudflare routing and local ingress were updated so both hostnames route to the same Catalyst Gateway origin:
+
+```text
+catalyst-api.unrealize.com -> http://127.0.0.1:8767
+catalyst-mcp.unrealize.com -> http://127.0.0.1:8767
+```
+
+The new API hostname was verified:
+
+```text
+POST https://catalyst-api.unrealize.com/api/v1/tool workspace_status
+ok: true
+summary: workspace status
+run_id: 095e0cc1-e736-4ab8-a758-62dde98e8de8
+```
+
+The private `Catalyst API Smoke` GPT Action schema was updated to use `https://catalyst-api.unrealize.com`. A fresh GPT chat showed the cleaner confirmation text:
+
+```text
+Catalyst API Smoke wants to talk to catalyst-api.unrealize.com
+```
+
+After confirmation, GPT called the new domain successfully and reported:
+
+```text
+Talked to catalyst-api.unrealize.com
+Domain/tool confirmation: http-json / workspace_status
+Run status: completed
+```
 
 ## Remaining proof work
 
