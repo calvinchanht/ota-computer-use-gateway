@@ -47,12 +47,14 @@ function toolAsync() {
     browser_cdp_browser_batch: quotaSaverAsync(),
     browser_cdp_call: quotaSaverAsync(),
     browser_cdp_batch: quotaSaverAsync(),
+    cua_driver_call: quotaSaverAsync('Cua Driver'),
+    cua_driver_batch: quotaSaverAsync('Cua Driver'),
     run_command: { may_return_running: false, note: 'Bounded argv command currently returns synchronously through the HTTP JSON API; still use api.run_id for recovery.' },
     get_gateway_run: { may_return_running: false, note: 'Poll/recovery endpoint for prior HTTP JSON API run_id values.' }
   };
 }
 
-function quotaSaverAsync() {
+function quotaSaverAsync(surface = 'browser/CDP') {
   return {
     may_return_running: true,
     default_async_mode: 'quota_saver',
@@ -61,7 +63,7 @@ function quotaSaverAsync() {
     initial_wait_ms_max: 10000,
     poll_after_ms_min: 5000,
     opt_out: 'Pass async_mode=sync or async_mode=off for old fully synchronous behavior.',
-    client_rule: 'If api.status=running, wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. Do not retry the original browser/CDP command.'
+    client_rule: `If api.status=running, wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. Do not retry the original ${surface} command.`
   };
 }
 

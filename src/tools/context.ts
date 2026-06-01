@@ -141,7 +141,8 @@ function capabilityDiscovery(workspace: Workspace) {
       rule: 'For HTTP JSON API responses with api.status=running, do not retry the original command. Wait at least api.poll_after_ms, then call get_gateway_run / GET /api/v1/runs/{api.run_id}.',
       default_poll_after_ms: 5000,
       browser_cdp_default_mode: 'quota_saver',
-      ready_behavior: 'Browser/CDP calls return completed results immediately when ready within initial_wait_ms; otherwise they return run_id for polling.'
+      cua_driver_default_mode: 'quota_saver',
+      ready_behavior: 'Browser/CDP and Cua Driver calls return completed results immediately when ready within initial_wait_ms; otherwise they return run_id for polling.'
     }
   };
 }
@@ -153,7 +154,7 @@ function bootstrapNextActions(workspace: Workspace) {
     workspace.allow_read ? 'Confirm scoped file access by calling list_dir on ".", and when useful tree/stat_path/read_file anywhere inside the workspace. Do not treat secrets/ or credential-named files as unavailable when gateway policy grants workspace access. Avoid pasting raw secret contents into chat unless the operator explicitly asks.' : 'Read access is disabled by policy; say so explicitly if asked for files.',
     workspace.allow_write ? 'Use write_file/edit_file/write_binary_file for routine scoped workspace updates without asking the operator to babysit. Record important outputs with record_artifact.' : 'Write access is disabled by policy; do not imply you can write files.',
     'Use browser_cdp_call/browser_cdp_batch or browser_cdp_browser_call/browser_cdp_browser_batch for direct CDP automation when browser control is enabled. Do not look for wrapper browser action tools; the gateway intentionally proxies CDP instead.',
-    'For HTTP JSON API browser/CDP calls, api.status may be running. If so, wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. Do not retry the original browser command.',
+    'For HTTP JSON API browser/CDP or Cua Driver calls, api.status may be running. If so, wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. Do not retry the original browser/computer-use command.',
     'Call list_artifacts to discover prior outputs, and record_artifact after creating important files.',
     'Call list_skills/read_skill for relevant workspace runbooks.',
     'Call memory_search/read_file for details only when needed.',

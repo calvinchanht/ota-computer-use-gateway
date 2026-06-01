@@ -257,7 +257,7 @@ async function handleQuotaSaverApiTool(config: AppConfig, res: ServerResponse, t
 function shouldUseQuotaSaver(tool: string, args: Record<string, unknown>): boolean {
   const mode = optionalString(args.async_mode) ?? optionalString(args.browser_async_mode);
   if (mode === 'off' || mode === 'sync') return false;
-  return mode === 'quota_saver' || (mode === undefined && tool.startsWith('browser_cdp'));
+  return mode === 'quota_saver' || (mode === undefined && (tool.startsWith('browser_cdp') || tool.startsWith('cua_driver_')) && tool !== 'cua_driver_status');
 }
 
 function storeRunningApiRun(input: Omit<ApiRunRecord, 'run_id' | 'status' | 'created_at' | 'completed_at'>): ApiRunRecord {
