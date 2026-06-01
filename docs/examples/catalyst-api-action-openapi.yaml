@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Catalyst Gateway API Action
-  version: 0.3.0
+  version: 0.4.0
   description: Transparent Catalyst Gateway JSON API Action for direct private Custom GPT proof.
 servers:
   - url: https://catalyst-api.unrealize.com
@@ -133,6 +133,20 @@ components:
         - browser_cdp_browser_batch
         - browser_cdp_call
         - browser_cdp_batch
+        - infer_file_structure
+        - sample_file
+        - read_file_chunk
+        - read_file_lines
+        - search_file
+        - search_files
+        - read_around
+        - table_profile
+        - query_table
+        - query_table_aggregate
+        - json_profile
+        - query_json
+        - patch_file_lines
+        - update_table_rows
     GatewayArguments:
       oneOf:
         - $ref: '#/components/schemas/WorkspaceStatusArguments'
@@ -150,6 +164,7 @@ components:
         - $ref: '#/components/schemas/BrowserCdpBrowserBatchArguments'
         - $ref: '#/components/schemas/BrowserCdpCallArguments'
         - $ref: '#/components/schemas/BrowserCdpBatchArguments'
+        - $ref: '#/components/schemas/LargeFileArguments'
     WorkspaceStatusArguments:
       type: object
       additionalProperties: false
@@ -397,6 +412,90 @@ components:
               type: integer
               minimum: 0
               maximum: 60000
+    LargeFileArguments:
+      type: object
+      additionalProperties: true
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [catalyst]
+        path:
+          type: string
+        root:
+          type: string
+        query:
+          type: string
+        glob:
+          type: string
+        max_bytes:
+          type: integer
+          minimum: 1
+          maximum: 250000
+        max_matches:
+          type: integer
+          minimum: 1
+          maximum: 200
+        context_lines:
+          type: integer
+          minimum: 0
+          maximum: 20
+        start_line:
+          type: integer
+          minimum: 1
+        max_lines:
+          type: integer
+          minimum: 1
+          maximum: 2000
+        line:
+          type: integer
+          minimum: 1
+        before:
+          type: integer
+          minimum: 0
+          maximum: 200
+        after:
+          type: integer
+          minimum: 0
+          maximum: 200
+        select:
+          type: array
+          items:
+            type: string
+        columns:
+          type: array
+          items:
+            type: string
+        where:
+          type: object
+          additionalProperties: true
+        sort:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        group_by:
+          type: array
+          items:
+            type: string
+        metrics:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        replacement:
+          type: string
+        expected_sha256:
+          type: string
+        dry_run:
+          type: boolean
+          default: true
+        set:
+          type: object
+          additionalProperties: true
+        allow_multiple:
+          type: boolean
+          default: false
     GatewayResponse:
       type: object
       properties:

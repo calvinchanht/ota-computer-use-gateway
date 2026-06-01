@@ -12,6 +12,7 @@ import { gitDiff, gitStatus } from '../tools/git.js';
 import { checkpointThread } from '../tools/context.js';
 import { memoryWrite } from '../tools/memory.js';
 import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserStatus, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
+import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable, queryTableAggregate, readAround, readFileChunk, readFileLinesLarge, sampleFile, searchFile, searchFiles, tableProfile, updateTableRows } from '../tools/largeFiles.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
 import { healthPayload } from './health.js';
@@ -276,6 +277,20 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'browser_cdp_browser_batch') return browserCdpBrowserBatch(workspace, requiredCdpBatchSteps(args.calls) as Parameters<typeof browserCdpBrowserBatch>[1], optionalString(args.profile_label));
   if (tool === 'browser_cdp_call') return browserCdpCall(workspace, requiredString(args.target_id, 'target_id'), requiredString(args.method, 'method'), recordArg(args.params, 'params') ?? {}, optionalString(args.profile_label));
   if (tool === 'browser_cdp_batch') return browserCdpBatch(workspace, requiredString(args.target_id, 'target_id'), requiredCdpBatchSteps(args.calls) as Parameters<typeof browserCdpBatch>[2], optionalString(args.profile_label));
+  if (tool === 'infer_file_structure') return inferFileStructure(config, workspace, requiredString(args.path, 'path'));
+  if (tool === 'sample_file') return sampleFile(config, workspace, requiredString(args.path, 'path'), optionalString(args.mode) ?? 'head_tail_random', optionalNumber(args.head_lines) ?? 20, optionalNumber(args.tail_lines) ?? 20, optionalNumber(args.random_lines) ?? 20, optionalNumber(args.max_bytes) ?? 20000);
+  if (tool === 'read_file_chunk') return readFileChunk(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.offset) ?? 0, optionalNumber(args.max_bytes) ?? 50000);
+  if (tool === 'read_file_lines') return readFileLinesLarge(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.start_line) ?? 1, optionalNumber(args.max_lines) ?? 200);
+  if (tool === 'read_around') return readAround(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.line) ?? 1, optionalNumber(args.before) ?? 10, optionalNumber(args.after) ?? 20);
+  if (tool === 'search_file') return searchFile(config, workspace, requiredString(args.path, 'path'), requiredString(args.query, 'query'), optionalNumber(args.max_matches) ?? 50, optionalNumber(args.context_lines) ?? 0);
+  if (tool === 'search_files') return searchFiles(config, workspace, optionalString(args.root) ?? '.', requiredString(args.query, 'query'), optionalString(args.glob) ?? '**/*', optionalNumber(args.max_matches) ?? 50, optionalNumber(args.context_lines) ?? 0);
+  if (tool === 'table_profile') return tableProfile(config, workspace, requiredString(args.path, 'path'), optionalStringArray(args.columns));
+  if (tool === 'query_table') return queryTable(config, workspace, requiredString(args.path, 'path'), optionalStringArray(args.select), recordArg(args.where, 'where'), arrayRecordArg(args.sort, 'sort'), optionalNumber(args.limit) ?? 100, optionalNumber(args.offset) ?? 0);
+  if (tool === 'query_table_aggregate') return queryTableAggregate(config, workspace, requiredString(args.path, 'path'), optionalStringArray(args.group_by), arrayRecordArg(args.metrics, 'metrics') ?? [{ op: 'count' }], recordArg(args.where, 'where'));
+  if (tool === 'json_profile') return jsonProfile(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.depth) ?? 3, optionalNumber(args.array_samples) ?? 3);
+  if (tool === 'query_json') return queryJson(config, workspace, requiredString(args.path, 'path'), requiredString(args.query, 'query'), optionalNumber(args.max_bytes) ?? 50000);
+  if (tool === 'patch_file_lines') return patchFileLines(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.start_line) ?? 1, optionalNumber(args.end_line) ?? optionalNumber(args.start_line) ?? 1, requiredString(args.replacement, 'replacement'), optionalString(args.expected_sha256), args.dry_run !== false);
+  if (tool === 'update_table_rows') return updateTableRows(config, workspace, requiredString(args.path, 'path'), recordArg(args.where, 'where') ?? {}, stringRecordArg(args.set, 'set'), args.dry_run !== false, Boolean(args.allow_multiple));
   throw new Error(`unsupported API tool: ${tool}`);
 }
 
@@ -321,6 +336,20 @@ function optionalStringArray(value: unknown): string[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new Error('expected string array');
   return value.map((item) => requiredString(item, 'array item'));
+}
+
+function arrayRecordArg(value: unknown, name: string): Array<Record<string, string>> | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error(`${name} must be an array`);
+  return value.map((item) => {
+    const record = recordArg(item, name) ?? {};
+    return Object.fromEntries(Object.entries(record).map(([key, val]) => [key, String(val)]));
+  });
+}
+
+function stringRecordArg(value: unknown, name: string): Record<string, string> {
+  const record = recordArg(value, name) ?? {};
+  return Object.fromEntries(Object.entries(record).map(([key, val]) => [key, String(val)]));
 }
 
 async function handleApiDebugRequestContext(req: IncomingMessage, res: ServerResponse): Promise<void> {
