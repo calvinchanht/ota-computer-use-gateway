@@ -148,23 +148,14 @@ components:
         - patch_file_lines
         - update_table_rows
     GatewayArguments:
-      oneOf:
-        - $ref: '#/components/schemas/WorkspaceStatusArguments'
-        - $ref: '#/components/schemas/ListDirArguments'
-        - $ref: '#/components/schemas/ReadFileArguments'
-        - $ref: '#/components/schemas/WriteFileArguments'
-        - $ref: '#/components/schemas/GitStatusArguments'
-        - $ref: '#/components/schemas/GitDiffArguments'
-        - $ref: '#/components/schemas/CheckpointThreadArguments'
-        - $ref: '#/components/schemas/MemoryWriteArguments'
-        - $ref: '#/components/schemas/ListBrowserProfilesArguments'
-        - $ref: '#/components/schemas/BrowserStatusArguments'
-        - $ref: '#/components/schemas/ListBrowserTabsArguments'
-        - $ref: '#/components/schemas/BrowserCdpBrowserCallArguments'
-        - $ref: '#/components/schemas/BrowserCdpBrowserBatchArguments'
-        - $ref: '#/components/schemas/BrowserCdpCallArguments'
-        - $ref: '#/components/schemas/BrowserCdpBatchArguments'
-        - $ref: '#/components/schemas/LargeFileArguments'
+      type: object
+      additionalProperties: true
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [catalyst]
+      description: Tool-specific arguments. For file tools include path; for browser/CDP include method/params/target_id/calls; for large-file tools include query, where, select, group_by, metrics, offsets, and dry_run fields as needed.
     WorkspaceStatusArguments:
       type: object
       additionalProperties: false
