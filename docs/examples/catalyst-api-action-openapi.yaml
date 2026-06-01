@@ -1,0 +1,100 @@
+openapi: 3.1.0
+info:
+  title: Catalyst Gateway API Action
+  version: 0.1.0
+  description: Minimal transparent read/write API Action for Catalyst Gateway JSON API proof.
+servers:
+  - url: https://catalyst-mcp.unrealize.com
+paths:
+  /api/v1/tool:
+    post:
+      operationId: gateway_request
+      summary: Run one scoped Catalyst gateway tool call.
+      description: Runs a single transparent scoped tool call. For this proof, use only read_file and write_file in workspace_id catalyst.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayRequest'
+      responses:
+        '200':
+          description: Gateway tool result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    GatewayRequest:
+      type: object
+      additionalProperties: false
+      required: [tool, arguments]
+      properties:
+        idempotency_key:
+          type: string
+          description: Optional stable retry key. Use a unique key for writes.
+        thread:
+          type: object
+          additionalProperties: true
+          description: Explicit thread identity metadata.
+        tool:
+          type: string
+          enum: [read_file, write_file]
+        arguments:
+          oneOf:
+            - $ref: '#/components/schemas/ReadFileArguments'
+            - $ref: '#/components/schemas/WriteFileArguments'
+    ReadFileArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, path]
+      properties:
+        workspace_id:
+          type: string
+          enum: [catalyst]
+        path:
+          type: string
+        start_line:
+          type: integer
+          minimum: 1
+        max_lines:
+          type: integer
+          minimum: 1
+          maximum: 120
+    WriteFileArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, path, content]
+      properties:
+        workspace_id:
+          type: string
+          enum: [catalyst]
+        path:
+          type: string
+        content:
+          type: string
+          maxLength: 4000
+        overwrite:
+          type: boolean
+          default: false
+    GatewayResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        summary:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+        api:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
