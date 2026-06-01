@@ -266,6 +266,38 @@ Domain/tool confirmation: http-json / workspace_status
 Run status: completed
 ```
 
+## Browser/CDP proxy API Action lane
+
+The Catalyst JSON API now exposes the existing scoped browser/CDP proxy tools to the Custom GPT Action lane instead of wrapping them as high-level browser actions:
+
+```text
+list_browser_profiles
+browser_status
+list_browser_tabs
+browser_cdp_browser_call
+browser_cdp_browser_batch
+browser_cdp_call
+browser_cdp_batch
+```
+
+This keeps the intended architecture: Custom GPT -> Gateway JSON API -> scoped raw CDP proxy, with Gateway-provided auth, audit, request limits, run records, idempotency, and URL redaction defaults.
+
+Public API smoke after deploy:
+
+```text
+browser_status -> ok true, run_id 87a060cd-e9cd-4baa-aca0-2434a9e8a917
+list_browser_tabs -> ok true, listed 12 browser targets, run_id e35eaa9d-b4f8-430e-8ef4-10798c677b70
+browser_cdp_browser_call Target.getTargets -> ok true, run_id b113c1d1-35aa-4327-9702-5da2b159449b
+```
+
+The private `Catalyst API Smoke` GPT Action schema was updated to v0.3. A fresh GPT chat successfully called:
+
+```text
+gateway_request browser_status {"workspace_id":"catalyst"}
+Talked to catalyst-api.unrealize.com
+api.run_id: e871b915-afbd-460d-ae28-95cf26f287d3
+```
+
 ## Remaining proof work
 
 The Catalyst custom GPT is now workable for direct scoped API use. Remaining hardening before making it the main Catalyst shell:
