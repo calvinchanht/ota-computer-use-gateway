@@ -171,12 +171,65 @@ status: completed
 summary: completed 4 API batch steps
 ```
 
+## GPT schema update and chat-level batch/recovery proof
+
+The private `Catalyst API Smoke` GPT Action schema was updated to v0.2. The Action table then showed:
+
+- `gateway_request` -> `POST /api/v1/tool`
+- `gateway_batch` -> `POST /api/v1/batch`
+- `get_gateway_run` -> `GET /api/v1/runs/{run_id}`
+
+A new GPT chat called `gateway_batch` with four steps:
+
+1. `workspace_status`
+2. `write_file` to `.agent/smoke/private-gpt-batch-write.txt`
+3. `read_file` of `.agent/smoke/private-gpt-batch-write.txt`
+4. `checkpoint_thread`
+
+ChatGPT displayed the expected confirmation gate for `gateway_batch`, then returned:
+
+```text
+api.run_id: cf9e4715-ed03-4b64-b649-871c92ea4079
+
+Success: Catalyst gateway_batch completed 4 steps. Workspace status succeeded, file write succeeded, read-back confirmed the content exactly:
+
+private Catalyst GPT batch write at 2026-06-01
+
+Checkpoint recorded with title Catalyst GPT batch proof.
+```
+
+Genesis independently verified the batch-written file through public Catalyst JSON API:
+
+```text
+read .agent/smoke/private-gpt-batch-write.txt
+private Catalyst GPT batch write at 2026-06-01
+```
+
+Genesis also independently verified the GPT batch run record:
+
+```text
+run_id: cf9e4715-ed03-4b64-b649-871c92ea4079
+kind: batch
+status: completed
+summary: completed 4 API batch steps
+```
+
+The GPT then called `get_gateway_run` for the same run ID. ChatGPT offered `Allow`, `Always allow`, and `Decline`; `Always allow` was selected. The GPT returned:
+
+```text
+Kind: batch
+Status: completed
+Summary: completed 4 API batch steps
+Batch had 4 steps: yes.
+```
+
+A follow-up `get_gateway_run` call in the same chat executed without another confirmation prompt and returned status completed, confirming that `Always allow` reduces repeated confirmation for this GPT/domain/action context.
+
 ## Remaining proof work
 
-The first Catalyst direct-call proof and public API batch/recovery/continuity smoke are successful. Next:
+The Catalyst custom GPT is now workable for direct scoped API use. Remaining hardening before making it the main Catalyst shell:
 
-1. Update the private Catalyst Custom GPT Action schema to the expanded v0.2 schema.
-2. Test `gateway_batch` from GPT chat.
-3. Test `get_gateway_run` from GPT chat.
-4. Test ChatGPT's privacy/always-allow setting for this domain/action.
-5. Decide whether this private custom GPT becomes the main Catalyst provider-runtime shell.
+1. Decide whether `Catalyst API Smoke` should be renamed/promoted into the main Catalyst custom GPT.
+2. Consider adding lower-scope action-specific bearer tokens instead of long-term main Catalyst bearer use.
+3. Add richer but still minimal tool schemas only as needed.
+4. Decide whether/when to merge `api-action-catalyst-proof` back to `main`.
