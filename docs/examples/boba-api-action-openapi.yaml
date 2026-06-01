@@ -15,7 +15,7 @@ paths:
     post:
       operationId: gateway_request
       summary: Run one scoped Boba gateway tool call.
-      description: Runs a single transparent scoped tool call in workspace_id boba. Use get_tool_profile first. Use unique idempotency_key values for writes/checkpoints/mutations. If api.status is running, poll get_gateway_run with api.run_id after api.poll_after_ms; api.operation_id and api.next_poll_after_ms are aliases; do not retry the original command.
+      description: Runs one scoped Boba Gateway tool call. Use get_tool_profile first. For writes/mutations use idempotency_key. If api.status=running, poll get_gateway_run with api.run_id; do not retry.
       security:
         - bearerAuth: []
       requestBody:
@@ -35,7 +35,7 @@ paths:
     post:
       operationId: gateway_batch
       summary: Run multiple scoped Boba gateway tool calls.
-      description: Runs up to 20 scoped Boba tool calls in order. Prefer this for multi-step read/read-back and Cua Driver sequences. If api.status is running, poll get_gateway_run with api.run_id after api.poll_after_ms; api.operation_id and api.next_poll_after_ms are aliases; do not retry the original batch.
+      description: Runs up to 20 scoped Boba tool calls in order. Prefer for read/read-back and Cua sequences. If api.status=running, poll get_gateway_run; do not retry.
       security:
         - bearerAuth: []
       requestBody:
@@ -55,7 +55,7 @@ paths:
     get:
       operationId: get_gateway_run
       summary: Retrieve a previous Gateway JSON API run.
-      description: Use this after a UI/stream interruption or when a previous response included api.run_id, especially api.status=running async Cua Driver/browser operations.
+      description: Retrieve a stored run result. Use after stream interruption or api.status=running responses.
       security:
         - bearerAuth: []
       parameters:
