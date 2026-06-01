@@ -25,7 +25,7 @@ export async function inferFileStructure(config: AppConfig, workspace: Workspace
   const detected = detectTextType(resolved.relative, text);
   const data: Record<string, unknown> = { path: resolved.relative, ...meta, detected_type: detected, sample_line_count: lines.length };
   if (detected === 'csv' || detected === 'tsv') Object.assign(data, tableStructure(text, detected === 'tsv' ? '\t' : ','));
-  if (detected === 'json') Object.assign(data, safeJsonProfile(text, 2, 3));
+  if (detected === 'json') Object.assign(data, safeJsonProfile(meta.size <= MAX_SCAN_BYTES ? await readBoundedText(resolved.absolute, MAX_SCAN_BYTES) : text, 2, 3));
   if (detected === 'jsonl') data.jsonl_samples = lines.filter(Boolean).slice(0, 5).map((line) => safeParseJson(line));
   return ok(`inferred ${resolved.relative}`, data);
 }
