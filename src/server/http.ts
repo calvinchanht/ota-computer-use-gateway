@@ -7,6 +7,8 @@ import { audit } from '../core/audit.js';
 import { fail, type ToolResult } from '../core/result.js';
 import { heartbeat } from '../tools/heartbeat.js';
 import { workspaceStatus } from '../tools/workspace.js';
+import { toolProfile } from '../tools/toolProfile.js';
+import { workspacePolicy } from '../tools/policy.js';
 import { listDir, readFileTool, writeFileTool } from '../tools/files.js';
 import { gitDiff, gitStatus } from '../tools/git.js';
 import { checkpointThread } from '../tools/context.js';
@@ -340,7 +342,9 @@ async function runApiTool(config: AppConfig, tool: string, args: Record<string, 
 async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typeof buildWorkspaces>>, workspace: Workspace | null, tool: string, args: Record<string, unknown>): Promise<ToolResult> {
   if (tool === 'heartbeat') return heartbeat(workspaces);
   if (tool === 'workspace_status') return workspaceStatus(workspaces);
+  if (tool === 'get_tool_profile') return toolProfile();
   if (!workspace) throw new Error('workspace_id is required');
+  if (tool === 'get_workspace_policy') return workspacePolicy(workspace);
   if (tool === 'list_dir') return listDir(config, workspace, String(args.path ?? '.'), optionalNumber(args.max_entries));
   if (tool === 'read_file') return readFileTool(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.start_line), optionalNumber(args.max_lines));
   if (tool === 'write_file') return writeFileTool(config, workspace, requiredString(args.path, 'path'), requiredString(args.content, 'content'), Boolean(args.overwrite));
