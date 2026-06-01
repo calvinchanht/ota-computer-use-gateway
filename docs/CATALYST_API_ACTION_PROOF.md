@@ -87,14 +87,57 @@ Use gateway_request to run this transparent Catalyst smoke test:
 Return a short success/failure summary.
 ```
 
-## What counts as success
+## First successful custom GPT proof
 
-Catalyst proof is stronger than Mickey only after a real custom GPT chat:
+A private/live GPT named `Catalyst API Smoke` was created with this OpenAPI Action schema.
 
-1. Calls the Catalyst OpenAPI Action.
-2. Handles or bypasses repeated confirmation via ChatGPT's privacy/always-allow setting.
-3. Writes a harmless file in the Catalyst workspace.
-4. Reads it back.
-5. Genesis independently verifies the file through the public Catalyst Gateway JSON API.
+Chat URL observed during proof:
 
-After that, expand the action schema to include `gateway_batch`, `GET /api/v1/runs/{run_id}`, and scoped continuity tools.
+```text
+https://chatgpt.com/g/g-6a1ceac0f6cc8191afb535a5b6bea0ab-catalyst-api-smoke/c/6a1ceba8-af1c-832f-899a-4eda62457eed
+```
+
+ChatGPT showed the expected domain confirmation:
+
+```text
+Catalyst API Smoke wants to talk to catalyst-mcp.unrealize.com
+Tool call: catalyst_mcp_unrealize_com__jit_plugin.gateway_request
+Confirm / Deny
+```
+
+After confirmation, the GPT reported:
+
+```text
+Success. Read/write/read-back smoke test completed.
+
+Initial read: .agent/smoke/api-action-branch-smoke.txt returned catalyst api branch smoke 2026-06-01.
+Write confirmed: .agent/smoke/private-gpt-chat-write.txt.
+Read-back confirmed exact content: private custom GPT Catalyst write at 2026-06-01.
+```
+
+Genesis independently verified the written file through the public Catalyst Gateway JSON API:
+
+```json
+{
+  "ok": true,
+  "summary": "read .agent/smoke/private-gpt-chat-write.txt",
+  "data": {
+    "text": "private custom GPT Catalyst write at 2026-06-01"
+  },
+  "api": {
+    "transport": "http-json",
+    "tool": "read_file",
+    "status": "completed"
+  }
+}
+```
+
+## Remaining proof work
+
+The first Catalyst direct-call proof is successful. Next expand beyond single-tool read/write:
+
+1. Test ChatGPT's privacy/always-allow setting for this domain/action.
+2. Add and test `gateway_batch`.
+3. Add and test `GET /api/v1/runs/{run_id}` recovery.
+4. Add and test scoped continuity tools such as `checkpoint_thread`.
+5. Decide whether this private custom GPT becomes the main Catalyst provider-runtime shell.
