@@ -14,6 +14,7 @@ import { gitDiff, gitStatus } from '../tools/git.js';
 import { checkpointThread } from '../tools/context.js';
 import { memoryWrite } from '../tools/memory.js';
 import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserStatus, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
+import { cuaDriverBatch, cuaDriverCall, cuaDriverStatus, type CuaDriverBatchStep } from '../tools/computer.js';
 import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable, queryTableAggregate, readAround, readFileChunk, readFileLinesLarge, sampleFile, searchFile, searchFiles, tableProfile, updateTableRows } from '../tools/largeFiles.js';
 import { runArgvTool } from '../tools/runCommand.js';
 import { createServer } from './create.js';
@@ -359,6 +360,9 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'browser_cdp_browser_batch') return browserCdpBrowserBatch(workspace, requiredCdpBatchSteps(args.calls) as Parameters<typeof browserCdpBrowserBatch>[1], optionalString(args.profile_label));
   if (tool === 'browser_cdp_call') return browserCdpCall(workspace, requiredString(args.target_id, 'target_id'), requiredString(args.method, 'method'), recordArg(args.params, 'params') ?? {}, optionalString(args.profile_label));
   if (tool === 'browser_cdp_batch') return browserCdpBatch(workspace, requiredString(args.target_id, 'target_id'), requiredCdpBatchSteps(args.calls) as Parameters<typeof browserCdpBatch>[2], optionalString(args.profile_label));
+  if (tool === 'cua_driver_status') return cuaDriverStatus(workspace);
+  if (tool === 'cua_driver_call') return cuaDriverCall(workspace, requiredString(args.method, 'method'), recordArg(args.params, 'params') ?? {});
+  if (tool === 'cua_driver_batch') return cuaDriverBatch(workspace, requiredCuaBatchSteps(args.calls));
   if (tool === 'infer_file_structure') return inferFileStructure(config, workspace, requiredString(args.path, 'path'));
   if (tool === 'sample_file') return sampleFile(config, workspace, requiredString(args.path, 'path'), optionalString(args.mode) ?? 'head_tail_random', optionalNumber(args.head_lines) ?? 20, optionalNumber(args.tail_lines) ?? 20, optionalNumber(args.random_lines) ?? 20, optionalNumber(args.max_bytes) ?? 20000);
   if (tool === 'read_file_chunk') return readFileChunk(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.offset) ?? 0, optionalNumber(args.max_bytes) ?? 50000);
@@ -413,6 +417,15 @@ function optionalString(value: unknown): string | undefined {
 function requiredCdpBatchSteps(value: unknown): Array<Record<string, unknown>> {
   if (!Array.isArray(value) || value.length === 0) throw new Error('calls array is required');
   return value.map((item) => recordArg(item, 'calls item') ?? {});
+}
+
+function requiredCuaBatchSteps(value: unknown): CuaDriverBatchStep[] {
+  if (!Array.isArray(value) || value.length === 0) throw new Error('calls array is required');
+  return value.map((item, index) => {
+    const source = recordArg(item, 'calls item') ?? {};
+    if ('delay_ms' in source) return { delay_ms: optionalNumber(source.delay_ms) ?? 0 };
+    return { method: requiredString(source.method, `calls[${index}].method`), params: recordArg(source.params, `calls[${index}].params`) ?? {} };
+  });
 }
 
 function optionalStringArray(value: unknown): string[] {
