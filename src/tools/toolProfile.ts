@@ -5,6 +5,8 @@ export function toolProfile() {
     profile: 'mcp_explicit',
     naming: 'descriptive snake_case canonical tool names',
     canonical_tools: canonicalTools(),
+    api_behavior: apiBehavior(),
+    tool_async: toolAsync(),
     aliases: aliases(),
     deprecated_tools: deprecatedTools(),
     skill_layouts: ['.agents/skills/<skill>/SKILL.md', '.agent/skills/<skill>/SKILL.md'],
@@ -24,6 +26,43 @@ function canonicalTools(): string[] {
     'list_skills', 'read_skill', 'approval_status', 'list_artifacts', 'record_artifact',
     'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread'
   ];
+}
+
+function apiBehavior() {
+  return {
+    run_recovery: 'Every HTTP JSON API tool/batch response includes api.run_id. Use get_gateway_run / GET /api/v1/runs/{run_id} to recover status/results instead of blindly retrying.',
+    idempotency: 'For writes, browser actions, commands, checkpoints, and other non-idempotent operations, send a stable idempotency_key so retries do not duplicate work.',
+    async_polling: {
+      running_status: 'api.status=running',
+      poll_field: 'api.poll_after_ms',
+      default_poll_after_ms: 5000,
+      instruction: 'When a response has api.status=running, wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. Do not retry the original tool call unless the run is missing or explicitly failed.'
+    }
+  };
+}
+
+function toolAsync() {
+  return {
+    browser_cdp_browser_call: quotaSaverAsync(),
+    browser_cdp_browser_batch: quotaSaverAsync(),
+    browser_cdp_call: quotaSaverAsync(),
+    browser_cdp_batch: quotaSaverAsync(),
+    run_command: { may_return_running: false, note: 'Bounded argv command currently returns synchronously through the HTTP JSON API; still use api.run_id for recovery.' },
+    get_gateway_run: { may_return_running: false, note: 'Poll/recovery endpoint for prior HTTP JSON API run_id values.' }
+  };
+}
+
+function quotaSaverAsync() {
+  return {
+    may_return_running: true,
+    default_async_mode: 'quota_saver',
+    ready_behavior: 'returns completed result immediately if ready within initial_wait_ms',
+    initial_wait_ms_default: 5000,
+    initial_wait_ms_max: 10000,
+    poll_after_ms_min: 5000,
+    opt_out: 'Pass async_mode=sync or async_mode=off for old fully synchronous behavior.',
+    client_rule: 'If api.status=running, wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. Do not retry the original browser/CDP command.'
+  };
 }
 
 function aliases(): Record<string, string> {
