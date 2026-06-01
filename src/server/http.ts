@@ -60,7 +60,7 @@ export async function listenHttp(config: AppConfig): Promise<void> {
 
   installShutdownHooks(httpServer);
   httpServer.listen(config.server.port, config.server.host, () => {
-    console.error(`Mickey MCP HTTP listening on http://${config.server.host}:${config.server.port}${MCP_PATH}`);
+    console.error(`OTA gateway MCP HTTP listening on http://${config.server.host}:${config.server.port}${MCP_PATH}`);
   });
 }
 
