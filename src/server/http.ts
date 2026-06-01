@@ -32,11 +32,11 @@ type ApiRunRecord = {
   run_id: string;
   idempotency_key?: string;
   kind: 'tool' | 'batch';
-  status: 'completed';
+  status: 'running' | 'completed';
   ok: boolean;
   summary: string;
   created_at: string;
-  completed_at: string;
+  completed_at?: string;
   request: { tool?: string; steps?: Array<{ tool: string }>; thread?: unknown };
   response: unknown;
 };
@@ -171,7 +171,9 @@ async function handleApiTool(config: AppConfig, req: IncomingMessage, res: Serve
   const existing = existingRun(idempotencyKey);
   if (existing) return sendJson(res, 200, existing.response);
   const request = parseApiToolRequest(parsedBody);
-  const result = await runApiTool(config, request.tool, request.arguments ?? {});
+  const args = request.arguments ?? {};
+  if (shouldUseQuotaSaver(request.tool, args)) return handleQuotaSaverApiTool(config, res, request.tool, args, idempotencyKey, safeBodyThread(parsedBody));
+  const result = await runApiTool(config, request.tool, args);
   const response = { ...result, api: { transport: 'http-json', tool: request.tool, thread: safeBodyThread(parsedBody) } };
   const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool: request.tool, thread: safeBodyThread(parsedBody) } });
   return sendJson(res, 200, attachRun(response, record));
@@ -221,10 +223,86 @@ function existingRun(idempotencyKey: string | undefined): ApiRunRecord | undefin
   return runId ? apiRunRecords.get(runId) : undefined;
 }
 
+
+async function handleQuotaSaverApiTool(config: AppConfig, res: ServerResponse, tool: string, args: Record<string, unknown>, idempotencyKey: string | undefined, thread: unknown): Promise<void> {
+  const initialWaitMs = boundedAsyncWaitMs(optionalNumber(args.initial_wait_ms) ?? optionalNumber(args.sync_wait_ms) ?? 5000);
+  const pollAfterMs = boundedPollAfterMs(optionalNumber(args.poll_after_ms) ?? 5000);
+  const promise = runApiTool(config, tool, args);
+  const result = await promiseWithTimeout(promise, initialWaitMs);
+  if (result) {
+    const response = { ...result, api: { transport: 'http-json', tool, thread, async_mode: 'quota_saver', completed_within_initial_wait_ms: initialWaitMs } };
+    const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool, thread } });
+    return sendJson(res, 200, attachRun(response, record));
+  }
+
+  const record = storeRunningApiRun({
+    kind: 'tool',
+    ok: true,
+    summary: `running ${tool}; poll get_gateway_run after ${pollAfterMs}ms`,
+    response: {
+      ok: true,
+      summary: `running ${tool}; poll get_gateway_run after ${pollAfterMs}ms`,
+      data: { status: 'running', poll_after_ms: pollAfterMs, instruction: 'Call get_gateway_run after poll_after_ms. Do not retry the original command.' },
+      api: { transport: 'http-json', tool, thread, async_mode: 'quota_saver', status: 'running', poll_after_ms: pollAfterMs }
+    },
+    idempotency_key: idempotencyKey,
+    request: { tool, thread }
+  });
+  promise.then((finished) => completeApiRun(record.run_id, finished, { transport: 'http-json', tool, thread, async_mode: 'quota_saver' })).catch((error) => completeApiRun(record.run_id, fail(error instanceof Error ? error.message : String(error)), { transport: 'http-json', tool, thread, async_mode: 'quota_saver' }));
+  return sendJson(res, 202, attachRun(record.response, record));
+}
+
+function shouldUseQuotaSaver(tool: string, args: Record<string, unknown>): boolean {
+  const mode = optionalString(args.async_mode) ?? optionalString(args.browser_async_mode);
+  if (mode === 'off' || mode === 'sync') return false;
+  return mode === 'quota_saver' || (mode === undefined && tool.startsWith('browser_cdp'));
+}
+
+function storeRunningApiRun(input: Omit<ApiRunRecord, 'run_id' | 'status' | 'created_at' | 'completed_at'>): ApiRunRecord {
+  const now = new Date().toISOString();
+  const record: ApiRunRecord = { run_id: randomUUID(), status: 'running', created_at: now, ...input };
+  record.response = attachRun(record.response, record);
+  rememberApiRun(record);
+  return record;
+}
+
+function completeApiRun(runId: string, result: ToolResult, api: Record<string, unknown>): void {
+  const record = apiRunRecords.get(runId);
+  if (!record) return;
+  const response = { ...result, api: { ...api, status: 'completed' } };
+  record.status = 'completed';
+  record.ok = result.ok;
+  record.summary = result.summary;
+  record.completed_at = new Date().toISOString();
+  record.response = attachRun(response, record);
+}
+
+async function promiseWithTimeout<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([promise, new Promise<undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), ms); })]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function boundedAsyncWaitMs(value: number): number {
+  return Math.min(Math.max(Math.trunc(value), 0), 10000);
+}
+
+function boundedPollAfterMs(value: number): number {
+  return Math.min(Math.max(Math.trunc(value), 5000), 60000);
+}
+
 function storeApiRun(input: Omit<ApiRunRecord, 'run_id' | 'status' | 'created_at' | 'completed_at'>): ApiRunRecord {
   const now = new Date().toISOString();
   const record: ApiRunRecord = { run_id: randomUUID(), status: 'completed', created_at: now, completed_at: now, ...input };
   record.response = attachRun(record.response, record);
+  rememberApiRun(record);
+  return record;
+}
+
+function rememberApiRun(record: ApiRunRecord): void {
   apiRunRecords.set(record.run_id, record);
   if (record.idempotency_key) apiRunByIdempotency.set(record.idempotency_key, record.run_id);
   while (apiRunRecords.size > MAX_RUN_RECORDS) {
@@ -234,7 +312,6 @@ function storeApiRun(input: Omit<ApiRunRecord, 'run_id' | 'status' | 'created_at
     apiRunRecords.delete(oldest);
     if (removed?.idempotency_key) apiRunByIdempotency.delete(removed.idempotency_key);
   }
-  return record;
 }
 
 function attachRun<T>(response: T, record: Pick<ApiRunRecord, 'run_id' | 'status'>): T & { api: Record<string, unknown> } {

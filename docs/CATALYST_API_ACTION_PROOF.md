@@ -282,6 +282,8 @@ browser_cdp_batch
 
 This keeps the intended architecture: Custom GPT -> Gateway JSON API -> scoped raw CDP proxy, with Gateway-provided auth, audit, request limits, run records, idempotency, and URL redaction defaults.
 
+Browser/CDP JSON API calls default to `quota_saver` async behavior for ChatGPT/webchat friendliness: the gateway waits briefly for a result and returns immediately if ready; if the operation is still running, it returns `202` with `api.status="running"`, `api.run_id`, and `poll_after_ms=5000`. Clients should poll `GET /api/v1/runs/{run_id}` after `poll_after_ms` and must not retry the original browser command. Callers may pass `async_mode: "sync"`/`"off"` for old fully synchronous behavior when appropriate.
+
 Public API smoke after deploy:
 
 ```text
