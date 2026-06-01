@@ -7,7 +7,7 @@ import { audit } from '../core/audit.js';
 import { fail, type ToolResult } from '../core/result.js';
 import { heartbeat } from '../tools/heartbeat.js';
 import { workspaceStatus } from '../tools/workspace.js';
-import { listDir, readFileTool } from '../tools/files.js';
+import { listDir, readFileTool, writeFileTool } from '../tools/files.js';
 import { gitDiff, gitStatus } from '../tools/git.js';
 import { checkpointThread } from '../tools/context.js';
 import { memoryWrite } from '../tools/memory.js';
@@ -263,6 +263,7 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (!workspace) throw new Error('workspace_id is required');
   if (tool === 'list_dir') return listDir(config, workspace, String(args.path ?? '.'), optionalNumber(args.max_entries));
   if (tool === 'read_file') return readFileTool(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.start_line), optionalNumber(args.max_lines));
+  if (tool === 'write_file') return writeFileTool(config, workspace, requiredString(args.path, 'path'), requiredString(args.content, 'content'), Boolean(args.overwrite));
   if (tool === 'git_status') return gitStatus(workspace);
   if (tool === 'git_diff') return gitDiff(workspace, optionalNumber(args.max_bytes) ?? 20000);
   if (tool === 'checkpoint_thread') return checkpointThread(workspace, requiredString(args.title, 'title'), requiredString(args.summary, 'summary'), optionalStringArray(args.next_steps));

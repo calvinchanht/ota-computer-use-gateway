@@ -29,7 +29,8 @@ Batch shape:
   },
   "steps": [
     { "tool": "workspace_status", "arguments": {} },
-    { "tool": "read_file", "arguments": { "path": ".agent/AGENT_START_HERE.md" } }
+    { "tool": "read_file", "arguments": { "path": ".agent/AGENT_START_HERE.md" } },
+    { "tool": "write_file", "arguments": { "path": ".agent/smoke/api-app-write.txt", "content": "hello", "overwrite": true } }
   ],
   "idempotency_key": "optional"
 }
