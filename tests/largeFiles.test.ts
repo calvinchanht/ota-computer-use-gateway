@@ -39,6 +39,7 @@ describe('large file tools', () => {
     await writeFile(path.join(workspace.realRoot, 'dashboard.json'), JSON.stringify({ stats: { total: 3 }, jobs: [{ id: 'a' }, { id: 'b' }] }));
     expect(JSON.stringify((await jsonProfile(config, workspace, 'dashboard.json', 3, 2)).data)).toContain('jobs');
     expect((await queryJson(config, workspace, 'dashboard.json', '$.jobs[0].id')).data).toMatchObject({ value: 'a' });
+    expect((await queryJson(config, workspace, 'dashboard.json', '$.jobs[*].{id:id}')).data).toMatchObject({ value: [{ id: 'a' }, { id: 'b' }] });
   });
 
   it('patches lines with sha guard', async () => {

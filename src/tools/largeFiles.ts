@@ -43,7 +43,7 @@ export async function sampleFile(config: AppConfig, workspace: Workspace, reques
     const step = Math.max(1, Math.floor((end - start) / Math.max(1, randomLines)));
     for (let lineNo = start + 1; lineNo <= end && picks.filter((p) => p.section === 'random').length < randomLines; lineNo += step) picks.push({ section: 'random', line: lineNo, text: lines[lineNo - 1] ?? '' });
   }
-  const limited = limitJsonBytes(picks, maxBytes);
+  const limited = limitArrayByJsonBytes(picks, maxBytes);
   return ok(`sampled ${resolved.relative}`, { path: resolved.relative, total_lines: lines.length, file_hash: sha256(text), samples: limited.value, truncated: limited.truncated });
 }
 
@@ -198,6 +198,75 @@ function sortRows(rows: Row[], sort?: Array<Record<string, string>>) { if (!sort
 function pick(row: Row, fields: string[]) { return Object.fromEntries(fields.map((f) => [f, row[f] ?? ''])); }
 function aggregate(rows: Row[], metric: Record<string, string>) { const op = metric.op ?? 'count'; const column = metric.column ?? ''; const key = column ? `${op}_${column}` : op; if (op === 'count') return { [key]: rows.length }; const nums = rows.map((r) => Number((r[column] ?? '').replace('%', ''))).filter(Number.isFinite); if (op === 'sum') return { [key]: nums.reduce((a, b) => a + b, 0) }; if (op === 'avg') return { [key]: nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null }; if (op === 'min') return { [key]: nums.length ? Math.min(...nums) : null }; if (op === 'max') return { [key]: nums.length ? Math.max(...nums) : null }; return { [key]: null }; }
 function profileJsonValue(value: unknown, depth: number, arraySamples: number, jsonPath: string): Record<string, unknown> { const type = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value; if (depth <= 0) return { type, path: jsonPath }; if (Array.isArray(value)) return { type, path: jsonPath, length: value.length, samples: value.slice(0, arraySamples).map((v, i) => profileJsonValue(v, depth - 1, arraySamples, `${jsonPath}[${i}]`)) }; if (value && typeof value === 'object') { const entries = Object.entries(value as Record<string, unknown>); return { type, path: jsonPath, keys: entries.map(([k]) => k), children: Object.fromEntries(entries.slice(0, 50).map(([k, v]) => [k, profileJsonValue(v, depth - 1, arraySamples, `${jsonPath}.${k}`)])) }; } return { type, path: jsonPath, sample: value }; }
-function evalJsonPath(root: unknown, query: string): unknown { let q = query.trim(); if (q.startsWith('$.')) q = q.slice(2); else if (q === '$') return root; else if (q.startsWith('.')) q = q.slice(1); const parts = q.split('.').filter(Boolean); let current: unknown = root; for (const part of parts) { const m = part.match(/^([^[]+)(?:\[(\d+)(?::(\d+))?\])?$/); if (!m) throw new Error(`unsupported json query segment: ${part}`); if (m[1]) current = (current as Record<string, unknown>)?.[m[1]]; if (m[2] !== undefined) { if (!Array.isArray(current)) return undefined; current = m[3] !== undefined ? current.slice(Number(m[2]), Number(m[3])) : current[Number(m[2])]; } } return current; }
-function limitJsonBytes(value: unknown, maxBytes: number) { const raw = JSON.stringify(value); if (Buffer.byteLength(raw) <= maxBytes) return { value, truncated: false }; return { value: JSON.parse(raw.slice(0, maxBytes).replace(/[,\[{][^,\[{]*$/, 'null')), truncated: true }; }
+function evalJsonPath(root: unknown, query: string): unknown {
+  let q = query.trim();
+  if (q.startsWith('$.')) q = q.slice(2);
+  else if (q === '$') return root;
+  else if (q.startsWith('.')) q = q.slice(1);
+  const parts = splitJsonPath(q);
+  return evalJsonPathParts(root, parts);
+}
+
+function evalJsonPathParts(current: unknown, parts: string[]): unknown {
+  if (parts.length === 0) return current;
+  const [part, ...rest] = parts;
+  const inlineProjection = part.match(/^([^[]+)\[\*\]\.?\{(.+)\}$/);
+  const braceProjection = part.match(/^\{(.+)\}$/);
+  if (inlineProjection || (braceProjection && Array.isArray(current))) {
+    const arr = inlineProjection ? (current as Record<string, unknown>)?.[inlineProjection[1]] : current;
+    if (!Array.isArray(arr)) return undefined;
+    const source = inlineProjection?.[2] ?? braceProjection?.[1] ?? '';
+    const fields = source.split(',').map((item) => item.trim()).filter(Boolean).map((item) => {
+      const [alias, field] = item.split(':').map((x) => x.trim());
+      return { alias: field ? alias : alias, field: field ?? alias };
+    });
+    const mapped = arr.map((item) => Object.fromEntries(fields.map(({ alias, field }) => [alias, (item as Record<string, unknown>)?.[field]])));
+    return evalJsonPathParts(mapped, rest);
+  }
+  const wildcard = part.match(/^([^[]+)\[\*\]$/);
+  if (wildcard) {
+    const arr = (current as Record<string, unknown>)?.[wildcard[1]];
+    if (!Array.isArray(arr)) return undefined;
+    if (rest[0]?.startsWith('{')) return evalJsonPathParts(arr, rest);
+    return rest.length ? arr.map((item) => evalJsonPathParts(item, rest)) : arr;
+  }
+  const m = part.match(/^([^[]+)(?:\[(\d+)(?::(\d+))?\])?$/);
+  if (!m) throw new Error(`unsupported json query segment: ${part}`);
+  let next = (current as Record<string, unknown>)?.[m[1]];
+  if (m[2] !== undefined) {
+    if (!Array.isArray(next)) return undefined;
+    next = m[3] !== undefined ? next.slice(Number(m[2]), Number(m[3])) : next[Number(m[2])];
+  }
+  return evalJsonPathParts(next, rest);
+}
+
+function splitJsonPath(query: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let braceDepth = 0;
+  for (const ch of query) {
+    if (ch === '{') braceDepth++;
+    if (ch === '}') braceDepth--;
+    if (ch === '.' && braceDepth === 0) { if (current) parts.push(current); current = ''; }
+    else current += ch;
+  }
+  if (current) parts.push(current);
+  return parts;
+}
+
+function limitJsonBytes(value: unknown, maxBytes: number) {
+  const raw = JSON.stringify(value);
+  if (Buffer.byteLength(raw) <= maxBytes) return { value, truncated: false };
+  return { value: typeof value === 'string' ? value.slice(0, maxBytes) : { omitted: true, reason: 'value exceeded max_bytes', bytes: Buffer.byteLength(raw) }, truncated: true };
+}
+
+function limitArrayByJsonBytes<T>(items: T[], maxBytes: number) {
+  const out: T[] = [];
+  for (const item of items) {
+    const next = [...out, item];
+    if (Buffer.byteLength(JSON.stringify(next)) > maxBytes) return { value: out, truncated: true };
+    out.push(item);
+  }
+  return { value: out, truncated: false };
+}
 function escapeCell(value: string, delimiter: string) { return value.includes(delimiter) || value.includes('"') || value.includes('\n') ? `"${value.replaceAll('"', '""')}"` : value; }
