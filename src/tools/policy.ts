@@ -8,7 +8,7 @@ export function workspacePolicy(workspace: Workspace) {
     root_label: 'configured workspace root',
     api_sets: resolvedApiSets(workspace),
     api_set_notes: {
-      workspace: 'Scoped workspace files, artifacts, context, skills, bounded commands/processes, and async run recovery.',
+      workspace: 'Scoped workspace files, artifacts, context, skills, and async run recovery. Command/process tools require allow_tests or machine_admin.',
       browser: 'Preassigned browser profiles/ports plus CDP-backed tabs, visible state, click/wait, and upload verification.',
       computer: 'Local GUI/computer-use via Cua Driver: screenshots, windows, accessibility tree, mouse, keyboard, and local app control.',
       machine_admin: 'Own machine/lane management through configured commands/process tools; service/config/tunnel work must stay scoped to the assigned machine.',
@@ -47,7 +47,7 @@ export function allowedTools(workspace: Workspace): string[] {
   if (sets.workspace || workspace.allow_read) base.push('workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'read_binary_file', 'search_files', 'git_status', 'git_diff', 'git_push_current_branch', 'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'memory_search', 'list_skills', 'read_skill', 'approval_status', 'list_artifacts');
   if (sets.workspace || workspace.allow_write) base.push('write_file', 'write_binary_file', 'edit_file', 'delete_file', 'delete_path', 'memory_write', 'record_artifact', 'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread');
   if (sets.workspace || workspace.allow_patch) base.push('propose_patch', 'apply_patch');
-  if (sets.workspace || workspace.allow_tests) base.push('run_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process');
+  if (sets.machine_admin || workspace.allow_tests) base.push('run_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process');
 
   if (sets.browser) base.push('list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch');
   if (sets.computer) base.push('cua_driver_status', 'cua_driver_call', 'cua_driver_batch');

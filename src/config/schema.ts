@@ -50,7 +50,6 @@ export const workspaceSchema = workspaceBaseSchema.transform((workspace) => {
     next.allow_read = true;
     next.allow_write = true;
     next.allow_patch = true;
-    next.allow_tests = true;
   }
   if (sets.browser || sets.computer) {
     next.allow_screen = true;
