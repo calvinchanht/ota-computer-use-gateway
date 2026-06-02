@@ -118,3 +118,14 @@ components:
     GatewayResponse:
       type: object
       additionalProperties: true
+      properties:
+        ok:
+          type: boolean
+        summary:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+        api:
+          type: object
+          additionalProperties: true
