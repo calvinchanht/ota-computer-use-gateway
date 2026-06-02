@@ -126,13 +126,30 @@ components:
         - workspace_status
         - get_tool_profile
         - get_workspace_policy
+        - workspace_inventory
         - list_dir
+        - stat_path
+        - tree
         - read_file
+        - read_binary_file
         - write_file
+        - write_binary_file
+        - edit_file
+        - delete_file
+        - delete_path
         - git_status
         - git_diff
+        - get_agent_bootstrap
+        - get_context_snapshot
+        - get_project_context
+        - record_progress
+        - record_decision
+        - record_handoff
+        - update_current_task
         - checkpoint_thread
         - memory_write
+        - list_artifacts
+        - record_artifact
         - list_browser_profiles
         - browser_status
         - list_browser_tabs
@@ -166,7 +183,7 @@ components:
         workspace_id:
           type: string
           enum: [boba]
-      description: Tool-specific arguments. Always include workspace_id=boba. For browser tab listing, list_browser_tabs defaults to real page targets only; pass type=all and include_iframes/include_workers/include_browser_ui only for raw CDP cleanup/debugging. For Cua Driver use cua_driver_status, cua_driver_call with method/params, or cua_driver_batch with calls including raw Cua method steps or delay_ms steps. For async quota_saver behavior, initial_wait_ms may be set; if api.status=running, poll get_gateway_run instead of retrying. For file tools include path; for browser/CDP include method/params/target_id/calls; for large-file tools include query, where, select, group_by, metrics, offsets, and dry_run fields as needed.
+      description: Tool-specific arguments. Always include workspace_id=boba. Start with get_agent_bootstrap when picking up a new Boba task. Boba has whole-Mac access with workspace root /, but its home/scratch workspace is /Users/calvinc/.openclaw/workspace and startup context is under /Users/calvinc/.openclaw/workspace/.agent. Roblox Studio is /Applications/RobloxStudio.app; prefer targeted paths such as Applications/RobloxStudio.app and Users/calvinc/.openclaw/workspace instead of broad root scans. For screenshots, cua_driver_call method=screenshot returns an artifact path under .agent/artifacts/screenshots; do not expect inline PNG/base64. For browser tab listing, list_browser_tabs defaults to real page targets only; pass type=all and include_iframes/include_workers/include_browser_ui only for raw CDP cleanup/debugging. For Cua Driver use cua_driver_status, cua_driver_call with method/params, or cua_driver_batch with calls including raw Cua method steps or delay_ms steps. For async quota_saver behavior, initial_wait_ms may be set; if api.status=running, poll get_gateway_run instead of retrying the original side-effectful call. For file tools include path; for context tools include title/body as needed; for browser/CDP include method/params/target_id/calls; for large-file tools include query, where, select, group_by, metrics, offsets, and dry_run fields as needed.
     WorkspaceStatusArguments:
       type: object
       additionalProperties: false
