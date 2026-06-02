@@ -47,6 +47,17 @@ type BrowserManageTabsOptions = {
   max_close?: number;
 };
 
+type BrowserClickAndWaitOptions = {
+  target_id: string;
+  selector?: string;
+  text?: string;
+  wait_for_text?: string;
+  wait_for_selector?: string;
+  wait_for_url_contains?: string;
+  wait_until_stable?: boolean;
+  timeout_ms?: number;
+};
+
 export async function listBrowserProfiles(workspace: Workspace) {
   const profiles = configuredProfiles(workspace).map((profile, index) => browserProfile(workspace, profile, index));
   return ok(`listed ${profiles.length} browser profiles`, { workspace_id: workspace.id, reminder: REMINDER, profiles });
@@ -134,6 +145,25 @@ export async function browserManageTabs(workspace: Workspace, options: BrowserMa
   throw new Error(`unsupported browser tab action: ${options.action}`);
 }
 
+
+export async function browserClickAndWait(workspace: Workspace, options: BrowserClickAndWaitOptions, label?: string) {
+  assertBrowserControl(workspace);
+  const { profile, target } = await websocketTarget(workspace, options.target_id, label);
+  const timeoutMs = boundedTimeoutMs(options.timeout_ms ?? 10000);
+  const result = await cdpCommand<RuntimeEvaluateResult>(target.webSocketDebuggerUrl, 'Runtime.evaluate', {
+    expression: clickAndWaitExpression(options, timeoutMs),
+    returnByValue: true,
+    awaitPromise: true
+  });
+  return ok('browser click and wait completed', {
+    workspace_id: workspace.id,
+    reminder: 'High-level click-and-wait helper. Prefer this over raw click followed by blind sleeps when waiting for visible text, selector, URL change, or DOM stability.',
+    profile_label: profile.label,
+    target: targetSummary(target),
+    result: runtimeValue(result)
+  });
+}
+
 export async function browserCdpBrowserCall(workspace: Workspace, method: string, params: Record<string, unknown> = {}, label?: string) {
   assertBrowserControl(workspace);
   const profile = selectedBrowserProfile(workspace, label);
@@ -191,6 +221,58 @@ function matchingTargets(targets: ChromeTarget[], options: BrowserManageTabsOpti
     if (!options.target_id && !options.url_contains && !options.title_contains && options.action !== 'list_page_tabs_only') return false;
     return true;
   });
+}
+
+
+function clickAndWaitExpression(options: BrowserClickAndWaitOptions, timeoutMs: number) {
+  const payload = JSON.stringify({
+    selector: options.selector,
+    text: options.text,
+    wait_for_text: options.wait_for_text,
+    wait_for_selector: options.wait_for_selector,
+    wait_for_url_contains: options.wait_for_url_contains,
+    wait_until_stable: options.wait_until_stable ?? false,
+    timeout_ms: timeoutMs
+  }).replace(/</g, '\\u003c');
+  return `(() => new Promise((resolve) => {
+    const opts = ${payload};
+    const started = Date.now();
+    const textOf = (el) => (el?.innerText || el?.textContent || '').replace(/\\s+/g, ' ').trim();
+    const visible = (el) => {
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+    };
+    const findByText = (needle) => Array.from(document.querySelectorAll('button, a, input, textarea, select, [role=button], [onclick]')).find((el) => visible(el) && textOf(el).toLowerCase().includes(String(needle).toLowerCase()));
+    const target = opts.selector ? document.querySelector(opts.selector) : findByText(opts.text);
+    if (!target) { resolve({ ok: false, error: 'click target not found', elapsed_ms: Date.now() - started }); return; }
+    target.scrollIntoView({ block: 'center', inline: 'center' });
+    target.click();
+    let lastText = textOf(document.body);
+    let stableSince = Date.now();
+    const check = () => {
+      const bodyText = textOf(document.body);
+      if (bodyText !== lastText) { lastText = bodyText; stableSince = Date.now(); }
+      const waited = {
+        text: opts.wait_for_text ? bodyText.includes(opts.wait_for_text) : undefined,
+        selector: opts.wait_for_selector ? Boolean(document.querySelector(opts.wait_for_selector)) : undefined,
+        url: opts.wait_for_url_contains ? location.href.includes(opts.wait_for_url_contains) : undefined,
+        stable: opts.wait_until_stable ? Date.now() - stableSince >= 750 : undefined
+      };
+      const active = Object.values(waited).filter((value) => value !== undefined);
+      if (!active.length || active.every(Boolean)) {
+        resolve({ ok: true, waited, url: location.href, title: document.title, elapsed_ms: Date.now() - started });
+        return;
+      }
+      if (Date.now() - started > opts.timeout_ms) {
+        resolve({ ok: false, error: 'wait timed out', waited, url: location.href, title: document.title, elapsed_ms: Date.now() - started });
+        return;
+      }
+      setTimeout(check, 100);
+    };
+    setTimeout(check, 100);
+  }))()`;
 }
 
 function visibleStateExpression() {

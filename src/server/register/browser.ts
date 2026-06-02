@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserManageTabs, browserStatus, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../../tools/browser.js';
+import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserStatus, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../../tools/browser.js';
 import { READ_ONLY, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -10,6 +10,7 @@ export function registerBrowserTools(context: RegisterContext): void {
   registerListBrowserTabs(context);
   registerBrowserVisibleState(context);
   registerBrowserManageTabs(context);
+  registerBrowserClickAndWait(context);
   registerBrowserCdpBrowserCall(context);
   registerBrowserCdpBrowserBatch(context);
   registerBrowserCdpCall(context);
@@ -53,6 +54,17 @@ function registerBrowserManageTabs({ server, workspaces }: RegisterContext): voi
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
     annotations: RUN_LOCAL
   }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_manage_tabs', (workspace) => browserManageTabs(workspace, args as any, args.profile_label)));
+}
+
+
+function registerBrowserClickAndWait({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_click_and_wait', {
+    title: 'Browser click and wait',
+    description: 'High-level click helper: click a visible element by CSS selector or text, then wait for visible text, selector, URL substring, and/or DOM text stability.',
+    inputSchema: { ...profileSchema(), target_id: z.string(), selector: z.string().optional(), text: z.string().optional(), wait_for_text: z.string().optional(), wait_for_selector: z.string().optional(), wait_for_url_contains: z.string().optional(), wait_until_stable: z.boolean().optional(), timeout_ms: z.number().optional() },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+    annotations: RUN_LOCAL
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_click_and_wait', (workspace) => browserClickAndWait(workspace, args as any, args.profile_label)));
 }
 
 function registerBrowserCdpBrowserCall({ server, workspaces }: RegisterContext): void {

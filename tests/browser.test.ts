@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserManageTabs, browserStatus, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../src/tools/browser.js';
+import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserStatus, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../src/tools/browser.js';
 
 describe('browser CDP proxy tools', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -84,6 +84,18 @@ describe('browser CDP proxy tools', () => {
     const data = (await browserManageTabs(controlWorkspace(), { action: 'focus_by_title', title_contains: 'job' })).data as any;
     expect(data.target.id).toBe('1');
     expect(sends[0]).toContain('Target.activateTarget');
+  });
+
+
+
+  it('clicks and waits on a page target with semantic helper', async () => {
+    mockFetch([{ id: '1', type: 'page', title: 'Apply', url: 'https://jobs.example/apply', webSocketDebuggerUrl: 'ws://cdp/1' }]);
+    const sends = mockWebSocket({ result: { value: { ok: true, waited: { text: true }, url: 'https://jobs.example/done' } } });
+    const data = (await browserClickAndWait(controlWorkspace(), { target_id: '1', text: 'Upload', wait_for_text: 'Ready' })).data as any;
+    expect(data.result.ok).toBe(true);
+    expect(data.reminder).toContain('click-and-wait');
+    expect(sends[0]).toContain('Runtime.evaluate');
+    expect(sends[0]).toContain('wait_for_text');
   });
 
   it('proxies a browser-level CDP call through the scoped browser websocket', async () => {
