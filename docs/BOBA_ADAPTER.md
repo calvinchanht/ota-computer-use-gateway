@@ -43,6 +43,8 @@ Boba/Mac computer use is exposed as a scoped Cua Driver proxy, not as gateway se
 
 `cua_driver_batch` runs raw Cua Driver command steps sequentially and supports gateway-side `{ "delay_ms": number }` steps. This is transport sequencing only, not a semantic computer-use wrapper.
 
+Screenshot handling is artifact-first. `cua_driver_call` with method `screenshot` proxies Cua first, then falls back to macOS `screencapture` when Cua returns metadata only. Screenshot artifacts are transient working files under `.agent/artifacts/screenshots/`; screenshot calls clean managed `cua-screenshot-*.png` files older than 86400 seconds by default and keep the latest 100. Agents should process screenshots promptly and copy important screenshots to task/project folders for durable retention.
+
 The gateway provides auth, workspace scoping, policy gates, audit, bounded outputs, and limits. It should not expose wrapper soup such as `computer_click`, `computer_type_text`, `computer_press_key`, or `computer_hotkey` when Cua Driver already provides those capabilities. External/irreversible actions remain stop-gated by policy and bootstrap instructions.
 
 ## Safety boundaries
@@ -69,13 +71,11 @@ On 2026-05-30, Genesis verified:
 - Public-style local MCP tool discovery originally exposed the old computer wrapper tools; the current direction is the Cua Driver proxy surface above.
 - Added direct Cua Driver proxy direction so Boba can use the real scoped Cua Driver surface rather than being trapped behind toy wrappers.
 - Old `computer_status` reported CUA ready for screen and mouse/keyboard.
-- Old `observe_screen` returned screen size and window list; screenshot failed with `screencapture failed for main display`, so screenshot remains a live Mac display/TCC/screencapture blocker.
+- Screenshot artifacts are now supported through Cua metadata detection plus macOS `screencapture` fallback, provided the Mac display is available/open.
 - Gateway-mediated CUA mutation proof previously succeeded via wrapper tools against Terminal, creating `/Users/calvinc/Desktop/boba-gateway-cua-proof.txt` with the expected marker; future proof should use `cua_driver_call` / `cua_driver_batch`.
 
 ## Next steps
 
-1. Convert the temporary local Boba gateway run into a LaunchAgent if/when Calvin wants Boba MCP to stay up.
-2. Debug macOS screenshot failure (`screencapture failed for main display`) separately from input control; window listing and keyboard injection already work.
-3. Add a provider connector/tunnel only after local Boba MCP acceptance is boring.
-4. Continue GUI mutation staging: Terminal proof is green; next target is a harmless Chrome/debug-profile or TextEdit proof with independent readback.
-5. Only after boring GUI mutation is reliable, test Roblox Studio with a local-only harmless action.
+1. Keep Boba screenshot artifacts short-lived; copy important screenshots into task/project folders before relying on them as durable evidence.
+2. Continue Roblox Studio task-specific smokes with local-only harmless actions before publishing/uploading/saving anything.
+3. Consider adding higher-level webchat bundle tools if repeated ChatGPT Action confirmation clicks become annoying.

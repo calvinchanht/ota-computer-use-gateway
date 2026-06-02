@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { ok } from '../core/result.js';
@@ -10,6 +10,10 @@ const execFileAsync = promisify(execFile);
 const CUA_DRIVER = process.env.CUA_DRIVER_BIN || 'cua-driver';
 const MAX_SCREENSHOT_BASE64 = 40000;
 const MAX_BATCH_STEPS = 25;
+const DEFAULT_SCREENSHOT_CLEANUP_OLDER_THAN_SECONDS = 86400;
+const DEFAULT_SCREENSHOT_KEEP_LATEST = 100;
+const SCREENSHOT_ARTIFACT_PREFIX = 'cua-screenshot-';
+const SCREENSHOT_ARTIFACT_SUFFIX = '.png';
 const READ_ONLY_CUA_TOOLS = new Set([
   'check_permissions',
   'list_windows',
@@ -58,8 +62,9 @@ export async function cuaDriverStatus(workspace: Workspace) {
 
 export async function cuaDriverCall(workspace: Workspace, method: string, params: Record<string, unknown> = {}) {
   const readOnly = authorizeCuaMethod(workspace, method);
-  const result = await cuaCall(method, sanitizeCuaArgs(params));
-  return ok('cua driver call', { method, read_only: readOnly, result: await boundCuaResult(workspace, method, result) });
+  const sanitizedParams = sanitizeCuaArgs(params);
+  const result = await cuaCall(method, sanitizedParams);
+  return ok('cua driver call', { method, read_only: readOnly, result: await boundCuaResult(workspace, method, result, sanitizedParams) });
 }
 
 export async function cuaDriverBatch(workspace: Workspace, calls: CuaDriverBatchStep[]) {
@@ -82,7 +87,7 @@ export async function cuaDriverBatch(workspace: Workspace, calls: CuaDriverBatch
     try {
       readOnly = authorizeCuaMethod(workspace, method);
       const result = await cuaCall(method, params);
-      results.push({ index, kind: 'cua_driver', method, read_only: readOnly, result: await boundCuaResult(workspace, method, result), elapsed_ms: Date.now() - started });
+      results.push({ index, kind: 'cua_driver', method, read_only: readOnly, result: await boundCuaResult(workspace, method, result, params), elapsed_ms: Date.now() - started });
     } catch (error) {
       results.push({ index, kind: 'cua_driver', method, read_only: readOnly, error: error instanceof Error ? error.message : String(error), elapsed_ms: Date.now() - started });
       break;
@@ -146,9 +151,9 @@ function sanitizeCuaArgs(args: Record<string, unknown>) {
   return JSON.parse(JSON.stringify(args ?? {})) as Record<string, unknown>;
 }
 
-async function boundCuaResult(workspace: Workspace, method: string, result: unknown) {
+async function boundCuaResult(workspace: Workspace, method: string, result: unknown, params: Record<string, unknown> = {}) {
   if (method === 'list_windows') return boundWindows(result);
-  if (method === 'screenshot') return boundedScreenshot(workspace, result);
+  if (method === 'screenshot') return boundedScreenshot(workspace, result, params);
   if (method === 'get_window_state') return boundWindowState(workspace, result);
   if (method === 'get_agent_cursor_state') return boundCursorState(result);
   return boundLargeStrings(result);
@@ -191,7 +196,7 @@ async function boundWindowState(workspace: Workspace, data: unknown) {
   });
 }
 
-async function boundedScreenshot(workspace: Workspace, data: unknown) {
+async function boundedScreenshot(workspace: Workspace, data: unknown, params: Record<string, unknown> = {}) {
   const payload = data as Record<string, unknown>;
   const copy: Record<string, unknown> = { ...payload };
   for (const [key, value] of Object.entries(copy)) {
@@ -201,6 +206,9 @@ async function boundedScreenshot(workspace: Workspace, data: unknown) {
     }
   }
 
+  const cleanup = await cleanupScreenshotArtifacts(workspace, params);
+  if (cleanup) copy.cleanup = cleanup;
+
   if (!hasScreenshotPayload(copy)) {
     const artifact = await captureScreenshotArtifact(workspace);
     if (artifact) {
@@ -208,11 +216,55 @@ async function boundedScreenshot(workspace: Workspace, data: unknown) {
       copy.note = 'cua-driver returned screenshot metadata only; saved a macOS screencapture artifact instead';
     }
   }
+  copy.retention_note = 'Screenshot artifacts are transient working files. Process them promptly or copy important screenshots to a task/project folder for durable retention.';
   return copy;
 }
 
 function hasScreenshotPayload(value: Record<string, unknown>) {
   return ['data', 'base64', 'image', 'image_base64', 'bytes', 'path', 'file', 'artifact'].some((key) => typeof value[key] === 'string' && String(value[key]).length > 0);
+}
+
+async function cleanupScreenshotArtifacts(workspace: Workspace, params: Record<string, unknown>) {
+  const olderThanSeconds = optionalNonNegativeNumber(params.cleanup_screenshots_older_than_seconds, DEFAULT_SCREENSHOT_CLEANUP_OLDER_THAN_SECONDS);
+  const keepLatest = optionalNonNegativeNumber(params.keep_latest_screenshots, DEFAULT_SCREENSHOT_KEEP_LATEST);
+  if (olderThanSeconds === null && keepLatest === null) return null;
+
+  const dir = screenshotArtifactDir(workspace);
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const screenshots: Array<{ name: string; absolute: string; mtimeMs: number }> = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !isManagedScreenshotName(entry.name)) continue;
+    const absolute = path.join(dir, entry.name);
+    const info = await stat(absolute).catch(() => null);
+    if (info?.isFile()) screenshots.push({ name: entry.name, absolute, mtimeMs: info.mtimeMs });
+  }
+
+  const now = Date.now();
+  const sorted = screenshots.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const keep = new Set(sorted.slice(0, keepLatest ?? sorted.length).map((item) => item.absolute));
+  const toDelete = sorted.filter((item) => {
+    if (keep.has(item.absolute)) return false;
+    if (keepLatest !== null && screenshots.length > keepLatest) return true;
+    if (olderThanSeconds === null) return false;
+    return now - item.mtimeMs > olderThanSeconds * 1000;
+  });
+
+  let deleted = 0;
+  for (const item of toDelete) {
+    await rm(item.absolute, { force: true }).then(() => { deleted += 1; }, () => undefined);
+  }
+  return { enabled: true, directory: agentRelativePath(workspace, dir), pattern: `${SCREENSHOT_ARTIFACT_PREFIX}*${SCREENSHOT_ARTIFACT_SUFFIX}`, older_than_seconds: olderThanSeconds, keep_latest: keepLatest, scanned: screenshots.length, deleted, retained: Math.max(0, screenshots.length - deleted) };
+}
+
+function optionalNonNegativeNumber(value: unknown, fallback: number | null) {
+  if (value === undefined || value === null) return fallback;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return fallback;
+  return Math.floor(number);
+}
+
+function isManagedScreenshotName(name: string) {
+  return name.startsWith(SCREENSHOT_ARTIFACT_PREFIX) && name.endsWith(SCREENSHOT_ARTIFACT_SUFFIX) && !name.includes('/') && !name.includes('..');
 }
 
 async function captureScreenshotArtifact(workspace: Workspace) {
@@ -230,10 +282,13 @@ async function writeBase64ScreenshotArtifact(workspace: Workspace, base64: strin
   return screenshotArtifact(workspace, absolutePath);
 }
 
+function screenshotArtifactDir(workspace: Workspace) {
+  return path.join(workspace.realAgentDir, 'artifacts', 'screenshots');
+}
+
 function screenshotArtifactPath(workspace: Workspace) {
-  const dir = path.join(workspace.realAgentDir, 'artifacts', 'screenshots');
-  const filename = `cua-screenshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
-  return path.join(dir, filename);
+  const filename = `${SCREENSHOT_ARTIFACT_PREFIX}${new Date().toISOString().replace(/[:.]/g, '-')}${SCREENSHOT_ARTIFACT_SUFFIX}`;
+  return path.join(screenshotArtifactDir(workspace), filename);
 }
 
 async function ensureScreenshotArtifactDir(absolutePath: string) {
