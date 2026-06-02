@@ -27,7 +27,7 @@ workspaces:
     allow_read: true
     allow_write: true
     allow_patch: true
-    allow_tests: false
+    allow_tests: true
     allow_screen: true
     allow_mouse_keyboard: true
     browser:
@@ -52,6 +52,9 @@ workspaces:
           launch: false
     git:
       github_token_file: "/home/molt/hkerbot/workspace/secrets/hker_github_pat.txt"
+    commands:
+      check: "python3 -m py_compile scripts/hkerschedule_daily_publish_all.py scripts/hkerschedule_daily_images.py"
+      patreon_preflight: "python3 scripts/patreon_preflight.py"
 
 security:
   max_file_bytes: 200000
