@@ -1,6 +1,9 @@
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserStatus, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../src/tools/browser.js';
+import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../src/tools/browser.js';
 
 describe('browser CDP proxy tools', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -98,6 +101,28 @@ describe('browser CDP proxy tools', () => {
     expect(sends[0]).toContain('wait_for_text');
   });
 
+
+
+  it('uploads a workspace-relative file and verifies visible filename text', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'browser-upload-'));
+    await writeFile(path.join(root, 'cv.pdf'), 'fake pdf');
+    mockFetch([{ id: '1', type: 'page', title: 'Apply', url: 'https://jobs.example/apply', webSocketDebuggerUrl: 'ws://cdp/1' }]);
+    const sends = mockWebSocketSequence([
+      { root: { nodeId: 1 } },
+      { nodeId: 7 },
+      {},
+      { result: { value: { ok: true, visible_text_found: 'cv.pdf' } } }
+    ]);
+    const data = (await browserUploadFileAndVerify(controlWorkspace({ root, realRoot: root }), { target_id: '1', selector: 'input[type=file]', path: 'cv.pdf' })).data as any;
+    expect(data.file.basename).toBe('cv.pdf');
+    expect(data.verify.ok).toBe(true);
+    expect(sends.some((message) => message.includes('DOM.setFileInputFiles'))).toBe(true);
+  });
+
+  it('rejects absolute upload paths', async () => {
+    await expect(browserUploadFileAndVerify(controlWorkspace(), { target_id: '1', selector: 'input[type=file]', path: '/tmp/cv.pdf' })).rejects.toThrow('absolute upload paths are not allowed');
+  });
+
   it('proxies a browser-level CDP call through the scoped browser websocket', async () => {
     mockFetch({ webSocketDebuggerUrl: 'ws://cdp/browser' });
     const sends = mockWebSocket({ product: 'Chrome/test' });
@@ -180,6 +205,27 @@ function mockFetchSequence(bodies: unknown[]) {
 
 function response(body: unknown) {
   return { ok: true, json: async () => body, text: async () => String(body) };
+}
+
+function mockWebSocketSequence(results: unknown[]) {
+  const sends: string[] = [];
+  let index = 0;
+  class MockWebSocket extends EventTarget {
+    close = vi.fn();
+    constructor(public url: string) {
+      super();
+      setTimeout(() => this.dispatchEvent(new Event('open')), 0);
+    }
+    send = vi.fn((message: string) => {
+      sends.push(message);
+      const id = JSON.parse(message).id;
+      const result = results[Math.min(index++, results.length - 1)];
+      const event = new MessageEvent('message', { data: JSON.stringify({ id, result }) });
+      setTimeout(() => this.dispatchEvent(event), 0);
+    });
+  }
+  vi.stubGlobal('WebSocket', MockWebSocket);
+  return sends;
 }
 
 function mockWebSocket(result: unknown, eventMethod?: string) {

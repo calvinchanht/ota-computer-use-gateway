@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserStatus, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../../tools/browser.js';
+import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../../tools/browser.js';
 import { READ_ONLY, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -11,6 +11,7 @@ export function registerBrowserTools(context: RegisterContext): void {
   registerBrowserVisibleState(context);
   registerBrowserManageTabs(context);
   registerBrowserClickAndWait(context);
+  registerBrowserUploadFileAndVerify(context);
   registerBrowserCdpBrowserCall(context);
   registerBrowserCdpBrowserBatch(context);
   registerBrowserCdpCall(context);
@@ -65,6 +66,17 @@ function registerBrowserClickAndWait({ server, workspaces }: RegisterContext): v
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
     annotations: RUN_LOCAL
   }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_click_and_wait', (workspace) => browserClickAndWait(workspace, args as any, args.profile_label)));
+}
+
+
+function registerBrowserUploadFileAndVerify({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_upload_file_and_verify', {
+    title: 'Browser upload file and verify visible',
+    description: 'High-level upload helper: set a workspace-relative file on a file input selector, then verify expected filename/text appears in human-visible page text.',
+    inputSchema: { ...profileSchema(), target_id: z.string(), selector: z.string(), path: z.string(), verify_visible_text: z.string().optional(), timeout_ms: z.number().optional() },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+    annotations: RUN_LOCAL
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_upload_file_and_verify', (workspace) => browserUploadFileAndVerify(workspace, args as any, args.profile_label)));
 }
 
 function registerBrowserCdpBrowserCall({ server, workspaces }: RegisterContext): void {

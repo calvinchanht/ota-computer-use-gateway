@@ -1,5 +1,8 @@
+import { realpath, stat } from 'node:fs/promises';
+import path from 'node:path';
 import type { Workspace } from '../core/workspaces.js';
 import { ok } from '../core/result.js';
+import { assertInside } from '../core/paths.js';
 
 const REMINDER = 'Use CDP directly through browser_cdp_* tools.';
 
@@ -55,6 +58,14 @@ type BrowserClickAndWaitOptions = {
   wait_for_selector?: string;
   wait_for_url_contains?: string;
   wait_until_stable?: boolean;
+  timeout_ms?: number;
+};
+
+type BrowserUploadFileOptions = {
+  target_id: string;
+  selector: string;
+  path: string;
+  verify_visible_text?: string;
   timeout_ms?: number;
 };
 
@@ -164,6 +175,32 @@ export async function browserClickAndWait(workspace: Workspace, options: Browser
   });
 }
 
+
+export async function browserUploadFileAndVerify(workspace: Workspace, options: BrowserUploadFileOptions, label?: string) {
+  assertBrowserControl(workspace);
+  const uploadFile = await resolveUploadPath(workspace, options.path);
+  const { profile, target } = await websocketTarget(workspace, options.target_id, label);
+  const documentResult = await cdpCommand<{ root: { nodeId: number } }>(target.webSocketDebuggerUrl, 'DOM.getDocument', { depth: 1, pierce: true });
+  const queryResult = await cdpCommand<{ nodeId: number }>(target.webSocketDebuggerUrl, 'DOM.querySelector', { nodeId: documentResult.root.nodeId, selector: options.selector });
+  if (!queryResult.nodeId) throw new Error('file input selector not found');
+  await cdpCommand(target.webSocketDebuggerUrl, 'DOM.setFileInputFiles', { nodeId: queryResult.nodeId, files: [uploadFile.absolute] });
+  const verifyText = options.verify_visible_text ?? path.basename(uploadFile.absolute);
+  const timeoutMs = boundedTimeoutMs(options.timeout_ms ?? 10000);
+  const verify = await cdpCommand<RuntimeEvaluateResult>(target.webSocketDebuggerUrl, 'Runtime.evaluate', {
+    expression: waitForVisibleTextExpression(verifyText, timeoutMs),
+    returnByValue: true,
+    awaitPromise: true
+  });
+  return ok('browser upload file and verify completed', {
+    workspace_id: workspace.id,
+    reminder: 'High-level file-upload helper. It sets the file input and verifies the upload is reflected in human-visible page text, avoiding DOM-only false readiness.',
+    profile_label: profile.label,
+    target: targetSummary(target),
+    file: { path: uploadFile.relative, basename: path.basename(uploadFile.absolute), bytes: uploadFile.bytes },
+    verify: runtimeValue(verify)
+  });
+}
+
 export async function browserCdpBrowserCall(workspace: Workspace, method: string, params: Record<string, unknown> = {}, label?: string) {
   assertBrowserControl(workspace);
   const profile = selectedBrowserProfile(workspace, label);
@@ -223,6 +260,33 @@ function matchingTargets(targets: ChromeTarget[], options: BrowserManageTabsOpti
   });
 }
 
+
+
+async function resolveUploadPath(workspace: Workspace, requested: string) {
+  if (path.isAbsolute(requested)) throw new Error('absolute upload paths are not allowed');
+  const joined = path.resolve(workspace.realRoot, requested);
+  const real = await realpath(joined);
+  assertInside(workspace.realRoot, real);
+  const info = await stat(real);
+  if (!info.isFile()) throw new Error('upload path is not a file');
+  return { absolute: real, relative: path.relative(workspace.realRoot, real) || '.', bytes: info.size };
+}
+
+function waitForVisibleTextExpression(text: string, timeoutMs: number) {
+  const payload = JSON.stringify({ text, timeout_ms: timeoutMs }).replace(/</g, '\\u003c');
+  return `(() => new Promise((resolve) => {
+    const opts = ${payload};
+    const started = Date.now();
+    const textOf = (el) => (el?.innerText || el?.textContent || '').replace(/\\s+/g, ' ').trim();
+    const check = () => {
+      const visible_text = textOf(document.body);
+      if (visible_text.includes(opts.text)) { resolve({ ok: true, visible_text_found: opts.text, elapsed_ms: Date.now() - started }); return; }
+      if (Date.now() - started > opts.timeout_ms) { resolve({ ok: false, error: 'visible upload text not found', expected_text: opts.text, elapsed_ms: Date.now() - started }); return; }
+      setTimeout(check, 100);
+    };
+    check();
+  }))()`;
+}
 
 function clickAndWaitExpression(options: BrowserClickAndWaitOptions, timeoutMs: number) {
   const payload = JSON.stringify({
