@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { promisify } from 'node:util';
 import { ok } from '../core/result.js';
 import { platformInfo } from '../core/platform.js';
@@ -57,7 +59,7 @@ export async function cuaDriverStatus(workspace: Workspace) {
 export async function cuaDriverCall(workspace: Workspace, method: string, params: Record<string, unknown> = {}) {
   const readOnly = authorizeCuaMethod(workspace, method);
   const result = await cuaCall(method, sanitizeCuaArgs(params));
-  return ok('cua driver call', { method, read_only: readOnly, result: boundCuaResult(method, result) });
+  return ok('cua driver call', { method, read_only: readOnly, result: await boundCuaResult(workspace, method, result) });
 }
 
 export async function cuaDriverBatch(workspace: Workspace, calls: CuaDriverBatchStep[]) {
@@ -80,7 +82,7 @@ export async function cuaDriverBatch(workspace: Workspace, calls: CuaDriverBatch
     try {
       readOnly = authorizeCuaMethod(workspace, method);
       const result = await cuaCall(method, params);
-      results.push({ index, kind: 'cua_driver', method, read_only: readOnly, result: boundCuaResult(method, result), elapsed_ms: Date.now() - started });
+      results.push({ index, kind: 'cua_driver', method, read_only: readOnly, result: await boundCuaResult(workspace, method, result), elapsed_ms: Date.now() - started });
     } catch (error) {
       results.push({ index, kind: 'cua_driver', method, read_only: readOnly, error: error instanceof Error ? error.message : String(error), elapsed_ms: Date.now() - started });
       break;
@@ -144,10 +146,12 @@ function sanitizeCuaArgs(args: Record<string, unknown>) {
   return JSON.parse(JSON.stringify(args ?? {})) as Record<string, unknown>;
 }
 
-function boundCuaResult(method: string, result: unknown) {
+async function boundCuaResult(workspace: Workspace, method: string, result: unknown) {
   if (method === 'list_windows') return boundWindows(result);
-  if (method === 'screenshot') return boundedScreenshot(result);
-  return result;
+  if (method === 'screenshot') return boundedScreenshot(workspace, result);
+  if (method === 'get_window_state') return boundWindowState(workspace, result);
+  if (method === 'get_agent_cursor_state') return boundCursorState(result);
+  return boundLargeStrings(result);
 }
 
 function boundWindows(data: unknown) {
@@ -156,7 +160,38 @@ function boundWindows(data: unknown) {
   return { current_space_id: payload.current_space_id ?? null, windows, truncated: Array.isArray(payload.windows) && payload.windows.length > windows.length, count: Array.isArray(payload.windows) ? payload.windows.length : windows.length };
 }
 
-function boundedScreenshot(data: unknown) {
+async function boundCursorState(data: unknown) {
+  const bounded = await boundLargeStrings(data) as Record<string, unknown>;
+  const cursors = Array.isArray(bounded.cursors) ? bounded.cursors as Array<Record<string, unknown>> : [];
+  const hasPosition = cursors.some((cursor) => cursor.position && typeof cursor.position === 'object');
+  if (!hasPosition) {
+    const fallback = await getMacCursorPosition();
+    if (fallback) bounded.fallback_position = fallback;
+  }
+  return bounded;
+}
+
+async function getMacCursorPosition() {
+  if (process.platform !== 'darwin') return null;
+  try {
+    const script = 'ObjC.import("AppKit"); const p=$.NSEvent.mouseLocation; const h=$.NSScreen.screens.objectAtIndex(0).frame.size.height; JSON.stringify({x:Math.round(p.x), y:Math.round(h-p.y), mac_y_up:Math.round(p.y), coordinate_system:"screen_top_left"})';
+    const { stdout } = await execFileAsync('/usr/bin/osascript', ['-l', 'JavaScript', '-e', script], { timeout: 5000, maxBuffer: 1024 * 1024 });
+    return JSON.parse(stdout.trim()) as Record<string, unknown>;
+  } catch { return null; }
+}
+
+async function boundWindowState(workspace: Workspace, data: unknown) {
+  return boundLargeStrings(data, async (key, value) => {
+    const lower = key.toLowerCase();
+    if (lower.includes('screenshot') && lower.includes('base64')) {
+      const artifact = await writeBase64ScreenshotArtifact(workspace, value);
+      return { replacement: null, extra: { [`${key}_artifact`]: artifact, [`${key}_omitted`]: `base64 screenshot payload omitted (${value.length} chars > ${MAX_SCREENSHOT_BASE64})` } };
+    }
+    return null;
+  });
+}
+
+async function boundedScreenshot(workspace: Workspace, data: unknown) {
   const payload = data as Record<string, unknown>;
   const copy: Record<string, unknown> = { ...payload };
   for (const [key, value] of Object.entries(copy)) {
@@ -165,7 +200,85 @@ function boundedScreenshot(data: unknown) {
       copy[`${key}_omitted`] = `base64 payload omitted (${value.length} chars > ${MAX_SCREENSHOT_BASE64})`;
     }
   }
+
+  if (!hasScreenshotPayload(copy)) {
+    const artifact = await captureScreenshotArtifact(workspace);
+    if (artifact) {
+      copy.artifact = artifact;
+      copy.note = 'cua-driver returned screenshot metadata only; saved a macOS screencapture artifact instead';
+    }
+  }
   return copy;
+}
+
+function hasScreenshotPayload(value: Record<string, unknown>) {
+  return ['data', 'base64', 'image', 'image_base64', 'bytes', 'path', 'file', 'artifact'].some((key) => typeof value[key] === 'string' && String(value[key]).length > 0);
+}
+
+async function captureScreenshotArtifact(workspace: Workspace) {
+  if (process.platform !== 'darwin') return null;
+  const absolutePath = screenshotArtifactPath(workspace);
+  await ensureScreenshotArtifactDir(absolutePath);
+  await execFileAsync('/usr/sbin/screencapture', ['-x', absolutePath], { timeout: 15000, maxBuffer: 1024 * 1024 });
+  return screenshotArtifact(workspace, absolutePath);
+}
+
+async function writeBase64ScreenshotArtifact(workspace: Workspace, base64: string) {
+  const absolutePath = screenshotArtifactPath(workspace);
+  await ensureScreenshotArtifactDir(absolutePath);
+  await writeFile(absolutePath, Buffer.from(base64, 'base64'));
+  return screenshotArtifact(workspace, absolutePath);
+}
+
+function screenshotArtifactPath(workspace: Workspace) {
+  const dir = path.join(workspace.realAgentDir, 'artifacts', 'screenshots');
+  const filename = `cua-screenshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+  return path.join(dir, filename);
+}
+
+async function ensureScreenshotArtifactDir(absolutePath: string) {
+  await mkdir(path.dirname(absolutePath), { recursive: true });
+}
+
+function screenshotArtifact(workspace: Workspace, absolutePath: string) {
+  return {
+    kind: 'image',
+    format: 'png',
+    path: workspaceRelativePath(workspace, absolutePath),
+    agent_artifact_path: agentRelativePath(workspace, absolutePath)
+  };
+}
+
+async function boundLargeStrings(value: unknown, onLargeString?: (key: string, value: string) => Promise<{ replacement: unknown; extra?: Record<string, unknown> } | null>): Promise<unknown> {
+  if (Array.isArray(value)) return Promise.all(value.map((item) => boundLargeStrings(item, onLargeString)));
+  if (!value || typeof value !== 'object') return value;
+
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof item === 'string' && item.length > MAX_SCREENSHOT_BASE64) {
+      const custom = onLargeString ? await onLargeString(key, item) : null;
+      if (custom) {
+        out[key] = custom.replacement;
+        if (custom.extra) Object.assign(out, custom.extra);
+      } else {
+        out[key] = null;
+        out[`${key}_omitted`] = `string payload omitted (${item.length} chars > ${MAX_SCREENSHOT_BASE64})`;
+      }
+    } else {
+      out[key] = await boundLargeStrings(item, onLargeString);
+    }
+  }
+  return out;
+}
+
+function workspaceRelativePath(workspace: Workspace, absolutePath: string) {
+  const relative = path.relative(workspace.realRoot, absolutePath);
+  return relative && !relative.startsWith('..') && !path.isAbsolute(relative) ? relative : agentRelativePath(workspace, absolutePath);
+}
+
+function agentRelativePath(workspace: Workspace, absolutePath: string) {
+  const relative = path.relative(workspace.realAgentDir, absolutePath);
+  return relative && !relative.startsWith('..') && !path.isAbsolute(relative) ? `.agent/${relative.replaceAll(path.sep, '/')}` : 'artifact';
 }
 
 function clampDelay(value: number) {
