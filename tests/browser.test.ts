@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserStatus, listBrowserProfiles, listBrowserTabs } from '../src/tools/browser.js';
+import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserManageTabs, browserStatus, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../src/tools/browser.js';
 
 describe('browser CDP proxy tools', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -62,6 +62,28 @@ describe('browser CDP proxy tools', () => {
     const data = (await listBrowserTabs(fixtureWorkspace(), undefined, true)).data as any;
     expect(data.urls_included).toBe(true);
     expect(data.targets[0].url).toBe('https://example.com/path?token=secret');
+  });
+
+
+
+  it('returns high-level browser visible state for a page target', async () => {
+    mockFetch([{ id: '1', type: 'page', title: 'Apply', url: 'https://jobs.example/apply', webSocketDebuggerUrl: 'ws://cdp/1' }]);
+    const sends = mockWebSocket({ result: { value: { title: 'Apply', visible_text: 'Uploaded cv.pdf Submit', buttons: [{ text: 'Submit', disabled: false }], file_inputs: [{ files: [{ name: 'cv.pdf' }] }], visible_uploaded_files: ['cv.pdf'], required_missing: [] } } });
+    const data = (await browserVisibleState(fixtureWorkspace(), '1')).data as any;
+    expect(data.state.visible_uploaded_files).toEqual(['cv.pdf']);
+    expect(data.reminder).toContain('human-visible');
+    expect(sends[0]).toContain('Runtime.evaluate');
+  });
+
+  it('manages page tabs without exposing browser UI targets', async () => {
+    mockFetchSequence([
+      [{ id: '1', type: 'page', title: 'Job A', url: 'https://jobs.example/a', webSocketDebuggerUrl: 'ws://cdp/1' }, { id: '2', type: 'page', title: 'Settings', url: 'chrome://settings' }],
+      { webSocketDebuggerUrl: 'ws://cdp/browser' }
+    ]);
+    const sends = mockWebSocket({ ok: true });
+    const data = (await browserManageTabs(controlWorkspace(), { action: 'focus_by_title', title_contains: 'job' })).data as any;
+    expect(data.target.id).toBe('1');
+    expect(sends[0]).toContain('Target.activateTarget');
   });
 
   it('proxies a browser-level CDP call through the scoped browser websocket', async () => {
@@ -137,6 +159,11 @@ function controlWorkspace(overrides: Partial<Workspace> = {}) {
 
 function mockFetch(body: unknown) {
   vi.stubGlobal('fetch', vi.fn(async () => response(body)));
+}
+
+function mockFetchSequence(bodies: unknown[]) {
+  let index = 0;
+  vi.stubGlobal('fetch', vi.fn(async () => response(bodies[Math.min(index++, bodies.length - 1)])));
 }
 
 function response(body: unknown) {

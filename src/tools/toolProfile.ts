@@ -16,7 +16,7 @@ export function toolProfile() {
 
 function canonicalTools(): string[] {
   return [
-    'list_browser_profiles', 'browser_status', 'list_browser_tabs',
+    'list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_manage_tabs',
     'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch',
     'cua_driver_status', 'cua_driver_call', 'cua_driver_batch',
     'workspace_inventory', 'read_file', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
@@ -42,6 +42,10 @@ function apiBehavior() {
       default_poll_after_ms: 5000,
       statuses: ['queued', 'running', 'waiting_for_navigation', 'waiting_for_dom', 'waiting_for_upload', 'waiting_for_user', 'completed', 'blocked_by_login', 'blocked_by_captcha', 'timed_out', 'failed'],
       instruction: 'When a response has api.status=running, wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. Do not retry the original tool call unless the run is missing or explicitly failed.'
+    },
+    browser_semantic_layer: {
+      compact_tools: ['browser_visible_state', 'browser_manage_tabs'],
+      direction: 'Keep browser truth generic and business workflow judgment in repo helpers/scripts.'
     },
     browser_targets: {
       list_browser_tabs_default: 'real page targets only',

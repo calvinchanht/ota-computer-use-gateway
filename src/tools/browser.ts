@@ -36,6 +36,17 @@ type BrowserTargetFilter = {
   include_browser_ui?: boolean;
 };
 
+type BrowserManageTabsAction = 'list_page_tabs_only' | 'focus_by_url' | 'focus_by_title' | 'close_by_filter';
+
+type BrowserManageTabsOptions = {
+  action: BrowserManageTabsAction;
+  url_contains?: string;
+  title_contains?: string;
+  target_id?: string;
+  include_urls?: boolean;
+  max_close?: number;
+};
+
 export async function listBrowserProfiles(workspace: Workspace) {
   const profiles = configuredProfiles(workspace).map((profile, index) => browserProfile(workspace, profile, index));
   return ok(`listed ${profiles.length} browser profiles`, { workspace_id: workspace.id, reminder: REMINDER, profiles });
@@ -73,6 +84,56 @@ export async function listBrowserTabs(workspace: Workspace, label?: string, incl
   });
 }
 
+
+export async function browserVisibleState(workspace: Workspace, targetId: string, label?: string) {
+  assertScreenRead(workspace);
+  const { profile, target } = await websocketTarget(workspace, targetId, label);
+  const result = await cdpCommand<RuntimeEvaluateResult>(target.webSocketDebuggerUrl, 'Runtime.evaluate', {
+    expression: visibleStateExpression(),
+    returnByValue: true,
+    awaitPromise: true
+  });
+  return ok('browser visible state', {
+    workspace_id: workspace.id,
+    reminder: 'High-level visible browser state. Use this to verify what a human-visible page appears to show; do not rely only on DOM mutation state for upload/form readiness.',
+    profile_label: profile.label,
+    target: targetSummary(target),
+    state: boundedVisibleState(runtimeValue(result))
+  });
+}
+
+export async function browserManageTabs(workspace: Workspace, options: BrowserManageTabsOptions, label?: string) {
+  const profile = selectedBrowserProfile(workspace, label);
+  const targets = await fetchCdpJson<ChromeTarget[]>(profile, '/json/list');
+  const pages = targets.filter((target) => targetMatchesFilter(target, normalizeTargetFilter({ type: 'page' })));
+  if (options.action === 'list_page_tabs_only') {
+    return ok(`listed ${pages.length} page tabs`, { workspace_id: workspace.id, profile_label: profile.label, targets: pages.map((target) => targetSummary(target, options.include_urls ?? false)) });
+  }
+
+  assertBrowserControl(workspace);
+  const browserUrl = await browserWebSocketUrl(profile);
+  const matches = matchingTargets(pages, options);
+  if (options.action === 'focus_by_url' || options.action === 'focus_by_title') {
+    const target = matches[0];
+    if (!target) throw new Error('no matching browser tab found');
+    await cdpCommand(browserUrl, 'Target.activateTarget', { targetId: target.id });
+    return ok('focused browser tab', { workspace_id: workspace.id, profile_label: profile.label, action: options.action, target: targetSummary(target, true) });
+  }
+
+  if (options.action === 'close_by_filter') {
+    const limit = Math.min(Math.max(Math.trunc(options.max_close ?? 10), 0), 50);
+    const selected = matches.slice(0, limit);
+    const closed = [];
+    for (const target of selected) {
+      await cdpCommand(browserUrl, 'Target.closeTarget', { targetId: target.id });
+      closed.push(targetSummary(target, true));
+    }
+    return ok(`closed ${closed.length} browser tabs`, { workspace_id: workspace.id, profile_label: profile.label, action: options.action, matched: matches.length, closed });
+  }
+
+  throw new Error(`unsupported browser tab action: ${options.action}`);
+}
+
 export async function browserCdpBrowserCall(workspace: Workspace, method: string, params: Record<string, unknown> = {}, label?: string) {
   assertBrowserControl(workspace);
   const profile = selectedBrowserProfile(workspace, label);
@@ -104,6 +165,90 @@ export async function browserCdpBatch(workspace: Workspace, targetId: string, ca
   const results = [];
   for (let index = 0; index < boundedCalls.length; index++) results.push(await oneCdpBatchCall(target.webSocketDebuggerUrl, boundedCalls[index], index, true));
   return ok('browser CDP batch completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, target: targetSummary(target), results });
+}
+
+
+type RuntimeEvaluateResult = { result?: { value?: unknown } };
+
+function runtimeValue(result: RuntimeEvaluateResult) {
+  return result?.result?.value ?? null;
+}
+
+function boundedVisibleState(value: unknown) {
+  if (!value || typeof value !== 'object') return value;
+  const state = value as Record<string, unknown>;
+  return {
+    ...state,
+    visible_text: typeof state.visible_text === 'string' ? state.visible_text.slice(0, 20000) : state.visible_text
+  };
+}
+
+function matchingTargets(targets: ChromeTarget[], options: BrowserManageTabsOptions) {
+  return targets.filter((target) => {
+    if (options.target_id && target.id !== options.target_id) return false;
+    if (options.url_contains && !(target.url ?? '').includes(options.url_contains)) return false;
+    if (options.title_contains && !(target.title ?? '').toLowerCase().includes(options.title_contains.toLowerCase())) return false;
+    if (!options.target_id && !options.url_contains && !options.title_contains && options.action !== 'list_page_tabs_only') return false;
+    return true;
+  });
+}
+
+function visibleStateExpression() {
+  return `(() => {
+    const textOf = (el) => (el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim();
+    const visible = (el) => {
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+    };
+    const labelFor = (el) => {
+      if (!el) return '';
+      const id = el.id;
+      const labels = [];
+      if (id) document.querySelectorAll('label[for="' + CSS.escape(id) + '"]').forEach((label) => labels.push(textOf(label)));
+      const parent = el.closest('label');
+      if (parent) labels.push(textOf(parent));
+      const aria = el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.getAttribute('name') || '';
+      if (aria) labels.push(aria);
+      return [...new Set(labels.filter(Boolean))].join(' | ').slice(0, 240);
+    };
+    const field = (el) => ({
+      tag: el.tagName.toLowerCase(),
+      type: el.getAttribute('type') || '',
+      name: el.getAttribute('name') || '',
+      id: el.id || '',
+      label: labelFor(el),
+      required: Boolean(el.required || el.getAttribute('aria-required') === 'true'),
+      disabled: Boolean(el.disabled),
+      visible: visible(el),
+      value_present: el.type === 'file' ? Boolean(el.files && el.files.length) : Boolean((el.value || '').trim()),
+      files: el.type === 'file' ? Array.from(el.files || []).map((file) => ({ name: file.name, size: file.size, type: file.type })) : undefined
+    });
+    const controls = Array.from(document.querySelectorAll('input, textarea, select')).filter(visible).slice(0, 200).map(field);
+    const buttons = Array.from(document.querySelectorAll('button, input[type=button], input[type=submit], [role=button]')).filter(visible).slice(0, 100).map((el) => ({ text: textOf(el).slice(0, 160) || el.value || el.getAttribute('aria-label') || '', type: el.getAttribute('type') || '', disabled: Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true') }));
+    const links = Array.from(document.querySelectorAll('a[href]')).filter(visible).slice(0, 100).map((el) => ({ text: textOf(el).slice(0, 160), href: el.href }));
+    const visibleText = textOf(document.body).slice(0, 30000);
+    const fileInputs = controls.filter((item) => item.type === 'file');
+    const filenames = new Set(fileInputs.flatMap((item) => (item.files || []).map((file) => file.name)));
+    const visibleUploadedFiles = Array.from(filenames).filter((name) => visibleText.includes(name));
+    const requiredMissing = controls.filter((item) => item.required && !item.disabled && item.visible && !item.value_present);
+    const errorNodes = Array.from(document.querySelectorAll('[role=alert], .error, .errors, .invalid, [aria-invalid="true"]')).filter(visible).slice(0, 50).map((el) => textOf(el).slice(0, 300)).filter(Boolean);
+    return {
+      url: location.href, title: document.title, ready_state: document.readyState,
+      visible_text: visibleText, buttons, links, controls,
+      required_missing: requiredMissing,
+      checkboxes: controls.filter((item) => item.type === 'checkbox'),
+      selects: controls.filter((item) => item.tag === 'select'),
+      file_inputs: fileInputs,
+      visible_uploaded_files: visibleUploadedFiles,
+      visible_errors: [...new Set(errorNodes)]
+    };
+  })()`;
+}
+
+function assertScreenRead(workspace: Workspace) {
+  if (!workspace.allow_screen && !workspace.allow_read) throw new Error('browser screen/read access is not enabled for this workspace');
 }
 
 async function websocketTarget(workspace: Workspace, targetId: string, label?: string) {

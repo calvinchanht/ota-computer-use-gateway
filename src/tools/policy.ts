@@ -22,7 +22,8 @@ function allowedTools(workspace: Workspace): string[] {
   if (workspace.allow_write) base.push('write_file', 'write_binary_file', 'edit_file', 'delete_file', 'delete_path', 'memory_write', 'record_artifact', 'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread');
   if (workspace.allow_patch) base.push('propose_patch', 'apply_patch');
   if (workspace.allow_tests) base.push('run_command', 'run_configured_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process');
+  if (workspace.allow_screen || workspace.allow_read) base.push('browser_visible_state');
   if (workspace.allow_screen || workspace.allow_mouse_keyboard) base.push('cua_driver_call', 'cua_driver_batch');
-  if (workspace.allow_mouse_keyboard) base.push( 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch');
+  if (workspace.allow_mouse_keyboard) base.push('browser_manage_tabs', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch');
   return base;
 }
