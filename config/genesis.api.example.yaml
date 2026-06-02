@@ -1,39 +1,116 @@
 server:
-  host: "127.0.0.1"
+  host: 127.0.0.1
   port: 8770
   auth:
     enabled: true
-    bearer_token_env: "GENESIS_API_BEARER_TOKEN"
+    bearer_token_env: GENESIS_API_BEARER_TOKEN
     allow_loopback_without_auth: true
   exposed_tools:
-    - heartbeat
-    - workspace_status
-    - get_tool_profile
-    - get_workspace_policy
-    - genesis_bootstrap
-    - genesis_estate_overview
-    - genesis_agent_deep_dive
-    - genesis_host_deep_dive
-    - genesis_safe_diagnostic
-
+  - heartbeat
+  - workspace_status
+  - get_workspace_policy
+  - get_tool_profile
+  - genesis_bootstrap
+  - genesis_estate_overview
+  - genesis_agent_deep_dive
+  - genesis_host_deep_dive
+  - genesis_safe_diagnostic
+  - workspace_inventory
+  - list_dir
+  - stat_path
+  - tree
+  - read_file
+  - read_binary_file
+  - search_files
+  - git_status
+  - git_diff
+  - git_push_current_branch
+  - get_project_context
+  - get_context_snapshot
+  - get_agent_bootstrap
+  - memory_search
+  - list_skills
+  - read_skill
+  - approval_status
+  - list_artifacts
+  - write_file
+  - write_binary_file
+  - edit_file
+  - delete_file
+  - delete_path
+  - memory_write
+  - record_artifact
+  - record_progress
+  - record_decision
+  - record_handoff
+  - update_current_task
+  - checkpoint_thread
+  - propose_patch
+  - apply_patch
+  - run_command
+  - start_process
+  - list_processes
+  - read_process
+  - write_process
+  - stop_process
+  - list_browser_profiles
+  - browser_status
+  - list_browser_tabs
+  - browser_visible_state
+  - browser_manage_tabs
+  - browser_click_and_wait
+  - browser_upload_file_and_verify
+  - browser_cdp_browser_call
+  - browser_cdp_browser_batch
+  - browser_cdp_call
+  - browser_cdp_batch
+  - cua_driver_status
+  - cua_driver_call
+  - cua_driver_batch
+  - run_configured_command
 workspaces:
-  - id: "genesis"
-    name: "Webchat Genesis"
-    root: "/home/genesis/workspace"
-    api_sets:
-      workspace: true
-      browser: true
-      computer: true
-      machine_admin: true
-      estate_admin: true
-    allow_read: true
-    allow_write: false
-    allow_patch: false
-    allow_tests: false
-    allow_screen: false
-    allow_mouse_keyboard: false
-    commands: {}
-
+- id: genesis
+  name: Webchat Genesis
+  root: /home/genesis/workspace
+  api_sets:
+    workspace: true
+    browser: true
+    computer: true
+    machine_admin: true
+    estate_admin: true
+  allow_read: true
+  allow_write: true
+  allow_patch: true
+  allow_tests: true
+  allow_screen: true
+  allow_mouse_keyboard: true
+  commands: {}
+  browser:
+    profiles:
+    - label: genesis
+      user_data_dir: /home/molt/.config/google-chrome-genesis
+      cdp_host: 127.0.0.1
+      cdp_port: 9222
+      display: :20
+      headed: true
+      default: true
+      launch: false
+    - label: genesis2
+      user_data_dir: /home/molt/.config/google-chrome-genesis-2
+      cdp_host: 127.0.0.1
+      cdp_port: 9223
+      display: :20
+      headed: true
+      default: false
+      launch: false
+    - label: genesis3
+      user_data_dir: /home/molt/.config/google-chrome-genesis-3
+      cdp_host: 127.0.0.1
+      cdp_port: 9224
+      display: :20
+      headed: true
+      default: false
+      launch: false
 security:
   max_file_bytes: 200000
   max_response_bytes: 50000
@@ -42,14 +119,14 @@ security:
   max_exec_ms: 120000
   protect_secret_paths: true
   denied_globs:
-    - ".env"
-    - ".env.*"
-    - "**/*.pem"
-    - "**/*.key"
-    - "**/id_rsa"
-    - "**/id_ed25519"
-    - "**/.ssh/**"
-    - "**/.gnupg/**"
-    - "**/.aws/**"
-    - "**/.kube/**"
-    - "**/secrets/**"
+  - .env
+  - .env.*
+  - '**/*.pem'
+  - '**/*.key'
+  - '**/id_rsa'
+  - '**/id_ed25519'
+  - '**/.ssh/**'
+  - '**/.gnupg/**'
+  - '**/.aws/**'
+  - '**/.kube/**'
+  - '**/secrets/**'
