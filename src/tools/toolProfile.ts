@@ -16,6 +16,7 @@ export function toolProfile() {
 
 function canonicalTools(): string[] {
   return [
+    'genesis_bootstrap', 'genesis_estate_overview', 'genesis_agent_deep_dive', 'genesis_host_deep_dive', 'genesis_safe_diagnostic',
     'list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify',
     'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch',
     'cua_driver_status', 'cua_driver_call', 'cua_driver_batch',
@@ -30,6 +31,7 @@ function canonicalTools(): string[] {
 
 function apiBehavior() {
   return {
+    webchat_genesis: { tools: ['genesis_bootstrap', 'genesis_estate_overview', 'genesis_agent_deep_dive', 'genesis_host_deep_dive', 'genesis_safe_diagnostic'], posture: 'read-heavy coarse control-plane reports with hard no-secrets/no-mutation boundaries' },
     run_recovery: 'Every HTTP JSON API tool/batch response includes api.run_id. Use get_gateway_run / GET /api/v1/runs/{run_id} to recover status/results instead of blindly retrying.',
     idempotency: 'For writes, browser actions, commands, checkpoints, and other non-idempotent operations, send a stable idempotency_key so retries do not duplicate work.',
     async_polling: {

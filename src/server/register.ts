@@ -8,6 +8,7 @@ import { registerComputerTools } from './register/computer.js';
 import { registerFileTools } from './register/files.js';
 import { registerGitTools } from './register/git.js';
 import { registerGatewayTools } from './register/gateway.js';
+import { registerGenesisTools } from './register/genesis.js';
 import { registerMemoryTools } from './register/memory.js';
 import { registerPatchTools } from './register/patch.js';
 import { registerProcessTools } from './register/processes.js';
@@ -22,6 +23,7 @@ export function registerTools(server: McpServer, config: AppConfig, workspaces: 
   setToolAnnotationMode(config.server.tool_annotations.mode);
   const context: RegisterContext = { server: filteredServer(server, config), config, workspaces };
   registerGatewayTools(context);
+  registerGenesisTools(context);
   registerWorkspaceTools(context);
   registerArtifactTools(context);
   registerBrowserTools(context);

@@ -1,0 +1,120 @@
+openapi: 3.1.0
+info:
+  title: Webchat Genesis Gateway API Action
+  version: 0.1.0
+  description: |
+    Private Webchat Genesis JSON API Action proof.
+
+    This lane exposes coarse read-only Genesis control-plane reports for webchat agents.
+    It intentionally does not expose secrets, raw arbitrary filesystem access, shell commands,
+    service restarts, external messaging, destructive operations, account/security changes, or
+    primitive-loop computer-use controls.
+
+    Use genesis_bootstrap first, then genesis_estate_overview, then one focused deep-dive or
+    safe diagnostic call. ChatGPT Action confirmation is the normal approval UX for routine
+    read-only calls; hard safety rails are enforced server-side by the available tool set.
+servers:
+  - url: https://genesis-api.unrealize.com
+paths:
+  /api/v1/tool:
+    post:
+      operationId: genesis_gateway_request
+      summary: Run one scoped Webchat Genesis report call.
+      description: Runs one read-only Webchat Genesis tool call. Always pass workspace_id=genesis.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayRequest'
+      responses:
+        '200':
+          description: Gateway tool result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResponse'
+  /api/v1/runs/{run_id}:
+    get:
+      operationId: get_genesis_gateway_run
+      summary: Retrieve a previous Webchat Genesis run.
+      description: Use this after a UI interruption or when a previous response included api.run_id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stored run record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    GatewayRequest:
+      type: object
+      additionalProperties: false
+      required: [tool, arguments]
+      properties:
+        idempotency_key:
+          type: string
+          description: Optional stable retry key.
+        thread:
+          type: object
+          additionalProperties: true
+          description: Explicit thread identity metadata.
+        tool:
+          $ref: '#/components/schemas/GatewayToolName'
+        arguments:
+          $ref: '#/components/schemas/GatewayArguments'
+    GatewayToolName:
+      type: string
+      enum:
+        - genesis_bootstrap
+        - genesis_estate_overview
+        - genesis_agent_deep_dive
+        - genesis_host_deep_dive
+        - genesis_safe_diagnostic
+        - get_tool_profile
+        - get_workspace_policy
+        - workspace_status
+    GatewayArguments:
+      type: object
+      additionalProperties: true
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [genesis]
+        agent:
+          type: string
+          description: Agent id/name for genesis_agent_deep_dive, e.g. catalyst, cortex, boba, hexa.
+        host:
+          type: string
+          description: Host/machine-profile id/name for genesis_host_deep_dive.
+        scope:
+          type: string
+          enum: [estate, agent, host]
+          description: Scope for genesis_safe_diagnostic.
+        target:
+          type: string
+          description: Agent or host target for scoped genesis_safe_diagnostic.
+      description: |
+        Tool-specific arguments. Always include workspace_id=genesis. Prefer coarse reports:
+        genesis_bootstrap, genesis_estate_overview, genesis_agent_deep_dive,
+        genesis_host_deep_dive, genesis_safe_diagnostic. This schema deliberately omits
+        write/exec/browser/file primitive tools.
+    GatewayResponse:
+      type: object
+      additionalProperties: true
