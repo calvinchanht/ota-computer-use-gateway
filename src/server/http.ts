@@ -8,7 +8,7 @@ import { fail, type ToolResult } from '../core/result.js';
 import { heartbeat } from '../tools/heartbeat.js';
 import { workspaceStatus } from '../tools/workspace.js';
 import { toolProfile } from '../tools/toolProfile.js';
-import { workspacePolicy } from '../tools/policy.js';
+import { allowedTools, workspacePolicy } from '../tools/policy.js';
 import { deleteFileTool, deletePathTool, editFileTool, listDir, readBinaryFileTool, readFileTool, statPath, treeTool, workspaceInventory, writeBinaryFileTool, writeFileTool } from '../tools/files.js';
 import { gitDiff, gitStatus } from '../tools/git.js';
 import { genesisAgentDeepDive, genesisBootstrap, genesisEstateOverview, genesisHostDeepDive, genesisSafeDiagnostic } from '../tools/genesis.js';
@@ -339,6 +339,8 @@ async function runApiTool(config: AppConfig, tool: string, args: Record<string, 
     const workspaces = await buildWorkspaces(config);
     const workspaceId = String(args.workspace_id ?? (workspaces.size === 1 ? [...workspaces.keys()][0] : ''));
     workspace = workspaceId ? getWorkspace(workspaces, workspaceId) : null;
+    const exposed = config.server.exposed_tools ?? [];
+    if (exposed.length > 0 && !exposed.includes(tool)) throw new Error(`tool is not exposed by this server: ${tool}`);
     const result = await callApiTool(config, workspaces, workspace, tool, args);
     await audit(workspace, { timestamp: new Date().toISOString(), tool: `api:${tool}`, ok: result.ok, summary: result.summary, duration_ms: Date.now() - started });
     return result;
@@ -355,6 +357,7 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'get_tool_profile') return toolProfile();
   if (!workspace) throw new Error('workspace_id is required');
   if (tool === 'get_workspace_policy') return workspacePolicy(workspace);
+  if (!allowedTools(workspace).includes(tool)) throw new Error(`tool is not exposed by this workspace api_sets profile: ${tool}`);
   if (tool === 'workspace_inventory') return workspaceInventory(config, workspace, optionalNumber(args.max_entries));
   if (tool === 'list_dir') return listDir(config, workspace, String(args.path ?? '.'), optionalNumber(args.max_entries));
   if (tool === 'stat_path') return statPath(config, workspace, requiredString(args.path, 'path'));

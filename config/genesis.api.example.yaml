@@ -20,6 +20,12 @@ workspaces:
   - id: "genesis"
     name: "Webchat Genesis"
     root: "/home/genesis/workspace"
+    api_sets:
+      workspace: true
+      browser: true
+      computer: true
+      machine_admin: true
+      estate_admin: true
     allow_read: true
     allow_write: false
     allow_patch: false

@@ -15,7 +15,15 @@ export const browserSchema = z.object({
   profiles: z.array(browserProfileSchema).default([])
 }).default({ profiles: [] });
 
-export const workspaceSchema = z.object({
+export const apiSetsSchema = z.object({
+  workspace: z.boolean().optional(),
+  browser: z.boolean().optional(),
+  computer: z.boolean().optional(),
+  machine_admin: z.boolean().optional(),
+  estate_admin: z.boolean().optional()
+}).default({});
+
+const workspaceBaseSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   root: z.string().min(1),
@@ -26,9 +34,32 @@ export const workspaceSchema = z.object({
   allow_tests: z.boolean().default(false),
   allow_screen: z.boolean().default(false),
   allow_mouse_keyboard: z.boolean().default(false),
+  api_sets: apiSetsSchema,
   browser: browserSchema,
   commands: z.record(z.string(), z.string()).default({}),
   git: z.object({ github_token_file: z.string().min(1).optional() }).default({})
+});
+
+export const workspaceSchema = workspaceBaseSchema.transform((workspace) => {
+  const sets = workspace.api_sets;
+  const hasSets = Object.keys(sets).length > 0;
+  if (!hasSets) return workspace;
+
+  const next = { ...workspace, api_sets: { ...sets } };
+  if (sets.workspace) {
+    next.allow_read = true;
+    next.allow_write = true;
+    next.allow_patch = true;
+    next.allow_tests = true;
+  }
+  if (sets.browser || sets.computer) {
+    next.allow_screen = true;
+    next.allow_mouse_keyboard = true;
+  }
+  if (sets.machine_admin) {
+    next.allow_tests = true;
+  }
+  return next;
 });
 
 export const authSchema = z.object({

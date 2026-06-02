@@ -19,6 +19,12 @@ workspaces:
     # Set this to Catalyst's actual workspace root on the host running the gateway.
     # Current estate card points to a PersonalVPS Catalyst lane; verify before deploying.
     root: "/absolute/path/to/catalyst/workspace"
+    api_sets:
+      workspace: true
+      browser: true
+      computer: false
+      machine_admin: false
+      estate_admin: false
     allow_read: true
     # Enable writes for continuity/checkpoints and approved workspace edits.
     allow_write: true

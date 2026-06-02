@@ -5,6 +5,7 @@ export function toolProfile() {
     profile: 'mcp_explicit',
     naming: 'descriptive snake_case canonical tool names',
     canonical_tools: canonicalTools(),
+    api_capability_sets: apiCapabilitySets(),
     api_behavior: apiBehavior(),
     tool_async: toolAsync(),
     aliases: aliases(),
@@ -27,6 +28,42 @@ function canonicalTools(): string[] {
     'list_skills', 'read_skill', 'approval_status', 'list_artifacts', 'record_artifact',
     'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread'
   ];
+}
+
+function apiCapabilitySets() {
+  return {
+    model: 'composable_api_sets_not_linear_levels',
+    config_key: 'workspaces[].api_sets',
+    sets: {
+      workspace: {
+        purpose: 'Normal agent workspace operations.',
+        tools: ['workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'write_file', 'edit_file', 'apply_patch', 'run_command', 'start_process', 'get_agent_bootstrap', 'get_project_context', 'list_skills', 'record_progress', 'checkpoint_thread']
+      },
+      browser: {
+        purpose: 'Web/browser automation using preassigned profiles and CDP ports.',
+        tools: ['list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_call', 'browser_cdp_batch']
+      },
+      computer: {
+        purpose: 'Local GUI/computer use; independent from machine administration.',
+        tools: ['cua_driver_status', 'cua_driver_call', 'cua_driver_batch']
+      },
+      machine_admin: {
+        purpose: 'Own-machine/lane management through configured commands/processes and scoped service/config/runbook work.',
+        tools: ['run_configured_command', 'run_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process']
+      },
+      estate_admin: {
+        purpose: 'Cross-agent/cross-host Genesis control-plane reporting and approved estate operations.',
+        tools: ['genesis_bootstrap', 'genesis_estate_overview', 'genesis_agent_deep_dive', 'genesis_host_deep_dive', 'genesis_safe_diagnostic']
+      }
+    },
+    examples: {
+      catalyst: ['workspace', 'browser'],
+      cortex: ['workspace', 'browser', 'machine_admin'],
+      boba: ['workspace', 'browser', 'computer', 'machine_admin'],
+      genesis: ['workspace', 'browser', 'computer', 'machine_admin', 'estate_admin']
+    },
+    policy_flags: ['external_actions', 'destructive_actions', 'secret_return', 'credential_use']
+  };
 }
 
 function apiBehavior() {

@@ -33,6 +33,7 @@ function fixtureWorkspace(): Workspace {
     allow_tests: true,
     allow_screen: true,
     allow_mouse_keyboard: true,
+    api_sets: { workspace: true, browser: true, computer: true, machine_admin: true, estate_admin: true },
     browser: { profiles: [] },
     commands: { test: 'npm test' }
   };

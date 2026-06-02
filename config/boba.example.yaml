@@ -18,6 +18,12 @@ workspaces:
     name: "Boba"
     agent_dir: "/Users/calvinc/.openclaw/workspace/.agent"
     root: "/"
+    api_sets:
+      workspace: true
+      browser: true
+      computer: true
+      machine_admin: true
+      estate_admin: false
     allow_read: true
     allow_write: true
     allow_patch: true
