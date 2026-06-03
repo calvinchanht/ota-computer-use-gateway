@@ -17,6 +17,8 @@ const SCREENSHOT_ARTIFACT_PREFIX = 'cua-screenshot-';
 const SCREENSHOT_PREVIEW_SUFFIX = '-preview.webp';
 const SCREENSHOT_FULL_SUFFIX = '-full.png';
 const SCREENSHOT_WEBP_QUALITY = 85;
+const WINDOW_STATE_ARTIFACT_PREFIX = 'cua-window-state-';
+const WINDOW_STATE_ARTIFACT_SUFFIX = '.md';
 const READ_ONLY_CUA_TOOLS = new Set([
   'check_permissions',
   'list_windows',
@@ -174,7 +176,12 @@ async function boundCursorState(data: unknown) {
   const hasPosition = cursors.some((cursor) => cursor.position && typeof cursor.position === 'object');
   if (!hasPosition) {
     const fallback = await getMacCursorPosition();
-    if (fallback) bounded.fallback_position = fallback;
+    if (fallback) {
+      bounded.position = fallback;
+      bounded.position_source = 'macos_fallback';
+      bounded.fallback_position = fallback;
+      for (const cursor of cursors) if (!cursor.position) cursor.fallback_position = fallback;
+    }
   }
   return bounded;
 }
@@ -194,6 +201,10 @@ async function boundWindowState(workspace: Workspace, data: unknown) {
     if (lower.includes('screenshot') && lower.includes('base64')) {
       const artifact = await writeBase64ScreenshotArtifact(workspace, value);
       return { replacement: null, extra: { [`${key}_artifact`]: artifact, [`${key}_omitted`]: `base64 screenshot payload omitted (${value.length} chars > ${MAX_SCREENSHOT_BASE64})` } };
+    }
+    if (lower === 'tree_markdown' || lower.endsWith('_tree_markdown')) {
+      const artifact = await writeWindowStateTextArtifact(workspace, value);
+      return { replacement: value.slice(0, MAX_SCREENSHOT_BASE64), extra: { [`${key}_artifact`]: artifact, [`${key}_truncated`]: true, [`${key}_omitted`]: `full accessibility tree saved as artifact (${value.length} chars > ${MAX_SCREENSHOT_BASE64})` } };
     }
     return null;
   });
@@ -291,11 +302,23 @@ function screenshotArtifactDir(workspace: Workspace) {
   return path.join(workspace.realAgentDir, 'artifacts', 'screenshots');
 }
 
+function windowStateArtifactDir(workspace: Workspace) {
+  return path.join(workspace.realAgentDir, 'artifacts', 'window-state');
+}
+
 function screenshotArtifactPaths(workspace: Workspace) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const base = `${SCREENSHOT_ARTIFACT_PREFIX}${stamp}`;
   const dir = screenshotArtifactDir(workspace);
   return { full: path.join(dir, `${base}${SCREENSHOT_FULL_SUFFIX}`), preview: path.join(dir, `${base}${SCREENSHOT_PREVIEW_SUFFIX}`) };
+}
+
+async function writeWindowStateTextArtifact(workspace: Workspace, content: string) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const absolutePath = path.join(windowStateArtifactDir(workspace), `${WINDOW_STATE_ARTIFACT_PREFIX}${stamp}${WINDOW_STATE_ARTIFACT_SUFFIX}`);
+  await mkdir(path.dirname(absolutePath), { recursive: true });
+  await writeFile(absolutePath, content);
+  return textArtifact(workspace, absolutePath, 'text/markdown');
 }
 
 async function writeWebpPreview(fullPath: string, previewPath: string) {
@@ -318,6 +341,21 @@ function screenshotArtifactPair(workspace: Workspace, fullPath: string, previewP
     full: screenshotArtifact(workspace, fullPath, 'png'),
     preview: screenshotArtifact(workspace, previewPath, 'webp', { quality: SCREENSHOT_WEBP_QUALITY, scale: 0.5 }),
     default: 'preview'
+  };
+}
+
+function textArtifact(workspace: Workspace, absolutePath: string, mediaType: string, extra: Record<string, unknown> = {}) {
+  const workspacePath = workspaceRelativePath(workspace, absolutePath);
+  const agentPath = agentRelativePath(workspace, absolutePath);
+  return {
+    kind: 'text',
+    format: 'markdown',
+    media_type: mediaType,
+    path: workspacePath,
+    agent_artifact_path: agentPath,
+    url_path: artifactUrlPath(workspace, agentPath),
+    url: artifactUrl(workspace, agentPath),
+    ...extra
   };
 }
 
