@@ -1,4 +1,6 @@
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { readFile, stat } from 'node:fs/promises';
+import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { AppConfig } from '../config/schema.js';
@@ -31,6 +33,7 @@ const API_TOOL_PATH = '/api/v1/tool';
 const API_BATCH_PATH = '/api/v1/batch';
 const API_DEBUG_REQUEST_CONTEXT_PATH = '/api/v1/debug/request_context';
 const API_RUNS_PREFIX = '/api/v1/runs/';
+const API_ARTIFACTS_PREFIX = '/api/v1/artifacts/';
 const MAX_RUN_RECORDS = 200;
 
 type ApiRunRecord = {
@@ -78,6 +81,7 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
   if (requestTooLarge(config, req)) return sendJson(res, 413, { error: 'payload_too_large' });
   if (!isAuthorized(config, req)) return sendAuthError(config, res);
   if (isApiDebugRequestContext(req)) return handleApiDebugRequestContext(req, res);
+  if (isApiArtifactPath(req)) return handleApiArtifact(config, req, res);
   if (isApiRunPath(req)) return handleApiRun(req, res);
   if (isApiTool(req)) return handleApiTool(config, req, res);
   if (isApiBatch(req)) return handleApiBatch(config, req, res);
@@ -110,8 +114,13 @@ function isMcp(req: IncomingMessage): boolean {
 
 function isApi(req: IncomingMessage): boolean {
   const path = req.url?.split('?')[0];
-  return path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || path === API_BATCH_PATH || isApiRunPath(req);
+  return path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || path === API_BATCH_PATH || isApiRunPath(req) || isApiArtifactPath(req);
 }
+
+function isApiArtifactPath(req: IncomingMessage): boolean {
+  return req.url?.split('?')[0]?.startsWith(API_ARTIFACTS_PREFIX) ?? false;
+}
+
 
 function isApiRunPath(req: IncomingMessage): boolean {
   return req.url?.split('?')[0]?.startsWith(API_RUNS_PREFIX) ?? false;
@@ -202,6 +211,59 @@ async function handleApiBatch(config: AppConfig, req: IncomingMessage, res: Serv
   return sendJson(res, 200, attachRun(response, record));
 }
 
+
+async function handleApiArtifact(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method !== 'GET') return sendJson(res, 405, { error: 'method_not_allowed' });
+  const parsed = parseArtifactRequest(req);
+  if (!parsed) return sendJson(res, 400, { ok: false, error: 'invalid_artifact_path' });
+  const workspaces = await buildWorkspaces(config);
+  const workspace = getWorkspace(workspaces, parsed.workspace_id);
+  const resolved = resolveServedArtifactPath(workspace, parsed.artifact_path);
+  if (!resolved) return sendJson(res, 403, { ok: false, error: 'artifact_path_not_allowed' });
+  const info = await stat(resolved).catch(() => null);
+  if (!info?.isFile()) return sendJson(res, 404, { ok: false, error: 'artifact_not_found' });
+  const body = await readFile(resolved);
+  applyCors(res);
+  res.writeHead(200, {
+    'content-type': artifactContentType(resolved),
+    'content-length': String(body.length),
+    'cache-control': 'private, max-age=300, no-transform',
+    'x-content-type-options': 'nosniff'
+  }).end(body);
+}
+
+function parseArtifactRequest(req: IncomingMessage): { workspace_id: string; artifact_path: string } | null {
+  const rawPath = req.url?.split('?')[0] ?? '';
+  const rest = rawPath.slice(API_ARTIFACTS_PREFIX.length);
+  const slash = rest.indexOf('/');
+  if (slash <= 0) return null;
+  const workspaceId = decodeURIComponent(rest.slice(0, slash));
+  const artifactPath = decodeURIComponent(rest.slice(slash + 1));
+  if (!workspaceId || !artifactPath) return null;
+  return { workspace_id: workspaceId, artifact_path: artifactPath };
+}
+
+function resolveServedArtifactPath(workspace: Workspace, artifactPath: string): string | null {
+  const normalized = path.posix.normalize(artifactPath.replaceAll('\\', '/'));
+  if (normalized.startsWith('../') || normalized === '..' || path.isAbsolute(normalized)) return null;
+  if (!normalized.startsWith('.agent/artifacts/')) return null;
+  const relativeToAgent = normalized.slice('.agent/'.length);
+  const absolute = path.resolve(workspace.realAgentDir, relativeToAgent);
+  const artifactsRoot = path.resolve(workspace.realAgentDir, 'artifacts');
+  const rel = path.relative(artifactsRoot, absolute);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  return absolute;
+}
+
+function artifactContentType(filename: string): string {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.json')) return 'application/json';
+  if (lower.endsWith('.txt') || lower.endsWith('.log')) return 'text/plain; charset=utf-8';
+  return 'application/octet-stream';
+}
 
 function handleApiRun(req: IncomingMessage, res: ServerResponse): void {
   if (req.method !== 'GET') return sendJson(res, 405, { error: 'method_not_allowed' });
