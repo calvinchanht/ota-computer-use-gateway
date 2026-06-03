@@ -8,11 +8,18 @@ export function workspacePolicy(workspace: Workspace) {
     root_label: 'configured workspace root',
     api_sets: resolvedApiSets(workspace),
     api_set_notes: {
-      workspace: 'Scoped workspace files, artifacts, context, skills, bounded commands/processes, and async run recovery.',
+      workspace: 'OpenClaw-like workspace agent primitives: scoped files, tmp cleanup/delete, artifacts, context, skills, bounded run_command/processes, git/context helpers, and async run recovery.',
       browser: 'Preassigned browser profiles/ports plus CDP-backed tabs, visible state, click/wait, and upload verification.',
       computer: 'Local GUI/computer-use via Cua Driver: screenshots, windows, accessibility tree, mouse, keyboard, and local app control.',
-      machine_admin: 'Own machine/lane management through configured commands/process tools; service/config/tunnel work must stay scoped to the assigned machine.',
+      machine_admin: 'Host/lane administration and configured operations such as run_configured_command, services, config, tunnels, and deployment workflows. This is separate from normal workspace exec.',
       estate_admin: 'Cross-agent/cross-host Genesis control-plane reports/diagnostics and approved estate runbook operations.'
+    },
+    policy_model: {
+      principle: 'Webchat agents should not be weaker than OpenClaw agents when a capability set is enabled; safety wraps powerful primitives instead of replacing them with toy actions.',
+      workspace_exec: 'Bounded run_command/start_process/read_process/write_process/stop_process are normal workspace-agent primitives when workspace or allow_tests is enabled.',
+      workspace_delete: 'delete_file/delete_path are normal scoped workspace editing tools, suitable for tmp cleanup and routine file management. Irreversible or out-of-scope destructive workflows remain stop-boundary events.',
+      machine_admin: 'run_configured_command and service/tunnel/host administration are machine_admin, not ordinary workspace execution.',
+      provider_prompts: 'Provider-side confirmation prompts are intentionally minimized for routine scoped workspace/browser/computer work; stop boundaries describe when the agent must pause for Calvin.'
     },
     allowed_tools: allowedTools(workspace),
     blocked_tools: ['mouse_click', 'keyboard_type'],
@@ -20,7 +27,7 @@ export function workspacePolicy(workspace: Workspace) {
     // Routine scoped workspace/computer tools are intentionally not listed as requiring
     // per-call approval; external/irreversible actions are handled by stop boundaries.
     requires_approval: [],
-    stop_boundaries: ['captcha_or_human_verification', 'credential_or_secret_use', 'external_messages_or_email', 'payments_or_terms_acceptance', 'third_party_uploads_or_submissions', 'irreversible_or_destructive_actions']
+    stop_boundaries: ['captcha_or_human_verification', 'credential_or_secret_use_or_secret_exfiltration', 'external_messages_email_chat_or_public_posts', 'third_party_uploads_or_form_submissions', 'payments_purchases_or_terms_acceptance', 'account_security_settings_or_identity_verification', 'irreversible_or_out_of_scope_destructive_actions']
   });
 }
 
