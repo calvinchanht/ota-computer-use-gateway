@@ -323,13 +323,14 @@ function screenshotArtifactPair(workspace: Workspace, fullPath: string, previewP
 
 function screenshotArtifact(workspace: Workspace, absolutePath: string, format: 'png' | 'webp', extra: Record<string, unknown> = {}) {
   const workspacePath = workspaceRelativePath(workspace, absolutePath);
+  const agentPath = agentRelativePath(workspace, absolutePath);
   return {
     kind: 'image',
     format,
     path: workspacePath,
-    agent_artifact_path: agentRelativePath(workspace, absolutePath),
-    url_path: artifactUrlPath(workspace, workspacePath),
-    url: artifactUrl(workspace, workspacePath),
+    agent_artifact_path: agentPath,
+    url_path: artifactUrlPath(workspace, agentPath),
+    url: artifactUrl(workspace, agentPath),
     ...extra
   };
 }
