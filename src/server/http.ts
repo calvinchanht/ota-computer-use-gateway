@@ -319,15 +319,23 @@ async function handleQuotaSaverApiTool(config: AppConfig, res: ServerResponse, t
   return sendJson(res, 202, attachRun(record.response, record));
 }
 
-function shouldUseQuotaSaver(tool: string, args: Record<string, unknown>): boolean {
+export function shouldUseQuotaSaver(tool: string, args: Record<string, unknown>): boolean {
   const mode = optionalString(args.async_mode) ?? optionalString(args.browser_async_mode);
   if (mode === 'off' || mode === 'sync') return false;
-  return mode === 'quota_saver' || (mode === undefined && (tool.startsWith('browser_cdp') || tool.startsWith('cua_driver_')) && tool !== 'cua_driver_status');
+  return mode === 'quota_saver' || (mode === undefined && defaultQuotaSaverTool(tool));
+}
+
+function defaultQuotaSaverTool(tool: string): boolean {
+  if (tool === 'run_command' || tool === 'search_files') return true;
+  if (tool === 'cua_driver_status') return false;
+  return tool.startsWith('browser_cdp') || tool.startsWith('cua_driver_');
 }
 
 function initialWaitReason(tool: string): string {
   if (tool.startsWith('browser_cdp')) return 'waiting_for_browser';
   if (tool.startsWith('cua_driver')) return 'waiting_for_computer';
+  if (tool === 'search_files') return 'searching_workspace';
+  if (tool === 'run_command') return 'running_command';
   return 'running';
 }
 
@@ -469,7 +477,7 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'read_file_lines') return readFileLinesLarge(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.start_line) ?? 1, optionalNumber(args.max_lines) ?? 200);
   if (tool === 'read_around') return readAround(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.line) ?? 1, optionalNumber(args.before) ?? 10, optionalNumber(args.after) ?? 20);
   if (tool === 'search_file') return searchFile(config, workspace, requiredString(args.path, 'path'), requiredString(args.query, 'query'), optionalNumber(args.max_matches) ?? 50, optionalNumber(args.context_lines) ?? 0);
-  if (tool === 'search_files') return searchFiles(config, workspace, optionalString(args.root) ?? '.', requiredString(args.query, 'query'), optionalString(args.glob) ?? '**/*', optionalNumber(args.max_matches) ?? 50, optionalNumber(args.context_lines) ?? 0);
+  if (tool === 'search_files') return searchFiles(config, workspace, optionalString(args.root) ?? optionalString(args.path) ?? '.', requiredString(args.query, 'query'), optionalString(args.glob) ?? '**/*', optionalNumber(args.max_matches) ?? 50, optionalNumber(args.context_lines) ?? 0);
   if (tool === 'table_profile') return tableProfile(config, workspace, requiredString(args.path, 'path'), optionalStringArray(args.columns));
   if (tool === 'query_table') return queryTable(config, workspace, requiredString(args.path, 'path'), optionalStringArray(args.select), recordArg(args.where, 'where'), arrayRecordArg(args.sort, 'sort'), optionalNumber(args.limit) ?? 100, optionalNumber(args.offset) ?? 0);
   if (tool === 'query_table_aggregate') return queryTableAggregate(config, workspace, requiredString(args.path, 'path'), optionalStringArray(args.group_by), arrayRecordArg(args.metrics, 'metrics') ?? [{ op: 'count' }], recordArg(args.where, 'where'));

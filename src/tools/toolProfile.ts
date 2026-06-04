@@ -102,7 +102,8 @@ function toolAsync() {
     browser_cdp_batch: quotaSaverAsync(),
     cua_driver_call: quotaSaverAsync('Cua Driver'),
     cua_driver_batch: quotaSaverAsync('Cua Driver'),
-    run_command: { may_return_running: false, note: 'Bounded argv command currently returns synchronously through the HTTP JSON API; still use api.run_id for recovery.' },
+    search_files: quotaSaverAsync('workspace search'),
+    run_command: quotaSaverAsync('workspace command'),
     get_gateway_run: { may_return_running: false, note: 'Poll/recovery endpoint for prior HTTP JSON API run_id values.' }
   };
 }
