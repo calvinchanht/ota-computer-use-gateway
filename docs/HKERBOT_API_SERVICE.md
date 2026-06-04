@@ -36,6 +36,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/home/molt/ota-computer-use-gateway
 EnvironmentFile=/home/molt/hkerbot/workspace/secrets/hkerbot-api.env
+Environment=PATH=/home/molt/.nvm/versions/node/v22.22.2/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
 ExecStart=/home/molt/.nvm/versions/node/v22.22.2/bin/node /home/molt/ota-computer-use-gateway/dist/index.js --config /home/molt/ota-computer-use-gateway/config/hkerbot.api.local.yaml --transport http
 Restart=always
 RestartSec=3
@@ -103,3 +104,26 @@ journalctl --user -u hkerbot-api-http.service --since '15 minutes ago' --no-page
 ## Why this exists
 
 A previous deploy left the service inactive and started the gateway manually. During later deploys, HKerBot observed 502 responses because the origin was briefly unavailable or port binding collided. Systemd ownership makes failures visible and restartable.
+
+
+## Bounded commands need Node on PATH
+
+HKerBot runbook/script validation often uses commands such as:
+
+```bash
+node --check scripts/example.js
+```
+
+The gateway service runs under systemd, which does not automatically inherit interactive shell or nvm PATH setup. Keep the nvm Node directory in the unit `PATH` so bounded `run_command` calls can find `node` and `npm`.
+
+Smoke check:
+
+```bash
+npm run cli -- tool run_command ... 'command -v node && node --version'
+```
+
+Expected node path:
+
+```text
+/home/molt/.nvm/versions/node/v22.22.2/bin/node
+```
