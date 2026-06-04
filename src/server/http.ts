@@ -200,17 +200,64 @@ async function handleApiBatch(config: AppConfig, req: IncomingMessage, res: Serv
   const existing = existingRun(idempotencyKey);
   if (existing) return sendJson(res, 200, existing.response);
   const steps = parseApiBatchRequest(parsedBody).steps.slice(0, 20);
+  const thread = safeBodyThread(parsedBody);
+  if (shouldUseQuotaSaverBatch(steps)) return handleQuotaSaverApiBatch(config, res, steps, idempotencyKey, thread, parsedBody);
+  const result = await runApiBatchSteps(config, steps);
+  const response = { ...result, api: { transport: 'http-json', thread } };
+  const record = storeApiRun({ kind: 'batch', ok: result.ok, summary: response.summary, response, idempotency_key: idempotencyKey, request: { steps: steps.map((step) => ({ tool: step.tool })), thread } });
+  return sendJson(res, 200, attachRun(response, record));
+}
+
+
+
+async function handleQuotaSaverApiBatch(config: AppConfig, res: ServerResponse, steps: Array<{ tool: string; arguments?: Record<string, unknown> }>, idempotencyKey: string | undefined, thread: unknown, body: unknown): Promise<void> {
+  const initialWaitMs = boundedAsyncWaitMs(batchOptionalNumber(steps, 'initial_wait_ms') ?? batchOptionalNumber(steps, 'sync_wait_ms') ?? 5000);
+  const pollAfterMs = boundedPollAfterMs(batchOptionalNumber(steps, 'poll_after_ms') ?? 5000);
+  const promise = runApiBatchSteps(config, steps);
+  const result = await promiseWithTimeout(promise, initialWaitMs);
+  if (result) {
+    const response = { ...result, api: { transport: 'http-json', thread, async_mode: 'quota_saver', completed_within_initial_wait_ms: initialWaitMs } };
+    const record = storeApiRun({ kind: 'batch', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { steps: steps.map((step) => ({ tool: step.tool })), thread } });
+    return sendJson(res, 200, attachRun(response, record));
+  }
+
+  const record = storeRunningApiRun({
+    kind: 'batch',
+    ok: true,
+    summary: `running batch; poll get_gateway_run after ${pollAfterMs}ms`,
+    response: {
+      ok: true,
+      summary: `running batch; poll get_gateway_run after ${pollAfterMs}ms`,
+      data: { status: 'running', operation_status: 'running', next_poll_after_ms: pollAfterMs, poll_after_ms: pollAfterMs, instruction: 'Call get_gateway_run after poll_after_ms. Do not retry the original batch.' },
+      api: { transport: 'http-json', thread: safeBodyThread(body), async_mode: 'quota_saver', status: 'running', operation_status: 'running', wait_reason: 'running_batch', poll_after_ms: pollAfterMs, next_poll_after_ms: pollAfterMs }
+    },
+    idempotency_key: idempotencyKey,
+    request: { steps: steps.map((step) => ({ tool: step.tool })), thread }
+  });
+  promise.then((finished) => completeApiRun(record.run_id, finished, { transport: 'http-json', thread, async_mode: 'quota_saver' })).catch((error) => completeApiRun(record.run_id, fail(error instanceof Error ? error.message : String(error)), { transport: 'http-json', thread, async_mode: 'quota_saver' }));
+  return sendJson(res, 202, attachRun(record.response, record));
+}
+
+async function runApiBatchSteps(config: AppConfig, steps: Array<{ tool: string; arguments?: Record<string, unknown> }>): Promise<ToolResult> {
   const results = [];
   for (let index = 0; index < steps.length; index++) {
     const step = steps[index];
     results.push({ index, tool: step.tool, result: await runApiTool(config, step.tool, step.arguments ?? {}) });
   }
-  const ok = results.every((step) => step.result.ok);
-  const response = { ok, summary: `completed ${results.length} API batch steps`, data: { results }, api: { transport: 'http-json', thread: safeBodyThread(parsedBody) } };
-  const record = storeApiRun({ kind: 'batch', ok, summary: response.summary, response, idempotency_key: idempotencyKey, request: { steps: steps.map((step) => ({ tool: step.tool })), thread: safeBodyThread(parsedBody) } });
-  return sendJson(res, 200, attachRun(response, record));
+  return { ok: results.every((step) => step.result.ok), summary: `completed ${results.length} API batch steps`, data: { results }, truncated: false, warnings: [] };
 }
 
+function shouldUseQuotaSaverBatch(steps: Array<{ tool: string; arguments?: Record<string, unknown> }>): boolean {
+  return steps.some((step) => shouldUseQuotaSaver(step.tool, step.arguments ?? {}));
+}
+
+function batchOptionalNumber(steps: Array<{ arguments?: Record<string, unknown> }>, key: string): number | undefined {
+  for (const step of steps) {
+    const value = optionalNumber(step.arguments?.[key]);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
 
 async function handleApiArtifact(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'GET') return sendJson(res, 405, { error: 'method_not_allowed' });
