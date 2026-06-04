@@ -1,0 +1,19 @@
+[Unit]
+Description=HKerBot webchat API gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/molt/ota-computer-use-gateway
+EnvironmentFile=/home/molt/hkerbot/workspace/secrets/hkerbot-api.env
+ExecStart=/home/molt/.nvm/versions/node/v22.22.2/bin/node /home/molt/ota-computer-use-gateway/dist/index.js --config /home/molt/ota-computer-use-gateway/config/hkerbot.api.local.yaml --transport http
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=60
+StartLimitBurst=10
+TimeoutStopSec=20
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=default.target
