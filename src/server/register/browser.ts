@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../../tools/browser.js';
+import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../../tools/browser.js';
 import { READ_ONLY, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -9,6 +9,7 @@ export function registerBrowserTools(context: RegisterContext): void {
   registerBrowserStatus(context);
   registerListBrowserTabs(context);
   registerBrowserVisibleState(context);
+  registerBrowserTail(context);
   registerBrowserManageTabs(context);
   registerBrowserClickAndWait(context);
   registerBrowserUploadFileAndVerify(context);
@@ -45,6 +46,16 @@ function registerBrowserVisibleState({ server, workspaces }: RegisterContext): v
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
     annotations: READ_ONLY
   }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_visible_state', (workspace) => browserVisibleState(workspace, args.target_id, args.profile_label)));
+}
+
+function registerBrowserTail({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_tail', {
+    title: 'Browser tail',
+    description: 'Return cursor-based visible browser deltas for a page target: URL/title/busy state and visible text delta since the prior cursor.',
+    inputSchema: { ...profileSchema(), target_id: z.string(), cursor: z.number().optional() },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+    annotations: READ_ONLY
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_tail', (workspace) => browserTail(workspace, args.target_id, args.cursor, args.profile_label)));
 }
 
 function registerBrowserManageTabs({ server, workspaces }: RegisterContext): void {

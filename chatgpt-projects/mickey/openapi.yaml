@@ -120,7 +120,7 @@ components:
           $ref: '#/components/schemas/ThreadContext'
         tool:
           type: string
-          enum: [heartbeat, workspace_status, get_tool_profile, list_dir, read_file, git_status, git_diff, run_command, start_process, list_processes, read_process, write_process, stop_process]
+          enum: [heartbeat, workspace_status, get_tool_profile, list_dir, read_file, git_status, git_diff, run_command, start_process, list_processes, read_process, write_process, stop_process, browser_status, list_browser_tabs, browser_visible_state, browser_tail]
         arguments:
           type: object
           additionalProperties: true
@@ -134,7 +134,7 @@ components:
       properties:
         tool:
           type: string
-          enum: [heartbeat, workspace_status, get_tool_profile, list_dir, read_file, git_status, git_diff, run_command, start_process, list_processes, read_process, write_process, stop_process]
+          enum: [heartbeat, workspace_status, get_tool_profile, list_dir, read_file, git_status, git_diff, run_command, start_process, list_processes, read_process, write_process, stop_process, browser_status, list_browser_tabs, browser_visible_state, browser_tail]
         arguments:
           type: object
           additionalProperties: true

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../src/tools/browser.js';
+import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../src/tools/browser.js';
 
 describe('browser CDP proxy tools', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -76,6 +76,25 @@ describe('browser CDP proxy tools', () => {
     expect(data.state.visible_uploaded_files).toEqual(['cv.pdf']);
     expect(data.reminder).toContain('human-visible');
     expect(sends[0]).toContain('Runtime.evaluate');
+  });
+
+  it('returns cursor-based visible browser deltas', async () => {
+    mockFetchSequence([
+      [{ id: '1', type: 'page', title: 'Apply', url: 'https://jobs.example/apply', webSocketDebuggerUrl: 'ws://cdp/1' }],
+      [{ id: '1', type: 'page', title: 'Apply', url: 'https://jobs.example/apply', webSocketDebuggerUrl: 'ws://cdp/1' }]
+    ]);
+    mockWebSocketSequence([
+      { result: { value: { url: 'https://jobs.example/apply', title: 'Apply', visible_text: 'alpha', busy: true } } },
+      { result: { value: { url: 'https://jobs.example/apply', title: 'Apply', visible_text: 'alphabeta', busy: false } } }
+    ]);
+    const first = (await browserTail(fixtureWorkspace(), '1')).data as any;
+    const second = (await browserTail(fixtureWorkspace(), '1', first.next_cursor)).data as any;
+    expect(first.tail_supported).toBe(true);
+    expect(first.delta.text_delta).toBe('alpha');
+    expect(second.cursor).toBe(first.next_cursor);
+    expect(second.delta.text_delta).toBe('beta');
+    expect(second.delta.busy_changed).toBe(true);
+    expect(second.delta.busy).toBe(false);
   });
 
   it('manages page tabs without exposing browser UI targets', async () => {

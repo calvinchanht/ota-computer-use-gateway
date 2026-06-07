@@ -56,7 +56,7 @@ export function allowedTools(workspace: Workspace): string[] {
   if (sets.workspace || workspace.allow_patch) base.push('propose_patch', 'apply_patch');
   if (sets.workspace || workspace.allow_tests) base.push('run_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process');
 
-  if (sets.browser) base.push('list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch');
+  if (sets.browser) base.push('list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch');
   if (sets.computer) base.push('cua_driver_status', 'cua_driver_call', 'cua_driver_batch');
   if (sets.machine_admin) base.push('run_configured_command');
 

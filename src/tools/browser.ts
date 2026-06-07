@@ -69,6 +69,18 @@ type BrowserUploadFileOptions = {
   timeout_ms?: number;
 };
 
+type BrowserTailSnapshot = {
+  cursor: number;
+  captured_at: string;
+  url?: string;
+  title?: string;
+  visible_text: string;
+  busy: boolean;
+};
+
+const browserTailSnapshots = new Map<string, BrowserTailSnapshot>();
+let browserTailCursor = 0;
+
 export async function listBrowserProfiles(workspace: Workspace) {
   const profiles = configuredProfiles(workspace).map((profile, index) => browserProfile(workspace, profile, index));
   return ok(`listed ${profiles.length} browser profiles`, { workspace_id: workspace.id, reminder: REMINDER, profiles });
@@ -121,6 +133,35 @@ export async function browserVisibleState(workspace: Workspace, targetId: string
     profile_label: profile.label,
     target: targetSummary(target),
     state: boundedVisibleState(runtimeValue(result))
+  });
+}
+
+export async function browserTail(workspace: Workspace, targetId: string, cursor?: number, label?: string) {
+  assertScreenRead(workspace);
+  const { profile, target } = await websocketTarget(workspace, targetId, label);
+  const result = await cdpCommand<RuntimeEvaluateResult>(target.webSocketDebuggerUrl, 'Runtime.evaluate', {
+    expression: browserTailExpression(),
+    returnByValue: true,
+    awaitPromise: true
+  });
+  const state = browserTailSnapshot(runtimeValue(result));
+  const previous = cursor === undefined ? undefined : browserTailSnapshots.get(browserTailKey(workspace.id, profile.label, targetId, cursor));
+  const nextCursor = ++browserTailCursor;
+  const captured_at = new Date().toISOString();
+  const snapshot: BrowserTailSnapshot = { cursor: nextCursor, captured_at, url: state.url, title: state.title, visible_text: state.visible_text, busy: state.busy };
+  browserTailSnapshots.set(browserTailKey(workspace.id, profile.label, targetId, nextCursor), snapshot);
+  pruneBrowserTailSnapshots();
+  return ok('browser tail', {
+    workspace_id: workspace.id,
+    profile_label: profile.label,
+    target: targetSummary(target),
+    tail_supported: true,
+    cursor: cursor ?? 0,
+    next_cursor: nextCursor,
+    captured_at,
+    state: { url: state.url, title: state.title, busy: state.busy, visible_text_length: state.visible_text.length },
+    delta: browserTailDelta(previous, snapshot),
+    note: 'Pass cursor=next_cursor on the next browser_tail call to receive only URL/title/busy/text deltas.'
   });
 }
 
@@ -250,6 +291,48 @@ function boundedVisibleState(value: unknown) {
   };
 }
 
+function browserTailSnapshot(value: unknown): Omit<BrowserTailSnapshot, 'cursor' | 'captured_at'> {
+  const state = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return {
+    url: typeof state.url === 'string' ? state.url : undefined,
+    title: typeof state.title === 'string' ? state.title : undefined,
+    visible_text: typeof state.visible_text === 'string' ? state.visible_text.slice(0, 50000) : '',
+    busy: Boolean(state.busy)
+  };
+}
+
+function browserTailDelta(previous: BrowserTailSnapshot | undefined, next: BrowserTailSnapshot) {
+  if (!previous) return { initial: true, url_changed: true, title_changed: true, busy_changed: true, text_delta: next.visible_text.slice(0, 20000), text_delta_truncated: next.visible_text.length > 20000 };
+  const textDelta = next.visible_text.startsWith(previous.visible_text) ? next.visible_text.slice(previous.visible_text.length) : next.visible_text;
+  return {
+    initial: false,
+    url_changed: previous.url !== next.url,
+    title_changed: previous.title !== next.title,
+    busy_changed: previous.busy !== next.busy,
+    url: previous.url !== next.url ? next.url : undefined,
+    title: previous.title !== next.title ? next.title : undefined,
+    busy: previous.busy !== next.busy ? next.busy : undefined,
+    text_delta: textDelta.slice(0, 20000),
+    text_delta_truncated: textDelta.length > 20000,
+    text_replaced: !next.visible_text.startsWith(previous.visible_text)
+  };
+}
+
+function browserTailKey(workspaceId: string, profileLabel: string, targetId: string, cursor: number): string {
+  return `${workspaceId}:${profileLabel}:${targetId}:${cursor}`;
+}
+
+function pruneBrowserTailSnapshots(): void {
+  const maxEntries = 200;
+  if (browserTailSnapshots.size <= maxEntries) return;
+  const remove = browserTailSnapshots.size - maxEntries;
+  let count = 0;
+  for (const key of browserTailSnapshots.keys()) {
+    browserTailSnapshots.delete(key);
+    if (++count >= remove) break;
+  }
+}
+
 function matchingTargets(targets: ChromeTarget[], options: BrowserManageTabsOptions) {
   return targets.filter((target) => {
     if (options.target_id && target.id !== options.target_id) return false;
@@ -337,6 +420,25 @@ function clickAndWaitExpression(options: BrowserClickAndWaitOptions, timeoutMs: 
     };
     setTimeout(check, 100);
   }))()`;
+}
+
+function browserTailExpression() {
+  return `(() => {
+    const textOf = (el) => (el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim();
+    const busySelectors = [
+      '[aria-busy="true"]',
+      '[data-testid*="stop" i]',
+      'button[aria-label*="Stop" i]',
+      'button[aria-label*="Cancel" i]',
+      '.result-streaming'
+    ];
+    return {
+      url: location.href,
+      title: document.title,
+      visible_text: textOf(document.body).slice(0, 50000),
+      busy: busySelectors.some((selector) => Boolean(document.querySelector(selector)))
+    };
+  })()`;
 }
 
 function visibleStateExpression() {
