@@ -69,7 +69,7 @@ export async function listenHttp(config: AppConfig): Promise<void> {
 
   installShutdownHooks(httpServer);
   httpServer.listen(config.server.port, config.server.host, () => {
-    console.error(`OTA gateway MCP HTTP listening on http://${config.server.host}:${config.server.port}${MCP_PATH}`);
+    console.error(`OTA gateway HTTP API listening on http://${config.server.host}:${config.server.port}/api/v1/tool; compatibility transport at ${MCP_PATH}`);
   });
 }
 
@@ -97,7 +97,7 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
     if (parsedBody) logMcpMethods(parsedBody);
     await transport.handleRequest(req, res, parsedBody);
   } catch (error) {
-    console.error('MCP HTTP request failed', error);
+    console.error('compatibility transport request failed', error);
     if (!res.headersSent) sendJson(res, 500, { error: 'mcp_request_failed' });
     else res.end();
   } finally {
@@ -166,7 +166,7 @@ function logMcpMethods(body: unknown): void {
   const methods = messages
     .map((message) => (message && typeof message === 'object' && 'method' in message ? String((message as { method?: unknown }).method) : null))
     .filter(Boolean);
-  if (methods.length > 0) console.error(`MCP HTTP methods: ${methods.join(',')}`);
+  if (methods.length > 0) console.error(`compatibility transport methods: ${methods.join(',')}`);
 }
 
 function sendCors(res: ServerResponse): void {
