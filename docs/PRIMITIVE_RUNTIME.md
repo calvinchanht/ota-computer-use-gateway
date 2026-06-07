@@ -142,3 +142,28 @@ These are intentionally outside issue #3 and tracked separately:
 - browser/computer observe-act primitives — issue #6;
 - deeper policy/approval/audit/redaction hardening — issue #9;
 - ChatGPT connector/session ergonomics and richer output schemas — issue #10.
+
+## Long-running command/browser observation discipline
+
+Prefer cursor-tail tools for long-running work:
+
+```text
+run_command(tail=true) -> read_process(cursor=previous next_cursor)
+start_process -> read_process(cursor=previous next_cursor)
+browser_tail(cursor=previous next_cursor)
+```
+
+`run_command` without `tail=true` remains the compatibility path for short bounded commands. For tests/builds/watchers or browser observation, cursor-tail avoids blind polling and repeated full-state dumps.
+
+Managed process lifecycle hardening:
+
+- managed `start_process` and `run_command(tail=true)` commands launch in their own process group;
+- `stop_process` and HTTP API shutdown signal the process group, not just the shell parent;
+- shutdown escalates from `SIGTERM` to `SIGKILL` if children do not exit;
+- after a kill request, API process records report `running=false` and `stopping=true` until the OS close event finalizes `exit_code`.
+
+Service restart discipline:
+
+- API services should use `KillMode=control-group`, `TimeoutStopSec=8`, and `SendSIGKILL=yes` so untracked descendants do not remain in the service cgroup.
+- Do not restart an API service through a `run_command` currently executing inside that same service. The active request will be killed and in-memory run records can disappear. Use an external lane/service/shell for restarts.
+- Browser processes launched through helpers that switch users, for example a `sudo -u molt` Chrome launch from a Genesis-owned service, may not be killable by the Genesis user service. Prefer launching long-lived browsers through their own service/user lane, or clean the exact browser profile explicitly.
