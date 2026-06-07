@@ -1,4 +1,5 @@
 import type { Server } from 'node:http';
+import { shutdownManagedProcesses } from '../core/processManager.js';
 
 type Closeable = { close(): Promise<void> };
 type Logger = Pick<typeof console, 'error'>;
@@ -14,6 +15,8 @@ export function installShutdownHooks(server: Server, transport?: Closeable, logg
     if (closing) return;
     closing = true;
     logger.error(`Received ${signal}; shutting down HTTP API server...`);
+    const managed = await shutdownManagedProcesses();
+    if (managed.signaled || managed.forced) logger.error(`Stopped managed child processes: signaled=${managed.signaled} forced=${managed.forced}`);
     await closeHttpServer(server);
     if (transport) await transport.close();
   };

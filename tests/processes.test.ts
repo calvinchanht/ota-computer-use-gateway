@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { processKill, processList, processLog, processStart, processWrite } from '../src/tools/processes.js';
+import { shutdownManagedProcesses } from '../src/core/processManager.js';
 import { runArgvTailTool } from '../src/tools/runCommand.js';
 import type { AppConfig } from '../src/config/schema.js';
 import type { Workspace } from '../src/core/workspaces.js';
@@ -55,6 +56,18 @@ describe('process tools', () => {
     expect(started.summary).toBe('command started for tailing');
     expect(JSON.stringify(started.data)).toContain('read_process');
     expect(JSON.stringify(processLog(processId).data)).toContain('tail-mode-ok');
+  });
+
+  it('terminates running managed processes during gateway shutdown', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const started = await processStart(config, workspace, 'sleep 10');
+    const processId = String(started.data?.process_id);
+    const stopped = await shutdownManagedProcesses(10);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const data = processLog(processId).data as { running: boolean; killed: boolean; exit_code: number | null };
+    expect(stopped.signaled).toBeGreaterThanOrEqual(1);
+    expect(data.killed).toBe(true);
+    expect(data.running).toBe(false);
   });
 
   it('kills running processes', async () => {
