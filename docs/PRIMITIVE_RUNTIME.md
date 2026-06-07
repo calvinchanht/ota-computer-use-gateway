@@ -1,11 +1,11 @@
 # Primitive Runtime
 
-The Tool Gateway exposes provider-neutral MCP primitives for chat-thread agents. The public surface uses explicit snake_case names so tools are clear in MCP clients and ChatGPT-style action pickers.
+The Tool Gateway exposes provider-neutral API primitives for chat-thread agents. The public surface uses explicit snake_case names so tools are clear in API clients and ChatGPT-style action pickers.
 
 Canonical naming profile:
 
 ```text
-mcp_explicit
+api_explicit
 ```
 
 Use `get_tool_profile` at runtime to discover canonical tools, compatibility aliases, deprecated names, and context conventions.
@@ -80,7 +80,7 @@ process_kill  -> stop_process
 
 ## Tool annotations
 
-Tools include MCP annotations where possible:
+Tools include tool annotations where possible:
 
 - read-only tools set `readOnlyHint: true` and `destructiveHint: false`.
 - scoped workspace mutation, patch, local command, approval, and process-control tools are marked non-read-only but `destructiveHint: false`; they are local workspace operations, not provider-level destructive/external actions.
@@ -108,7 +108,7 @@ Use the primitive smoke test before considering runtime changes healthy:
 npm run smoke:primitives
 ```
 
-The smoke test launches a temporary local HTTP MCP gateway and exercises discovery, filesystem, command, and process primitives end to end.
+The smoke test launches a temporary local HTTP API gateway and exercises discovery, filesystem, command, and process primitives end to end.
 
 For the full local gate, run:
 
@@ -118,10 +118,10 @@ npm run build
 npm run smoke:primitives
 ```
 
-To check a deployed public HTTPS MCP endpoint, set the endpoint and bearer token outside git:
+To check a deployed public HTTPS API endpoint, set the endpoint and bearer token outside git:
 
 ```bash
-export OTA_GATEWAY_SMOKE_URL="https://mickey-mcp.example.com/mcp"
+export OTA_GATEWAY_SMOKE_URL="https://mickey-api.example.com/api/v1/tool"
 export OTA_GATEWAY_SMOKE_TOKEN="..."
 npm run smoke:public
 ```

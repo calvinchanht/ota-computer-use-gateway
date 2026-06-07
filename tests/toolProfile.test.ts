@@ -4,7 +4,7 @@ import { toolProfile } from '../src/tools/toolProfile.js';
 describe('toolProfile', () => {
   it('documents canonical names, aliases, and deprecated tools', () => {
     const result = toolProfile();
-    expect(result.data?.profile).toBe('mcp_explicit');
+    expect(result.data?.profile).toBe('api_explicit');
     expect(result.data?.canonical_tools).toContain('run_command');
     expect(result.data?.canonical_tools).toContain('write_process');
     expect(result.data?.aliases).toMatchObject({ Bash: 'run_command' });

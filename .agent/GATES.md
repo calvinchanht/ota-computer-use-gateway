@@ -6,9 +6,9 @@ These gates keep provider-thread agents powerful without letting them drift into
 
 Pass when:
 
-- public MCP endpoint is reachable;
+- public API endpoint is reachable;
 - bearer auth is configured in provider UI secret/API-key field;
-- unauthenticated MCP calls are rejected;
+- unauthenticated API calls are rejected;
 - provider thread can call `get_agent_bootstrap`.
 
 ## Gate 2: Provider acceptance

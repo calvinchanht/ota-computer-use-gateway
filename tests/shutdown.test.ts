@@ -19,6 +19,6 @@ describe('HTTP graceful shutdown', () => {
 
     expect(hooks.signals).toEqual(['SIGINT', 'SIGTERM']);
     expect(transport.close).toHaveBeenCalledTimes(1);
-    expect(logger.error).toHaveBeenCalledWith('Received SIGTERM; shutting down HTTP MCP server...');
+    expect(logger.error).toHaveBeenCalledWith('Received SIGTERM; shutting down HTTP API server...');
   });
 });

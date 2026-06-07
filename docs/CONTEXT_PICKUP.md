@@ -114,7 +114,7 @@ npm run smoke:primitives
 The public smoke checks deployed/tunneled context pickup too:
 
 ```bash
-export OTA_GATEWAY_SMOKE_URL="https://mickey-mcp.example.com/mcp"
+export OTA_GATEWAY_SMOKE_URL="https://mickey-api.example.com/api/v1/tool"
 export OTA_GATEWAY_SMOKE_TOKEN="..."
 npm run smoke:public
 ```
@@ -129,7 +129,7 @@ npm run smoke:public
 Mickey has a focused public acceptance smoke for the provider-thread proof:
 
 ```bash
-export OTA_GATEWAY_SMOKE_URL="https://mickey-mcp.example.com/mcp"
+export OTA_GATEWAY_SMOKE_URL="https://mickey-api.example.com/api/v1/tool"
 export OTA_GATEWAY_SMOKE_TOKEN="..."
 npm run smoke:mickey-acceptance
 ```

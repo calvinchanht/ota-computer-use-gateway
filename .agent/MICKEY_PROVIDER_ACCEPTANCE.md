@@ -4,7 +4,7 @@ Use this checklist to prove a provider chat thread can pick up Mickey as an Open
 
 ## Preconditions
 
-- ChatGPT/provider connector is pointed at Mickey MCP endpoint.
+- ChatGPT/provider connector is pointed at Mickey API endpoint.
 - Connector has the Mickey bearer token configured server-side/provider-side, not pasted into chat.
 - Mickey service and Cloudflare tunnel are healthy.
 

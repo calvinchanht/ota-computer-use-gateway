@@ -4,7 +4,7 @@ info:
   version: 0.1.0
   description: Scoped JSON API lane for the Mickey workspace validation project.
 servers:
-  - url: https://mickey-mcp.unrealize.com
+  - url: https://mickey-api.unrealize.com
 paths:
   /api/v1/tool:
     post:
@@ -120,7 +120,7 @@ components:
           $ref: '#/components/schemas/ThreadContext'
         tool:
           type: string
-          enum: [heartbeat, workspace_status, list_dir, read_file, git_status, git_diff, write_file, checkpoint_thread, memory_write]
+          enum: [heartbeat, workspace_status, get_tool_profile, list_dir, read_file, git_status, git_diff, run_command, start_process, list_processes, read_process, write_process, stop_process]
         arguments:
           type: object
           additionalProperties: true
@@ -134,7 +134,7 @@ components:
       properties:
         tool:
           type: string
-          enum: [heartbeat, workspace_status, list_dir, read_file, git_status, git_diff, write_file, checkpoint_thread, memory_write]
+          enum: [heartbeat, workspace_status, get_tool_profile, list_dir, read_file, git_status, git_diff, run_command, start_process, list_processes, read_process, write_process, stop_process]
         arguments:
           type: object
           additionalProperties: true

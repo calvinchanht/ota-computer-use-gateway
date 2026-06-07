@@ -8,7 +8,7 @@ Canonical repo:
 
 Current deployment target:
 
-- Mickey public MCP endpoint is served through Cloudflare Tunnel for ChatGPT Business connector testing.
+- Mickey public API endpoint is served through Cloudflare Tunnel for ChatGPT Business connector testing.
 - The bearer token remains server-side/secret and must never be pasted into chat or logs.
 
 Roadmap relationship:

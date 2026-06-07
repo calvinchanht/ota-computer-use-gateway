@@ -13,7 +13,7 @@ export function installShutdownHooks(server: Server, transport?: Closeable, logg
   const onSignal = async (signal: NodeJS.Signals): Promise<void> => {
     if (closing) return;
     closing = true;
-    logger.error(`Received ${signal}; shutting down HTTP MCP server...`);
+    logger.error(`Received ${signal}; shutting down HTTP API server...`);
     await closeHttpServer(server);
     if (transport) await transport.close();
   };

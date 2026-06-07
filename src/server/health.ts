@@ -4,7 +4,8 @@ export type HealthPayload = {
   ok: true;
   service: 'ota-computer-use-gateway';
   transport: 'http';
-  mcp_path: '/mcp';
+  api_paths: { tool: '/api/v1/tool'; batch: '/api/v1/batch'; runs: '/api/v1/runs/{run_id}' };
+  compatibility_mcp_path: '/mcp';
   uptime_seconds: number;
   auth_required: boolean;
   rate_limit_enabled: boolean;
@@ -16,7 +17,8 @@ export function healthPayload(config: AppConfig, startedAt: number): HealthPaylo
     ok: true,
     service: 'ota-computer-use-gateway',
     transport: 'http',
-    mcp_path: '/mcp',
+    api_paths: { tool: '/api/v1/tool', batch: '/api/v1/batch', runs: '/api/v1/runs/{run_id}' },
+    compatibility_mcp_path: '/mcp',
     uptime_seconds: uptimeSeconds(startedAt),
     auth_required: config.server.auth.enabled,
     rate_limit_enabled: config.server.rate_limit.enabled,

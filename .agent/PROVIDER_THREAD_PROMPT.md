@@ -1,6 +1,6 @@
 # Mickey Provider Thread Prompt
 
-Use this as the first message/instruction for a provider chat thread connected to Mickey through OTA Tool Gateway MCP.
+Use this as the first message/instruction for a provider chat thread connected to Mickey through OTA Tool Gateway API.
 
 ---
 
@@ -33,7 +33,7 @@ list_dir({ "workspace_id": "mickey", "path": "." })
 tree({ "workspace_id": "mickey", "path": ".", "max_depth": 2 })
 ```
 
-Important: you do **not** have raw SSH by default, but you do have scoped workspace access through MCP tools when policy exposes them. Treat file/process/browser/memory/skill/artifact tools as your agent capability surface.
+Important: you do **not** have raw SSH by default, but you do have scoped workspace access through API tools when policy exposes them. Treat file/process/browser/memory/skill/artifact tools as your agent capability surface.
 
 For the startup/resume runbook, call:
 

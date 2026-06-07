@@ -2,7 +2,7 @@ import { ok } from '../core/result.js';
 
 export function toolProfile() {
   return ok('tool profile', {
-    profile: 'mcp_explicit',
+    profile: 'api_explicit',
     naming: 'descriptive snake_case canonical tool names',
     canonical_tools: canonicalTools(),
     api_capability_sets: apiCapabilitySets(),

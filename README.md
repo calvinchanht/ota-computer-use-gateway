@@ -73,7 +73,7 @@ Key Mickey startup artifacts live under `.agent/`:
 Focused live/public validation:
 
 ```bash
-export OTA_GATEWAY_SMOKE_URL="https://mickey-mcp.example.com/mcp"
+export OTA_GATEWAY_SMOKE_URL="https://mickey-api.example.com/api/v1/tool"
 export OTA_GATEWAY_SMOKE_TOKEN="..."
 npm run smoke:mickey-acceptance
 ```
