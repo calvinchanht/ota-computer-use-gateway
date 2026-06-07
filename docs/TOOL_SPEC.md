@@ -24,3 +24,7 @@ Mutation tools are deferred until policy, audit, and approval are proven.
 - Command execution is routed through a platform adapter so Linux/macOS and future Windows support stay isolated.
 - Workspace tools write audit records under `.agent/audit/tool_calls.jsonl`.
 - `.agent/PANIC_STOP` blocks non-low-risk workspace tools.
+
+## Process tailing
+
+`read_process` supports cursor-based tailing. Clients can pass `cursor` from a prior `next_cursor` value to receive only newly buffered process output. This is the preferred workflow for long-running test/build/watch commands when live progress matters.

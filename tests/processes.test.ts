@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { processKill, processList, processLog, processStart, processWrite } from '../src/tools/processes.js';
+import { runArgvTailTool } from '../src/tools/runCommand.js';
 import type { AppConfig } from '../src/config/schema.js';
 import type { Workspace } from '../src/core/workspaces.js';
 
@@ -29,6 +30,31 @@ describe('process tools', () => {
     processWrite(processId, 'stdin-ok', true);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(JSON.stringify(processLog(processId).data)).toContain('stdin-ok');
+  });
+
+  it('supports cursor-based process output tailing', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const started = await processStart(config, workspace, 'printf first; sleep 0.05; printf second');
+    const processId = String(started.data?.process_id);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const first = processLog(processId).data as { output: string; next_cursor: number; tail_supported: boolean };
+    expect(first.tail_supported).toBe(true);
+    expect(first.output).toContain('first');
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const second = processLog(processId, 50000, first.next_cursor).data as { output: string; cursor: number; next_cursor: number };
+    expect(second.cursor).toBe(first.next_cursor);
+    expect(second.output).toContain('second');
+    expect(second.output).not.toContain('first');
+  });
+
+  it('starts argv run_command work in tail mode', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const started = await runArgvTailTool(config, workspace, ['bash', '-lc', 'printf tail-mode-ok']);
+    const processId = String((started.data as { process_id: string }).process_id);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(started.summary).toBe('command started for tailing');
+    expect(JSON.stringify(started.data)).toContain('read_process');
+    expect(JSON.stringify(processLog(processId).data)).toContain('tail-mode-ok');
   });
 
   it('kills running processes', async () => {

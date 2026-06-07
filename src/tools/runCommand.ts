@@ -1,5 +1,6 @@
 import { shellInvocation } from '../core/commandAdapter.js';
 import { runCommand } from '../core/process.js';
+import { describeManagedProcess, startManagedArgvProcess } from '../core/processManager.js';
 import { ok } from '../core/result.js';
 import { resolveInside } from '../core/paths.js';
 import { truncateText } from '../core/text.js';
@@ -34,6 +35,16 @@ export async function runArgvTool(config: AppConfig, workspace: Workspace, cmd: 
   const stdout = truncateText(result.stdout, Math.min(Math.max(1, maxStdoutBytes), MAX_OUTPUT_BYTES));
   const stderr = truncateText(result.stderr, Math.min(Math.max(1, maxStderrBytes), MAX_OUTPUT_BYTES));
   return ok('command finished', { command: cmd, cwd: cwd.relative, timeout_ms: timeout, exit_code: result.code, stdout: stdout.text, stderr: stderr.text, stdout_truncated: stdout.truncated, stderr_truncated: stderr.truncated });
+}
+
+export async function runArgvTailTool(config: AppConfig, workspace: Workspace, cmd: string[], cwdPath = '.', timeoutMs = 30000) {
+  if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
+  if (!Array.isArray(cmd) || cmd.length === 0) throw new Error('cmd array is required');
+  const [command, ...args] = cmd.map(String);
+  const cwd = await resolveInside(workspace, cwdPath, config);
+  const timeout = Math.min(Math.max(1, timeoutMs), config.security.max_exec_ms);
+  const item = startManagedArgvProcess(command, args, cwd.absolute, timeout, cmd.join(' '));
+  return ok('command started for tailing', { ...describeManagedProcess(item), command_argv: cmd, cwd: cwd.relative, timeout_ms: timeout, tail_supported: true, read_with: 'read_process', initial_cursor: 0 });
 }
 
 async function runShellCommand(command: string, cwd: string, timeoutMs = 120000) {

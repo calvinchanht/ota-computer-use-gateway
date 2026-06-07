@@ -57,9 +57,17 @@ Keep `edit_file` and `apply_patch` separate:
 
 - `start_process` — start an approved background shell command.
 - `list_processes` — list managed background processes.
-- `read_process` — read buffered stdout/stderr for a process.
+- `read_process` — read buffered stdout/stderr for a process. Pass `cursor` from the previous `next_cursor` to receive only new output.
 - `write_process` — write UTF-8 input to process stdin, optionally closing stdin.
 - `stop_process` — terminate a managed process.
+
+For long-running commands where incremental output matters, prefer:
+
+```text
+start_process -> read_process(cursor=previous next_cursor) -> stop_process if needed
+```
+
+This gives cursor-based tail behavior without retrying the original command. `read_process` returns `output`, `cursor`, `next_cursor`, `running`, `exit_code`, and `tail_supported`.
 
 Deprecated compatibility aliases remain during migration:
 

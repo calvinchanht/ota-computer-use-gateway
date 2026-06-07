@@ -104,6 +104,7 @@ function toolAsync() {
     cua_driver_batch: quotaSaverAsync('Cua Driver'),
     search_files: quotaSaverAsync('workspace search'),
     run_command: quotaSaverAsync('workspace command'),
+    read_process: { may_return_running: false, tail_supported: true, cursor_field: 'cursor', next_cursor_field: 'data.next_cursor', note: 'For long-running commands, prefer start_process plus read_process(cursor) to retrieve only new buffered output.' },
     get_gateway_run: { may_return_running: false, note: 'Poll/recovery endpoint for prior HTTP JSON API run_id values.' }
   };
 }
