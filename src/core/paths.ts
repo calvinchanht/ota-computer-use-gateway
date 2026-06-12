@@ -7,8 +7,7 @@ import type { Workspace } from './workspaces.js';
 export type ResolvedPath = { absolute: string; relative: string };
 
 export async function resolveInside(workspace: Workspace, requested: string, config: AppConfig): Promise<ResolvedPath> {
-  if (path.isAbsolute(requested)) throw new Error('absolute paths are not allowed');
-  const joined = path.resolve(workspace.realRoot, requested);
+  const joined = resolveRequestedPath(workspace, requested);
   const real = await realpath(joined);
   assertInside(workspace.realRoot, real);
   const relative = path.relative(workspace.realRoot, real) || '.';
@@ -18,14 +17,17 @@ export async function resolveInside(workspace: Workspace, requested: string, con
 }
 
 export async function resolveWritableInside(workspace: Workspace, requested: string, config: AppConfig): Promise<ResolvedPath> {
-  if (path.isAbsolute(requested)) throw new Error('absolute paths are not allowed');
-  const absolute = path.resolve(workspace.realRoot, requested);
+  const absolute = resolveRequestedPath(workspace, requested);
   assertInside(workspace.realRoot, absolute);
   const relative = path.relative(workspace.realRoot, absolute) || '.';
   const denied = deniedPath(relative, config.security.denied_globs, config.security.protect_secret_paths);
   if (denied) throw new Error(denied);
   await mkdir(path.dirname(absolute), { recursive: true });
   return { absolute, relative };
+}
+
+function resolveRequestedPath(workspace: Workspace, requested: string): string {
+  return path.isAbsolute(requested) ? path.resolve(requested) : path.resolve(workspace.realRoot, requested);
 }
 
 export function assertInside(root: string, candidate: string): void {
