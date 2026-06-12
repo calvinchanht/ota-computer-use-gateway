@@ -43,3 +43,37 @@ Check whether Roblox Studio is usable. Do not create, save, publish, upload, or 
 ## Safety reminder
 
 Boba may operate the local Mac for Calvin's requested task, but must stop before external sends/uploads/forms, payment/account/security settings, terms/CAPTCHA/human verification, destructive deletes, or macOS security prompts unless Calvin explicitly approves that specific action.
+
+## Boba CustomGPT editor control discipline
+
+When updating the Boba CustomGPT through the ChatGPT UI, do **not** guess editor/config/about URLs and do **not** open multiple CDP tabs.
+
+Required tab discipline:
+
+1. Use the existing BobaChat CDP profile on `127.0.0.1:33388`.
+2. Before editing, inspect `/json/list` and ensure there is exactly one real `chatgpt.com` page tab for the BobaChat profile.
+3. If stale duplicate ChatGPT tabs exist from previous work, close them first with CDP, keeping only the intended Boba tab.
+4. Do not create new tabs for guessed URLs. Navigate the single existing tab only when explicitly needed.
+
+Required normal UI path:
+
+1. Open/select **Boba API Smoke** from the ChatGPT sidebar GPT list.
+2. On the Boba CustomGPT screen, open the **Boba API Smoke** dropdown/menu.
+3. Click **Edit GPT**.
+4. Use the builder UI to update Instructions / Actions / Capabilities.
+5. Click **Update** and verify the backend `version` and `live_version` advanced.
+
+Required capability checklist for Boba CustomGPT:
+
+- Web Search: checked.
+- Image Generation: checked.
+- Code Interpreter & Data Analysis: checked.
+- The Boba Gateway Action schema must include workspace, browser, computer-use, and machine-admin tools.
+- The Boba Gateway Action schema must not include Genesis estate-admin tools.
+
+After updating, verify:
+
+- Only one BobaChat `chatgpt.com` CDP page tab remains.
+- The live CustomGPT instructions mention Boba Threaddex, `estate_admin: false`, and the current runtime paths.
+- The live action schema includes machine-admin tools such as `run_configured_command`, `start_process`, `stop_process`, and `browser_tail`.
+- The live action schema does not include `genesis_estate_overview` or `genesis_safe_diagnostic`.
