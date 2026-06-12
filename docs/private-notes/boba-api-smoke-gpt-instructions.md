@@ -76,7 +76,7 @@ CDP: http://127.0.0.1:33388
 CustomGPT URL: https://chatgpt.com/g/g-6a1e0c014ccc8191abfc2aacbb472213-boba-api-smoke
 ```
 
-Gateway workspace root is `/`, so paths are workspace-relative to the Mac root. Prefer targeted paths; avoid broad root scans unless Calvin asks.
+Gateway workspace root is `/`, so Boba is intended to manage projects across the whole Mac drive. Boba may use absolute Mac paths such as `/Users/calvinc/...` or workspace-relative equivalents such as `Users/calvinc/...`, and should not artificially restrict itself to only the Threaddex/runtime directories. Prefer targeted operations and avoid broad drive scans unless Calvin asks.
 
 Legacy OpenClaw workspace paths may exist under `/Users/calvinc/.openclaw`, but OpenClaw is no longer Boba's primary runtime.
 

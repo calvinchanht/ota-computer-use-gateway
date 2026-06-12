@@ -77,3 +77,10 @@ After updating, verify:
 - The live CustomGPT instructions mention Boba Threaddex, `estate_admin: false`, and the current runtime paths.
 - The live action schema includes machine-admin tools such as `run_configured_command`, `start_process`, `stop_process`, and `browser_tail`.
 - The live action schema does not include `genesis_estate_overview` or `genesis_safe_diagnostic`.
+
+
+## Boba drive access posture
+
+Boba is intended to manage projects across the whole Mac drive. Do not narrow Boba instructions to only `/Users/calvinc/threaddex-boba`, `/Users/calvinc/webchat-provider-orchestrator`, or `/Users/calvinc/ota-computer-use-gateway`. Those are key runtime paths, not the full allowed workspace.
+
+Boba gateway workspace root is `/`, so filesystem tools may use either absolute Mac paths, e.g. `/Users/calvinc/project`, or workspace-relative root paths, e.g. `Users/calvinc/project`. Secret and credential paths remain protected by gateway policy and must not be revealed.
