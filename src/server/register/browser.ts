@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserStatus, listBrowserProfiles, listBrowserTabs } from '../../tools/browser.js';
+import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../../tools/browser.js';
 import { READ_ONLY, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -8,6 +8,11 @@ export function registerBrowserTools(context: RegisterContext): void {
   registerListBrowserProfiles(context);
   registerBrowserStatus(context);
   registerListBrowserTabs(context);
+  registerBrowserVisibleState(context);
+  registerBrowserTail(context);
+  registerBrowserManageTabs(context);
+  registerBrowserClickAndWait(context);
+  registerBrowserUploadFileAndVerify(context);
   registerBrowserCdpBrowserCall(context);
   registerBrowserCdpBrowserBatch(context);
   registerBrowserCdpCall(context);
@@ -30,6 +35,59 @@ function registerListBrowserTabs({ server, workspaces }: RegisterContext): void 
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
     annotations: READ_ONLY
   }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'list_browser_tabs', (workspace) => listBrowserTabs(workspace, args.profile_label, args.include_urls)));
+}
+
+
+function registerBrowserVisibleState({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_visible_state', {
+    title: 'Browser visible state',
+    description: 'Return high-level human-visible page state for a page target: visible text, buttons, links, controls, required missing fields, file inputs, visibly uploaded filenames, and visible errors.',
+    inputSchema: { ...profileSchema(), target_id: z.string() },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+    annotations: READ_ONLY
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_visible_state', (workspace) => browserVisibleState(workspace, args.target_id, args.profile_label)));
+}
+
+function registerBrowserTail({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_tail', {
+    title: 'Browser tail',
+    description: 'Return cursor-based visible browser deltas for a page target: URL/title/busy state and visible text delta since the prior cursor.',
+    inputSchema: { ...profileSchema(), target_id: z.string(), cursor: z.number().optional() },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+    annotations: READ_ONLY
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_tail', (workspace) => browserTail(workspace, args.target_id, args.cursor, args.profile_label)));
+}
+
+function registerBrowserManageTabs({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_manage_tabs', {
+    title: 'Browser tab management',
+    description: 'Compact high-level tab hygiene helper: list page tabs only, focus by URL/title/target id, or close matching page tabs. Hides workers/iframes/browser UI.',
+    inputSchema: { ...profileSchema(), action: z.enum(['list_page_tabs_only', 'focus_by_url', 'focus_by_title', 'close_by_filter']), url_contains: z.string().optional(), title_contains: z.string().optional(), target_id: z.string().optional(), include_urls: z.boolean().optional(), max_close: z.number().optional() },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+    annotations: RUN_LOCAL
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_manage_tabs', (workspace) => browserManageTabs(workspace, args as any, args.profile_label)));
+}
+
+
+function registerBrowserClickAndWait({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_click_and_wait', {
+    title: 'Browser click and wait',
+    description: 'High-level click helper: click a visible element by CSS selector or text, then wait for visible text, selector, URL substring, and/or DOM text stability.',
+    inputSchema: { ...profileSchema(), target_id: z.string(), selector: z.string().optional(), text: z.string().optional(), wait_for_text: z.string().optional(), wait_for_selector: z.string().optional(), wait_for_url_contains: z.string().optional(), wait_until_stable: z.boolean().optional(), timeout_ms: z.number().optional() },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+    annotations: RUN_LOCAL
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_click_and_wait', (workspace) => browserClickAndWait(workspace, args as any, args.profile_label)));
+}
+
+
+function registerBrowserUploadFileAndVerify({ server, workspaces }: RegisterContext): void {
+  server.registerTool('browser_upload_file_and_verify', {
+    title: 'Browser upload file and verify visible',
+    description: 'High-level upload helper: set a workspace-relative file on a file input selector, then verify expected filename/text appears in human-visible page text.',
+    inputSchema: { ...profileSchema(), target_id: z.string(), selector: z.string(), path: z.string(), verify_visible_text: z.string().optional(), timeout_ms: z.number().optional() },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+    annotations: RUN_LOCAL
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_upload_file_and_verify', (workspace) => browserUploadFileAndVerify(workspace, args as any, args.profile_label)));
 }
 
 function registerBrowserCdpBrowserCall({ server, workspaces }: RegisterContext): void {

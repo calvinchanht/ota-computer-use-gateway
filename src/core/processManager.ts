@@ -20,8 +20,12 @@ const MAX_BUFFER_BYTES = 100000;
 
 export function startManagedProcess(command: string, cwd: string, timeoutMs: number): ManagedProcess {
   const invocation = shellInvocation(command);
-  const child = spawn(invocation.command, invocation.args, { cwd, env: safeEnv() });
-  const item = newProcess(command, cwd, child);
+  return startManagedArgvProcess(invocation.command, invocation.args, cwd, timeoutMs, command);
+}
+
+export function startManagedArgvProcess(command: string, args: string[], cwd: string, timeoutMs: number, displayCommand?: string): ManagedProcess {
+  const child = spawn(command, args, { cwd, env: safeEnv(), detached: true });
+  const item = newProcess(displayCommand ?? [command, ...args].join(' '), cwd, child);
   processes.set(item.id, item);
   attachOutput(item);
   attachClose(item);
@@ -39,11 +43,44 @@ export function getManagedProcess(id: string): ManagedProcess {
   return item;
 }
 
-export function killManagedProcess(id: string): boolean {
+export function killManagedProcess(id: string, signal: NodeJS.Signals = 'SIGTERM'): boolean {
   const item = getManagedProcess(id);
   if (item.exit_code !== null) return false;
   item.killed = true;
-  return item.child.kill('SIGTERM');
+  return signalManagedProcess(item, signal);
+}
+
+export function terminateManagedProcesses(signal: NodeJS.Signals = 'SIGTERM'): number {
+  let signaled = 0;
+  for (const item of processes.values()) {
+    if (item.exit_code !== null) continue;
+    item.killed = true;
+    if (signalManagedProcess(item, signal)) signaled++;
+  }
+  return signaled;
+}
+
+export function hasRunningManagedProcesses(): boolean {
+  return [...processes.values()].some((item) => item.exit_code === null);
+}
+
+export async function shutdownManagedProcesses(graceMs = 1500): Promise<{ signaled: number; forced: number }> {
+  const signaled = terminateManagedProcesses('SIGTERM');
+  await waitForManagedProcessesToExit(graceMs);
+  if (!hasRunningManagedProcesses()) return { signaled, forced: 0 };
+  let forced = 0;
+  for (const item of processes.values()) {
+    if (item.exit_code !== null) continue;
+    item.killed = true;
+    if (signalManagedProcess(item, 'SIGKILL')) forced++;
+  }
+  await waitForManagedProcessesToExit(1000);
+  return { signaled, forced };
+}
+
+async function waitForManagedProcessesToExit(timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + Math.max(0, timeoutMs);
+  while (hasRunningManagedProcesses() && Date.now() < deadline) await delay(10);
 }
 
 export function writeManagedProcess(id: string, input: string, closeStdin = false): number {
@@ -52,6 +89,40 @@ export function writeManagedProcess(id: string, input: string, closeStdin = fals
   item.child.stdin.write(input);
   if (closeStdin) item.child.stdin.end();
   return Buffer.byteLength(input, 'utf8');
+}
+
+export function describeManagedProcess(item: ManagedProcess) {
+  return {
+    process_id: item.id,
+    command: item.command,
+    cwd: item.cwd,
+    started_at: item.started_at,
+    running: item.exit_code === null && !item.killed,
+    stopping: item.exit_code === null && item.killed,
+    exit_code: item.exit_code,
+    killed: item.killed
+  };
+}
+
+export function managedProcessOutput(item: ManagedProcess, cursor?: number, maxBytes = MAX_BUFFER_BYTES): { output: string; next_cursor: number; cursor: number; truncated: boolean } {
+  const combined = item.stdout + item.stderr;
+  const boundedCursor = cursor === undefined ? 0 : Math.min(Math.max(Math.trunc(cursor), 0), combined.length);
+  const output = truncateText(combined.slice(boundedCursor), Math.min(Math.max(Math.trunc(maxBytes), 1), MAX_BUFFER_BYTES));
+  return { output: output.text, next_cursor: combined.length, cursor: boundedCursor, truncated: output.truncated };
+}
+
+
+function signalManagedProcess(item: ManagedProcess, signal: NodeJS.Signals): boolean {
+  const pid = item.child.pid;
+  if (!pid) return false;
+  try {
+    // Managed tools run in their own process group so shells and their descendants are cleaned together.
+    process.kill(-pid, signal);
+    return true;
+  } catch {
+    try { return item.child.kill(signal); }
+    catch { return false; }
+  }
 }
 
 function newProcess(command: string, cwd: string, child: ChildProcessWithoutNullStreams): ManagedProcess {
@@ -69,10 +140,16 @@ function attachClose(item: ManagedProcess): void {
 
 function appendBounded(existing: string, data: Buffer): string {
   const merged = existing + data.toString('utf8');
-  return truncateText(merged, MAX_BUFFER_BYTES).text;
+  const buffer = Buffer.from(merged, 'utf8');
+  if (buffer.length <= MAX_BUFFER_BYTES) return merged;
+  return buffer.subarray(buffer.length - MAX_BUFFER_BYTES).toString('utf8');
 }
 
 function safeEnv(): NodeJS.ProcessEnv {
   const keep = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'SHELL'];
   return Object.fromEntries(keep.map((key) => [key, process.env[key] ?? '']));
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

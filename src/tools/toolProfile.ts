@@ -2,9 +2,10 @@ import { ok } from '../core/result.js';
 
 export function toolProfile() {
   return ok('tool profile', {
-    profile: 'mcp_explicit',
+    profile: 'api_explicit',
     naming: 'descriptive snake_case canonical tool names',
     canonical_tools: canonicalTools(),
+    api_capability_sets: apiCapabilitySets(),
     api_behavior: apiBehavior(),
     tool_async: toolAsync(),
     aliases: aliases(),
@@ -16,7 +17,8 @@ export function toolProfile() {
 
 function canonicalTools(): string[] {
   return [
-    'list_browser_profiles', 'browser_status', 'list_browser_tabs',
+    'genesis_bootstrap', 'genesis_estate_overview', 'genesis_agent_deep_dive', 'genesis_host_deep_dive', 'genesis_safe_diagnostic',
+    'list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify',
     'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch',
     'cua_driver_status', 'cua_driver_call', 'cua_driver_batch',
     'workspace_inventory', 'read_file', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
@@ -28,8 +30,45 @@ function canonicalTools(): string[] {
   ];
 }
 
+function apiCapabilitySets() {
+  return {
+    model: 'composable_api_sets_not_linear_levels',
+    config_key: 'workspaces[].api_sets',
+    sets: {
+      workspace: {
+        purpose: 'Normal agent workspace operations.',
+        tools: ['workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'write_file', 'edit_file', 'apply_patch', 'run_command', 'start_process', 'get_agent_bootstrap', 'get_project_context', 'list_skills', 'record_progress', 'checkpoint_thread']
+      },
+      browser: {
+        purpose: 'Web/browser automation using preassigned profiles and CDP ports.',
+        tools: ['list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_call', 'browser_cdp_batch']
+      },
+      computer: {
+        purpose: 'Local GUI/computer use; independent from machine administration.',
+        tools: ['cua_driver_status', 'cua_driver_call', 'cua_driver_batch']
+      },
+      machine_admin: {
+        purpose: 'Own-machine/lane management through configured commands/processes and scoped service/config/runbook work.',
+        tools: ['run_configured_command', 'run_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process']
+      },
+      estate_admin: {
+        purpose: 'Cross-agent/cross-host Genesis control-plane reporting and approved estate operations.',
+        tools: ['genesis_bootstrap', 'genesis_estate_overview', 'genesis_agent_deep_dive', 'genesis_host_deep_dive', 'genesis_safe_diagnostic']
+      }
+    },
+    examples: {
+      catalyst: ['workspace', 'browser'],
+      cortex: ['workspace', 'browser', 'machine_admin'],
+      boba: ['workspace', 'browser', 'computer', 'machine_admin'],
+      genesis: ['workspace', 'browser', 'computer', 'machine_admin', 'estate_admin']
+    },
+    policy_flags: ['external_actions', 'destructive_actions', 'secret_return', 'credential_use']
+  };
+}
+
 function apiBehavior() {
   return {
+    webchat_genesis: { tools: ['genesis_bootstrap', 'genesis_estate_overview', 'genesis_agent_deep_dive', 'genesis_host_deep_dive', 'genesis_safe_diagnostic'], posture: 'read-heavy coarse control-plane reports with hard no-secrets/no-mutation boundaries' },
     run_recovery: 'Every HTTP JSON API tool/batch response includes api.run_id. Use get_gateway_run / GET /api/v1/runs/{run_id} to recover status/results instead of blindly retrying.',
     idempotency: 'For writes, browser actions, commands, checkpoints, and other non-idempotent operations, send a stable idempotency_key so retries do not duplicate work.',
     async_polling: {
@@ -42,6 +81,10 @@ function apiBehavior() {
       default_poll_after_ms: 5000,
       statuses: ['queued', 'running', 'waiting_for_navigation', 'waiting_for_dom', 'waiting_for_upload', 'waiting_for_user', 'completed', 'blocked_by_login', 'blocked_by_captcha', 'timed_out', 'failed'],
       instruction: 'When a response has api.status=running, wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. Do not retry the original tool call unless the run is missing or explicitly failed.'
+    },
+    browser_semantic_layer: {
+      compact_tools: ['browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify'],
+      direction: 'Keep browser truth generic and business workflow judgment in repo helpers/scripts.'
     },
     browser_targets: {
       list_browser_tabs_default: 'real page targets only',
@@ -59,7 +102,10 @@ function toolAsync() {
     browser_cdp_batch: quotaSaverAsync(),
     cua_driver_call: quotaSaverAsync('Cua Driver'),
     cua_driver_batch: quotaSaverAsync('Cua Driver'),
-    run_command: { may_return_running: false, note: 'Bounded argv command currently returns synchronously through the HTTP JSON API; still use api.run_id for recovery.' },
+    search_files: quotaSaverAsync('workspace search'),
+    run_command: quotaSaverAsync('workspace command'),
+    read_process: { may_return_running: false, tail_supported: true, cursor_field: 'cursor', next_cursor_field: 'data.next_cursor', note: 'For long-running commands, prefer start_process plus read_process(cursor) to retrieve only new buffered output.' },
+    browser_tail: { may_return_running: false, tail_supported: true, cursor_field: 'cursor', next_cursor_field: 'data.next_cursor', note: 'For long-running browser observation, call browser_tail with cursor=previous next_cursor to retrieve visible-state deltas.' },
     get_gateway_run: { may_return_running: false, note: 'Poll/recovery endpoint for prior HTTP JSON API run_id values.' }
   };
 }

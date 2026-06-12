@@ -3,9 +3,9 @@ info:
   title: Boba Gateway API Action
   version: 0.4.0
   description: |
-    Transparent Boba Gateway JSON API Action for direct private Custom GPT proof.
+    Boba Gateway JSON API Action for Calvin's Boba/Mac Threaddex agent.
 
-    Primary target: webchat agent -> scoped Gateway JSON API -> Boba/Mac Cua Driver proxy.
+    Primary target: Telegram -> Threaddex -> Boba CustomGPT -> scoped Boba/Mac Gateway JSON API. Boba has workspace, browser, computer, and machine_admin API sets; estate_admin is intentionally not enabled.
 
     Important async rule: if any response includes api.status="running", do not retry the original command. Wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. This is normal for Cua Driver/browser-style operations using quota_saver mode.
 servers:
@@ -15,7 +15,7 @@ paths:
     post:
       operationId: gateway_request
       summary: Run one scoped Boba gateway tool call.
-      description: Runs a single transparent scoped tool call in workspace_id boba. Use get_tool_profile first. Use unique idempotency_key values for writes/checkpoints/mutations. If api.status is running, poll get_gateway_run with api.run_id after api.poll_after_ms; api.operation_id and api.next_poll_after_ms are aliases; do not retry the original command.
+      description: Runs one scoped Boba Gateway tool call. Use get_tool_profile first. For writes/mutations use idempotency_key. If api.status=running, poll get_gateway_run with api.run_id; do not retry.
       security:
         - bearerAuth: []
       requestBody:
@@ -35,7 +35,7 @@ paths:
     post:
       operationId: gateway_batch
       summary: Run multiple scoped Boba gateway tool calls.
-      description: Runs up to 20 scoped Boba tool calls in order. Prefer this for multi-step read/read-back and Cua Driver sequences. If api.status is running, poll get_gateway_run with api.run_id after api.poll_after_ms; api.operation_id and api.next_poll_after_ms are aliases; do not retry the original batch.
+      description: Runs up to 20 scoped Boba tool calls in order. Prefer for read/read-back and Cua sequences. If api.status=running, poll get_gateway_run; do not retry.
       security:
         - bearerAuth: []
       requestBody:
@@ -55,7 +55,7 @@ paths:
     get:
       operationId: get_gateway_run
       summary: Retrieve a previous Gateway JSON API run.
-      description: Use this after a UI/stream interruption or when a previous response included api.run_id, especially api.status=running async Cua Driver/browser operations.
+      description: Retrieve a stored run result. Use after stream interruption or api.status=running responses.
       security:
         - bearerAuth: []
       parameters:
@@ -126,16 +126,37 @@ components:
         - workspace_status
         - get_tool_profile
         - get_workspace_policy
+        - workspace_inventory
         - list_dir
+        - stat_path
+        - tree
         - read_file
+        - read_binary_file
         - write_file
+        - write_binary_file
+        - edit_file
+        - delete_file
+        - delete_path
         - git_status
         - git_diff
+        - get_agent_bootstrap
+        - get_context_snapshot
+        - get_project_context
+        - record_progress
+        - record_decision
+        - record_handoff
+        - update_current_task
         - checkpoint_thread
         - memory_write
+        - list_artifacts
+        - record_artifact
         - list_browser_profiles
         - browser_status
         - list_browser_tabs
+        - browser_visible_state
+        - browser_manage_tabs
+        - browser_click_and_wait
+        - browser_upload_file_and_verify
         - browser_cdp_browser_call
         - browser_cdp_browser_batch
         - browser_cdp_call
@@ -143,6 +164,20 @@ components:
         - cua_driver_status
         - cua_driver_call
         - cua_driver_batch
+        - browser_tail
+        - apply_patch
+        - git_push_current_branch
+        - run_configured_command
+        - start_process
+        - list_processes
+        - read_process
+        - write_process
+        - stop_process
+        - memory_search
+        - list_skills
+        - read_skill
+        - approval_status
+        - propose_patch
         - infer_file_structure
         - sample_file
         - read_file_chunk
@@ -166,7 +201,31 @@ components:
         workspace_id:
           type: string
           enum: [boba]
-      description: Tool-specific arguments. Always include workspace_id=boba. For browser tab listing, list_browser_tabs defaults to real page targets only; pass type=all and include_iframes/include_workers/include_browser_ui only for raw CDP cleanup/debugging. For Cua Driver use cua_driver_status, cua_driver_call with method/params, or cua_driver_batch with calls including raw Cua method steps or delay_ms steps. For async quota_saver behavior, initial_wait_ms may be set; if api.status=running, poll get_gateway_run instead of retrying. For file tools include path; for browser/CDP include method/params/target_id/calls; for large-file tools include query, where, select, group_by, metrics, offsets, and dry_run fields as needed.
+      description: |
+        Tool-specific arguments. Always include workspace_id=boba. Start with get_agent_bootstrap, get_tool_profile,
+        and get_workspace_policy when picking up a new Boba task. Boba has whole-Mac workspace root / plus browser,
+        computer-use, and machine_admin capability sets. estate_admin is intentionally not enabled. Boba's Threaddex
+        runtime is /Users/calvinc/threaddex-boba and repo is /Users/calvinc/webchat-provider-orchestrator. The OTA
+        gateway repo is /Users/calvinc/ota-computer-use-gateway. Legacy OpenClaw paths may exist, but they are no
+        longer Boba's primary runtime.
+        Roblox Studio is /Applications/RobloxStudio.app; prefer targeted paths such as Applications/RobloxStudio.app
+        and Users/calvinc/.openclaw/workspace instead of broad root scans. For screenshots, cua_driver_call
+        method=screenshot returns a transient artifact path under .agent/artifacts/screenshots; do not expect inline
+        PNG/base64. Screenshot calls clean managed cua-screenshot-*.png artifacts older than 86400 seconds by default
+        and keep the latest 100; process screenshots promptly or copy important images to a task/project folder.
+        Optional screenshot params include cleanup_screenshots_older_than_seconds and keep_latest_screenshots. For
+        browser work, prefer high-level visible-state and tab-hygiene helpers before raw CDP: browser_visible_state
+        returns human-visible text/buttons/forms/required-missing/file upload/error state; browser_manage_tabs
+        lists/focuses/closes real page tabs; browser_click_and_wait clicks by selector/text and waits for visible
+        text, selector, URL substring, or page stability; browser_upload_file_and_verify sets a workspace-relative
+        file input and confirms expected filename/text appears in human-visible page text. For browser tab listing,
+        list_browser_tabs defaults to real page targets only; pass type=all and
+        include_iframes/include_workers/include_browser_ui only for raw CDP cleanup/debugging. For Cua Driver use
+        cua_driver_status, cua_driver_call with method/params, or cua_driver_batch with calls including raw Cua method
+        steps or delay_ms steps. For async quota_saver behavior, initial_wait_ms may be set; if api.status=running,
+        poll get_gateway_run instead of retrying the original side-effectful call. For file tools include path; for
+        context tools include title/body as needed; for browser/CDP include method/params/target_id/calls; for large-
+        file tools include query, where, select, group_by, metrics, offsets, and dry_run fields as needed.
     WorkspaceStatusArguments:
       type: object
       additionalProperties: false

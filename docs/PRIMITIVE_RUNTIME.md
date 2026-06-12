@@ -1,11 +1,11 @@
 # Primitive Runtime
 
-The Tool Gateway exposes provider-neutral MCP primitives for chat-thread agents. The public surface uses explicit snake_case names so tools are clear in MCP clients and ChatGPT-style action pickers.
+The Tool Gateway exposes provider-neutral API primitives for chat-thread agents. The public surface uses explicit snake_case names so tools are clear in API clients and ChatGPT-style action pickers.
 
 Canonical naming profile:
 
 ```text
-mcp_explicit
+api_explicit
 ```
 
 Use `get_tool_profile` at runtime to discover canonical tools, compatibility aliases, deprecated names, and context conventions.
@@ -57,9 +57,17 @@ Keep `edit_file` and `apply_patch` separate:
 
 - `start_process` — start an approved background shell command.
 - `list_processes` — list managed background processes.
-- `read_process` — read buffered stdout/stderr for a process.
+- `read_process` — read buffered stdout/stderr for a process. Pass `cursor` from the previous `next_cursor` to receive only new output.
 - `write_process` — write UTF-8 input to process stdin, optionally closing stdin.
 - `stop_process` — terminate a managed process.
+
+For long-running commands where incremental output matters, prefer:
+
+```text
+start_process -> read_process(cursor=previous next_cursor) -> stop_process if needed
+```
+
+This gives cursor-based tail behavior without retrying the original command. `read_process` returns `output`, `cursor`, `next_cursor`, `running`, `exit_code`, and `tail_supported`.
 
 Deprecated compatibility aliases remain during migration:
 
@@ -72,7 +80,7 @@ process_kill  -> stop_process
 
 ## Tool annotations
 
-Tools include MCP annotations where possible:
+Tools include tool annotations where possible:
 
 - read-only tools set `readOnlyHint: true` and `destructiveHint: false`.
 - scoped workspace mutation, patch, local command, approval, and process-control tools are marked non-read-only but `destructiveHint: false`; they are local workspace operations, not provider-level destructive/external actions.
@@ -100,7 +108,7 @@ Use the primitive smoke test before considering runtime changes healthy:
 npm run smoke:primitives
 ```
 
-The smoke test launches a temporary local HTTP MCP gateway and exercises discovery, filesystem, command, and process primitives end to end.
+The smoke test launches a temporary local HTTP API gateway and exercises discovery, filesystem, command, and process primitives end to end.
 
 For the full local gate, run:
 
@@ -110,10 +118,10 @@ npm run build
 npm run smoke:primitives
 ```
 
-To check a deployed public HTTPS MCP endpoint, set the endpoint and bearer token outside git:
+To check a deployed public HTTPS API endpoint, set the endpoint and bearer token outside git:
 
 ```bash
-export OTA_GATEWAY_SMOKE_URL="https://mickey-mcp.example.com/mcp"
+export OTA_GATEWAY_SMOKE_URL="https://mickey-api.example.com/api/v1/tool"
 export OTA_GATEWAY_SMOKE_TOKEN="..."
 npm run smoke:public
 ```
@@ -134,3 +142,28 @@ These are intentionally outside issue #3 and tracked separately:
 - browser/computer observe-act primitives — issue #6;
 - deeper policy/approval/audit/redaction hardening — issue #9;
 - ChatGPT connector/session ergonomics and richer output schemas — issue #10.
+
+## Long-running command/browser observation discipline
+
+Prefer cursor-tail tools for long-running work:
+
+```text
+run_command(tail=true) -> read_process(cursor=previous next_cursor)
+start_process -> read_process(cursor=previous next_cursor)
+browser_tail(cursor=previous next_cursor)
+```
+
+`run_command` without `tail=true` remains the compatibility path for short bounded commands. For tests/builds/watchers or browser observation, cursor-tail avoids blind polling and repeated full-state dumps.
+
+Managed process lifecycle hardening:
+
+- managed `start_process` and `run_command(tail=true)` commands launch in their own process group;
+- `stop_process` and HTTP API shutdown signal the process group, not just the shell parent;
+- shutdown escalates from `SIGTERM` to `SIGKILL` if children do not exit;
+- after a kill request, API process records report `running=false` and `stopping=true` until the OS close event finalizes `exit_code`.
+
+Service restart discipline:
+
+- API services should use `KillMode=control-group`, `TimeoutStopSec=8`, and `SendSIGKILL=yes` so untracked descendants do not remain in the service cgroup.
+- Do not restart an API service through a `run_command` currently executing inside that same service. The active request will be killed and in-memory run records can disappear. Use an external lane/service/shell for restarts.
+- Browser processes launched through helpers that switch users, for example a `sudo -u molt` Chrome launch from a Genesis-owned service, may not be killable by the Genesis user service. Prefer launching long-lived browsers through their own service/user lane, or clean the exact browser profile explicitly.

@@ -1,0 +1,226 @@
+openapi: 3.1.0
+info:
+  title: Webchat Genesis Gateway API Action
+  version: 0.1.0
+  description: 'Private Webchat Genesis JSON API Action proof.
+
+
+    This lane exposes Genesis'' composable API sets for Calvin''s private webchat Genesis: workspace, browser, computer, machine_admin,
+    and estate_admin. Use get_tool_profile and get_workspace_policy first to inspect the live tool/capability policy.
+
+
+    Hard safety rails still apply: never reveal bearer tokens, PATs, OAuth tokens, cookies, credentials, auth headers, API
+    keys, HAR secrets, raw secret file contents, or private key material. Do not send external messages/email/chat, upload/submit
+    forms, make payments, accept terms, solve CAPTCHA/human verification, change account/security settings, or perform destructive
+    deletes unless Calvin explicitly approves that workflow. Stop on system/security prompts unless explicitly handled.
+
+    '
+servers:
+- url: https://genesis-api.unrealize.com
+paths:
+  /api/v1/tool:
+    post:
+      operationId: genesis_gateway_request
+      summary: Run one scoped Webchat Genesis report call.
+      description: Runs one read-only Webchat Genesis tool call. Always pass workspace_id=genesis.
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayRequest'
+      responses:
+        '200':
+          description: Gateway tool result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResponse'
+  /api/v1/runs/{run_id}:
+    get:
+      operationId: get_genesis_gateway_run
+      summary: Retrieve a previous Webchat Genesis run.
+      description: Use this after a UI interruption or when a previous response included api.run_id.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Stored run record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    GatewayRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - tool
+      - arguments
+      properties:
+        idempotency_key:
+          type: string
+          description: Optional stable retry key.
+        thread:
+          type: object
+          additionalProperties: true
+          description: Explicit thread identity metadata.
+        tool:
+          $ref: '#/components/schemas/GatewayToolName'
+        arguments:
+          $ref: '#/components/schemas/GatewayArguments'
+    GatewayToolName:
+      type: string
+      enum:
+      - heartbeat
+      - workspace_status
+      - get_workspace_policy
+      - get_tool_profile
+      - genesis_bootstrap
+      - genesis_estate_overview
+      - genesis_agent_deep_dive
+      - genesis_host_deep_dive
+      - genesis_safe_diagnostic
+      - workspace_inventory
+      - list_dir
+      - stat_path
+      - tree
+      - read_file
+      - read_binary_file
+      - search_files
+      - git_status
+      - git_diff
+      - git_push_current_branch
+      - get_project_context
+      - get_context_snapshot
+      - get_agent_bootstrap
+      - memory_search
+      - list_skills
+      - read_skill
+      - approval_status
+      - list_artifacts
+      - write_file
+      - write_binary_file
+      - edit_file
+      - delete_file
+      - delete_path
+      - memory_write
+      - record_artifact
+      - record_progress
+      - record_decision
+      - record_handoff
+      - update_current_task
+      - checkpoint_thread
+      - propose_patch
+      - apply_patch
+      - run_command
+      - start_process
+      - list_processes
+      - read_process
+      - write_process
+      - stop_process
+      - list_browser_profiles
+      - browser_status
+      - list_browser_tabs
+      - browser_visible_state
+      - browser_manage_tabs
+      - browser_click_and_wait
+      - browser_upload_file_and_verify
+      - browser_cdp_browser_call
+      - browser_cdp_browser_batch
+      - browser_cdp_call
+      - browser_cdp_batch
+      - cua_driver_status
+      - cua_driver_call
+      - cua_driver_batch
+      - run_configured_command
+    GatewayArguments:
+      type: object
+      additionalProperties: true
+      required:
+      - workspace_id
+      properties:
+        workspace_id:
+          type: string
+          enum:
+          - genesis
+        agent:
+          type: string
+          description: Agent id/name for genesis_agent_deep_dive, e.g. catalyst, cortex, boba, hexa.
+        host:
+          type: string
+          description: Host/machine-profile id/name for genesis_host_deep_dive.
+        scope:
+          type: string
+          enum:
+          - estate
+          - agent
+          - host
+          description: Scope for genesis_safe_diagnostic.
+        target:
+          type: string
+          description: Agent or host target for scoped genesis_safe_diagnostic.
+        path:
+          type: string
+        content:
+          type: string
+        overwrite:
+          type: boolean
+        command:
+          type: array
+          items:
+            type: string
+        profile_label:
+          type: string
+        target_id:
+          type: string
+        selector:
+          type: string
+        text:
+          type: string
+        method:
+          type: string
+        params:
+          type: object
+          additionalProperties: true
+        steps:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        max_entries:
+          type: integer
+        max_lines:
+          type: integer
+        max_bytes:
+          type: integer
+      description: Tool-specific arguments. Always include workspace_id=genesis. Use get_tool_profile and get_workspace_policy
+        early. This broad private schema intentionally exposes Genesis workspace/browser/computer/machine/estate tools while
+        relying on server-side auth, workspace policy, denied secret globs, and Calvin-approved workflow boundaries.
+    GatewayResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        ok:
+          type: boolean
+        summary:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+        api:
+          type: object
+          additionalProperties: true

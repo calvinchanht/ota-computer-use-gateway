@@ -1,6 +1,9 @@
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserStatus, listBrowserProfiles, listBrowserTabs } from '../src/tools/browser.js';
+import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../src/tools/browser.js';
 
 describe('browser CDP proxy tools', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -62,6 +65,81 @@ describe('browser CDP proxy tools', () => {
     const data = (await listBrowserTabs(fixtureWorkspace(), undefined, true)).data as any;
     expect(data.urls_included).toBe(true);
     expect(data.targets[0].url).toBe('https://example.com/path?token=secret');
+  });
+
+
+
+  it('returns high-level browser visible state for a page target', async () => {
+    mockFetch([{ id: '1', type: 'page', title: 'Apply', url: 'https://jobs.example/apply', webSocketDebuggerUrl: 'ws://cdp/1' }]);
+    const sends = mockWebSocket({ result: { value: { title: 'Apply', visible_text: 'Uploaded cv.pdf Submit', buttons: [{ text: 'Submit', disabled: false }], file_inputs: [{ files: [{ name: 'cv.pdf' }] }], visible_uploaded_files: ['cv.pdf'], required_missing: [] } } });
+    const data = (await browserVisibleState(fixtureWorkspace(), '1')).data as any;
+    expect(data.state.visible_uploaded_files).toEqual(['cv.pdf']);
+    expect(data.reminder).toContain('human-visible');
+    expect(sends[0]).toContain('Runtime.evaluate');
+  });
+
+  it('returns cursor-based visible browser deltas', async () => {
+    mockFetchSequence([
+      [{ id: '1', type: 'page', title: 'Apply', url: 'https://jobs.example/apply', webSocketDebuggerUrl: 'ws://cdp/1' }],
+      [{ id: '1', type: 'page', title: 'Apply', url: 'https://jobs.example/apply', webSocketDebuggerUrl: 'ws://cdp/1' }]
+    ]);
+    mockWebSocketSequence([
+      { result: { value: { url: 'https://jobs.example/apply', title: 'Apply', visible_text: 'alpha', busy: true } } },
+      { result: { value: { url: 'https://jobs.example/apply', title: 'Apply', visible_text: 'alphabeta', busy: false } } }
+    ]);
+    const first = (await browserTail(fixtureWorkspace(), '1')).data as any;
+    const second = (await browserTail(fixtureWorkspace(), '1', first.next_cursor)).data as any;
+    expect(first.tail_supported).toBe(true);
+    expect(first.delta.text_delta).toBe('alpha');
+    expect(second.cursor).toBe(first.next_cursor);
+    expect(second.delta.text_delta).toBe('beta');
+    expect(second.delta.busy_changed).toBe(true);
+    expect(second.delta.busy).toBe(false);
+  });
+
+  it('manages page tabs without exposing browser UI targets', async () => {
+    mockFetchSequence([
+      [{ id: '1', type: 'page', title: 'Job A', url: 'https://jobs.example/a', webSocketDebuggerUrl: 'ws://cdp/1' }, { id: '2', type: 'page', title: 'Settings', url: 'chrome://settings' }],
+      { webSocketDebuggerUrl: 'ws://cdp/browser' }
+    ]);
+    const sends = mockWebSocket({ ok: true });
+    const data = (await browserManageTabs(controlWorkspace(), { action: 'focus_by_title', title_contains: 'job' })).data as any;
+    expect(data.target.id).toBe('1');
+    expect(sends[0]).toContain('Target.activateTarget');
+  });
+
+
+
+  it('clicks and waits on a page target with semantic helper', async () => {
+    mockFetch([{ id: '1', type: 'page', title: 'Apply', url: 'https://jobs.example/apply', webSocketDebuggerUrl: 'ws://cdp/1' }]);
+    const sends = mockWebSocket({ result: { value: { ok: true, waited: { text: true }, url: 'https://jobs.example/done' } } });
+    const data = (await browserClickAndWait(controlWorkspace(), { target_id: '1', text: 'Upload', wait_for_text: 'Ready' })).data as any;
+    expect(data.result.ok).toBe(true);
+    expect(data.reminder).toContain('click-and-wait');
+    expect(sends[0]).toContain('Runtime.evaluate');
+    expect(sends[0]).toContain('wait_for_text');
+  });
+
+
+
+  it('uploads a workspace-relative file and verifies visible filename text', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'browser-upload-'));
+    await writeFile(path.join(root, 'cv.pdf'), 'fake pdf');
+    mockFetch([{ id: '1', type: 'page', title: 'Apply', url: 'https://jobs.example/apply', webSocketDebuggerUrl: 'ws://cdp/1' }]);
+    const sends = mockWebSocketSequence([
+      { root: { nodeId: 1 } },
+      { nodeId: 7 },
+      {},
+      { result: { value: { ok: true, visible_text_found: 'cv.pdf' } } }
+    ]);
+    const data = (await browserUploadFileAndVerify(controlWorkspace({ root, realRoot: root }), { target_id: '1', selector: 'input[type=file]', path: 'cv.pdf' })).data as any;
+    expect(data.file.basename).toBe('cv.pdf');
+    expect(data.verify.ok).toBe(true);
+    expect(sends.some((message) => message.includes('DOM.setFileInputFiles'))).toBe(true);
+  });
+
+  it('rejects absolute upload paths', async () => {
+    await expect(browserUploadFileAndVerify(controlWorkspace(), { target_id: '1', selector: 'input[type=file]', path: '/tmp/cv.pdf' })).rejects.toThrow('absolute upload paths are not allowed');
   });
 
   it('proxies a browser-level CDP call through the scoped browser websocket', async () => {
@@ -139,8 +217,34 @@ function mockFetch(body: unknown) {
   vi.stubGlobal('fetch', vi.fn(async () => response(body)));
 }
 
+function mockFetchSequence(bodies: unknown[]) {
+  let index = 0;
+  vi.stubGlobal('fetch', vi.fn(async () => response(bodies[Math.min(index++, bodies.length - 1)])));
+}
+
 function response(body: unknown) {
   return { ok: true, json: async () => body, text: async () => String(body) };
+}
+
+function mockWebSocketSequence(results: unknown[]) {
+  const sends: string[] = [];
+  let index = 0;
+  class MockWebSocket extends EventTarget {
+    close = vi.fn();
+    constructor(public url: string) {
+      super();
+      setTimeout(() => this.dispatchEvent(new Event('open')), 0);
+    }
+    send = vi.fn((message: string) => {
+      sends.push(message);
+      const id = JSON.parse(message).id;
+      const result = results[Math.min(index++, results.length - 1)];
+      const event = new MessageEvent('message', { data: JSON.stringify({ id, result }) });
+      setTimeout(() => this.dispatchEvent(event), 0);
+    });
+  }
+  vi.stubGlobal('WebSocket', MockWebSocket);
+  return sends;
 }
 
 function mockWebSocket(result: unknown, eventMethod?: string) {

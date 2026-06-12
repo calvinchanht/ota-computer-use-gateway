@@ -1,5 +1,8 @@
+import { realpath, stat } from 'node:fs/promises';
+import path from 'node:path';
 import type { Workspace } from '../core/workspaces.js';
 import { ok } from '../core/result.js';
+import { assertInside } from '../core/paths.js';
 
 const REMINDER = 'Use CDP directly through browser_cdp_* tools.';
 
@@ -35,6 +38,48 @@ type BrowserTargetFilter = {
   include_workers?: boolean;
   include_browser_ui?: boolean;
 };
+
+type BrowserManageTabsAction = 'list_page_tabs_only' | 'focus_by_url' | 'focus_by_title' | 'close_by_filter';
+
+type BrowserManageTabsOptions = {
+  action: BrowserManageTabsAction;
+  url_contains?: string;
+  title_contains?: string;
+  target_id?: string;
+  include_urls?: boolean;
+  max_close?: number;
+};
+
+type BrowserClickAndWaitOptions = {
+  target_id: string;
+  selector?: string;
+  text?: string;
+  wait_for_text?: string;
+  wait_for_selector?: string;
+  wait_for_url_contains?: string;
+  wait_until_stable?: boolean;
+  timeout_ms?: number;
+};
+
+type BrowserUploadFileOptions = {
+  target_id: string;
+  selector: string;
+  path: string;
+  verify_visible_text?: string;
+  timeout_ms?: number;
+};
+
+type BrowserTailSnapshot = {
+  cursor: number;
+  captured_at: string;
+  url?: string;
+  title?: string;
+  visible_text: string;
+  busy: boolean;
+};
+
+const browserTailSnapshots = new Map<string, BrowserTailSnapshot>();
+let browserTailCursor = 0;
 
 export async function listBrowserProfiles(workspace: Workspace) {
   const profiles = configuredProfiles(workspace).map((profile, index) => browserProfile(workspace, profile, index));
@@ -73,6 +118,130 @@ export async function listBrowserTabs(workspace: Workspace, label?: string, incl
   });
 }
 
+
+export async function browserVisibleState(workspace: Workspace, targetId: string, label?: string) {
+  assertScreenRead(workspace);
+  const { profile, target } = await websocketTarget(workspace, targetId, label);
+  const result = await cdpCommand<RuntimeEvaluateResult>(target.webSocketDebuggerUrl, 'Runtime.evaluate', {
+    expression: visibleStateExpression(),
+    returnByValue: true,
+    awaitPromise: true
+  });
+  return ok('browser visible state', {
+    workspace_id: workspace.id,
+    reminder: 'High-level visible browser state. Use this to verify what a human-visible page appears to show; do not rely only on DOM mutation state for upload/form readiness.',
+    profile_label: profile.label,
+    target: targetSummary(target),
+    state: boundedVisibleState(runtimeValue(result))
+  });
+}
+
+export async function browserTail(workspace: Workspace, targetId: string, cursor?: number, label?: string) {
+  assertScreenRead(workspace);
+  const { profile, target } = await websocketTarget(workspace, targetId, label);
+  const result = await cdpCommand<RuntimeEvaluateResult>(target.webSocketDebuggerUrl, 'Runtime.evaluate', {
+    expression: browserTailExpression(),
+    returnByValue: true,
+    awaitPromise: true
+  });
+  const state = browserTailSnapshot(runtimeValue(result));
+  const previous = cursor === undefined ? undefined : browserTailSnapshots.get(browserTailKey(workspace.id, profile.label, targetId, cursor));
+  const nextCursor = ++browserTailCursor;
+  const captured_at = new Date().toISOString();
+  const snapshot: BrowserTailSnapshot = { cursor: nextCursor, captured_at, url: state.url, title: state.title, visible_text: state.visible_text, busy: state.busy };
+  browserTailSnapshots.set(browserTailKey(workspace.id, profile.label, targetId, nextCursor), snapshot);
+  pruneBrowserTailSnapshots();
+  return ok('browser tail', {
+    workspace_id: workspace.id,
+    profile_label: profile.label,
+    target: targetSummary(target),
+    tail_supported: true,
+    cursor: cursor ?? 0,
+    next_cursor: nextCursor,
+    captured_at,
+    state: { url: state.url, title: state.title, busy: state.busy, visible_text_length: state.visible_text.length },
+    delta: browserTailDelta(previous, snapshot),
+    note: 'Pass cursor=next_cursor on the next browser_tail call to receive only URL/title/busy/text deltas.'
+  });
+}
+
+export async function browserManageTabs(workspace: Workspace, options: BrowserManageTabsOptions, label?: string) {
+  const profile = selectedBrowserProfile(workspace, label);
+  const targets = await fetchCdpJson<ChromeTarget[]>(profile, '/json/list');
+  const pages = targets.filter((target) => targetMatchesFilter(target, normalizeTargetFilter({ type: 'page' })));
+  if (options.action === 'list_page_tabs_only') {
+    return ok(`listed ${pages.length} page tabs`, { workspace_id: workspace.id, profile_label: profile.label, targets: pages.map((target) => targetSummary(target, options.include_urls ?? false)) });
+  }
+
+  assertBrowserControl(workspace);
+  const browserUrl = await browserWebSocketUrl(profile);
+  const matches = matchingTargets(pages, options);
+  if (options.action === 'focus_by_url' || options.action === 'focus_by_title') {
+    const target = matches[0];
+    if (!target) throw new Error('no matching browser tab found');
+    await cdpCommand(browserUrl, 'Target.activateTarget', { targetId: target.id });
+    return ok('focused browser tab', { workspace_id: workspace.id, profile_label: profile.label, action: options.action, target: targetSummary(target, true) });
+  }
+
+  if (options.action === 'close_by_filter') {
+    const limit = Math.min(Math.max(Math.trunc(options.max_close ?? 10), 0), 50);
+    const selected = matches.slice(0, limit);
+    const closed = [];
+    for (const target of selected) {
+      await cdpCommand(browserUrl, 'Target.closeTarget', { targetId: target.id });
+      closed.push(targetSummary(target, true));
+    }
+    return ok(`closed ${closed.length} browser tabs`, { workspace_id: workspace.id, profile_label: profile.label, action: options.action, matched: matches.length, closed });
+  }
+
+  throw new Error(`unsupported browser tab action: ${options.action}`);
+}
+
+
+export async function browserClickAndWait(workspace: Workspace, options: BrowserClickAndWaitOptions, label?: string) {
+  assertBrowserControl(workspace);
+  const { profile, target } = await websocketTarget(workspace, options.target_id, label);
+  const timeoutMs = boundedTimeoutMs(options.timeout_ms ?? 10000);
+  const result = await cdpCommand<RuntimeEvaluateResult>(target.webSocketDebuggerUrl, 'Runtime.evaluate', {
+    expression: clickAndWaitExpression(options, timeoutMs),
+    returnByValue: true,
+    awaitPromise: true
+  });
+  return ok('browser click and wait completed', {
+    workspace_id: workspace.id,
+    reminder: 'High-level click-and-wait helper. Prefer this over raw click followed by blind sleeps when waiting for visible text, selector, URL change, or DOM stability.',
+    profile_label: profile.label,
+    target: targetSummary(target),
+    result: runtimeValue(result)
+  });
+}
+
+
+export async function browserUploadFileAndVerify(workspace: Workspace, options: BrowserUploadFileOptions, label?: string) {
+  assertBrowserControl(workspace);
+  const uploadFile = await resolveUploadPath(workspace, options.path);
+  const { profile, target } = await websocketTarget(workspace, options.target_id, label);
+  const documentResult = await cdpCommand<{ root: { nodeId: number } }>(target.webSocketDebuggerUrl, 'DOM.getDocument', { depth: 1, pierce: true });
+  const queryResult = await cdpCommand<{ nodeId: number }>(target.webSocketDebuggerUrl, 'DOM.querySelector', { nodeId: documentResult.root.nodeId, selector: options.selector });
+  if (!queryResult.nodeId) throw new Error('file input selector not found');
+  await cdpCommand(target.webSocketDebuggerUrl, 'DOM.setFileInputFiles', { nodeId: queryResult.nodeId, files: [uploadFile.absolute] });
+  const verifyText = options.verify_visible_text ?? path.basename(uploadFile.absolute);
+  const timeoutMs = boundedTimeoutMs(options.timeout_ms ?? 10000);
+  const verify = await cdpCommand<RuntimeEvaluateResult>(target.webSocketDebuggerUrl, 'Runtime.evaluate', {
+    expression: waitForVisibleTextExpression(verifyText, timeoutMs),
+    returnByValue: true,
+    awaitPromise: true
+  });
+  return ok('browser upload file and verify completed', {
+    workspace_id: workspace.id,
+    reminder: 'High-level file-upload helper. It sets the file input and verifies the upload is reflected in human-visible page text, avoiding DOM-only false readiness.',
+    profile_label: profile.label,
+    target: targetSummary(target),
+    file: { path: uploadFile.relative, basename: path.basename(uploadFile.absolute), bytes: uploadFile.bytes },
+    verify: runtimeValue(verify)
+  });
+}
+
 export async function browserCdpBrowserCall(workspace: Workspace, method: string, params: Record<string, unknown> = {}, label?: string) {
   assertBrowserControl(workspace);
   const profile = selectedBrowserProfile(workspace, label);
@@ -104,6 +273,230 @@ export async function browserCdpBatch(workspace: Workspace, targetId: string, ca
   const results = [];
   for (let index = 0; index < boundedCalls.length; index++) results.push(await oneCdpBatchCall(target.webSocketDebuggerUrl, boundedCalls[index], index, true));
   return ok('browser CDP batch completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, target: targetSummary(target), results });
+}
+
+
+type RuntimeEvaluateResult = { result?: { value?: unknown } };
+
+function runtimeValue(result: RuntimeEvaluateResult) {
+  return result?.result?.value ?? null;
+}
+
+function boundedVisibleState(value: unknown) {
+  if (!value || typeof value !== 'object') return value;
+  const state = value as Record<string, unknown>;
+  return {
+    ...state,
+    visible_text: typeof state.visible_text === 'string' ? state.visible_text.slice(0, 20000) : state.visible_text
+  };
+}
+
+function browserTailSnapshot(value: unknown): Omit<BrowserTailSnapshot, 'cursor' | 'captured_at'> {
+  const state = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return {
+    url: typeof state.url === 'string' ? state.url : undefined,
+    title: typeof state.title === 'string' ? state.title : undefined,
+    visible_text: typeof state.visible_text === 'string' ? state.visible_text.slice(0, 50000) : '',
+    busy: Boolean(state.busy)
+  };
+}
+
+function browserTailDelta(previous: BrowserTailSnapshot | undefined, next: BrowserTailSnapshot) {
+  if (!previous) return { initial: true, url_changed: true, title_changed: true, busy_changed: true, text_delta: next.visible_text.slice(0, 20000), text_delta_truncated: next.visible_text.length > 20000 };
+  const textDelta = next.visible_text.startsWith(previous.visible_text) ? next.visible_text.slice(previous.visible_text.length) : next.visible_text;
+  return {
+    initial: false,
+    url_changed: previous.url !== next.url,
+    title_changed: previous.title !== next.title,
+    busy_changed: previous.busy !== next.busy,
+    url: previous.url !== next.url ? next.url : undefined,
+    title: previous.title !== next.title ? next.title : undefined,
+    busy: previous.busy !== next.busy ? next.busy : undefined,
+    text_delta: textDelta.slice(0, 20000),
+    text_delta_truncated: textDelta.length > 20000,
+    text_replaced: !next.visible_text.startsWith(previous.visible_text)
+  };
+}
+
+function browserTailKey(workspaceId: string, profileLabel: string, targetId: string, cursor: number): string {
+  return `${workspaceId}:${profileLabel}:${targetId}:${cursor}`;
+}
+
+function pruneBrowserTailSnapshots(): void {
+  const maxEntries = 200;
+  if (browserTailSnapshots.size <= maxEntries) return;
+  const remove = browserTailSnapshots.size - maxEntries;
+  let count = 0;
+  for (const key of browserTailSnapshots.keys()) {
+    browserTailSnapshots.delete(key);
+    if (++count >= remove) break;
+  }
+}
+
+function matchingTargets(targets: ChromeTarget[], options: BrowserManageTabsOptions) {
+  return targets.filter((target) => {
+    if (options.target_id && target.id !== options.target_id) return false;
+    if (options.url_contains && !(target.url ?? '').includes(options.url_contains)) return false;
+    if (options.title_contains && !(target.title ?? '').toLowerCase().includes(options.title_contains.toLowerCase())) return false;
+    if (!options.target_id && !options.url_contains && !options.title_contains && options.action !== 'list_page_tabs_only') return false;
+    return true;
+  });
+}
+
+
+
+async function resolveUploadPath(workspace: Workspace, requested: string) {
+  if (path.isAbsolute(requested)) throw new Error('absolute upload paths are not allowed');
+  const joined = path.resolve(workspace.realRoot, requested);
+  const real = await realpath(joined);
+  assertInside(workspace.realRoot, real);
+  const info = await stat(real);
+  if (!info.isFile()) throw new Error('upload path is not a file');
+  return { absolute: real, relative: path.relative(workspace.realRoot, real) || '.', bytes: info.size };
+}
+
+function waitForVisibleTextExpression(text: string, timeoutMs: number) {
+  const payload = JSON.stringify({ text, timeout_ms: timeoutMs }).replace(/</g, '\\u003c');
+  return `(() => new Promise((resolve) => {
+    const opts = ${payload};
+    const started = Date.now();
+    const textOf = (el) => (el?.innerText || el?.textContent || '').replace(/\\s+/g, ' ').trim();
+    const check = () => {
+      const visible_text = textOf(document.body);
+      if (visible_text.includes(opts.text)) { resolve({ ok: true, visible_text_found: opts.text, elapsed_ms: Date.now() - started }); return; }
+      if (Date.now() - started > opts.timeout_ms) { resolve({ ok: false, error: 'visible upload text not found', expected_text: opts.text, elapsed_ms: Date.now() - started }); return; }
+      setTimeout(check, 100);
+    };
+    check();
+  }))()`;
+}
+
+function clickAndWaitExpression(options: BrowserClickAndWaitOptions, timeoutMs: number) {
+  const payload = JSON.stringify({
+    selector: options.selector,
+    text: options.text,
+    wait_for_text: options.wait_for_text,
+    wait_for_selector: options.wait_for_selector,
+    wait_for_url_contains: options.wait_for_url_contains,
+    wait_until_stable: options.wait_until_stable ?? false,
+    timeout_ms: timeoutMs
+  }).replace(/</g, '\\u003c');
+  return `(() => new Promise((resolve) => {
+    const opts = ${payload};
+    const started = Date.now();
+    const textOf = (el) => (el?.innerText || el?.textContent || '').replace(/\\s+/g, ' ').trim();
+    const visible = (el) => {
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+    };
+    const findByText = (needle) => Array.from(document.querySelectorAll('button, a, input, textarea, select, [role=button], [onclick]')).find((el) => visible(el) && textOf(el).toLowerCase().includes(String(needle).toLowerCase()));
+    const target = opts.selector ? document.querySelector(opts.selector) : findByText(opts.text);
+    if (!target) { resolve({ ok: false, error: 'click target not found', elapsed_ms: Date.now() - started }); return; }
+    target.scrollIntoView({ block: 'center', inline: 'center' });
+    target.click();
+    let lastText = textOf(document.body);
+    let stableSince = Date.now();
+    const check = () => {
+      const bodyText = textOf(document.body);
+      if (bodyText !== lastText) { lastText = bodyText; stableSince = Date.now(); }
+      const waited = {
+        text: opts.wait_for_text ? bodyText.includes(opts.wait_for_text) : undefined,
+        selector: opts.wait_for_selector ? Boolean(document.querySelector(opts.wait_for_selector)) : undefined,
+        url: opts.wait_for_url_contains ? location.href.includes(opts.wait_for_url_contains) : undefined,
+        stable: opts.wait_until_stable ? Date.now() - stableSince >= 750 : undefined
+      };
+      const active = Object.values(waited).filter((value) => value !== undefined);
+      if (!active.length || active.every(Boolean)) {
+        resolve({ ok: true, waited, url: location.href, title: document.title, elapsed_ms: Date.now() - started });
+        return;
+      }
+      if (Date.now() - started > opts.timeout_ms) {
+        resolve({ ok: false, error: 'wait timed out', waited, url: location.href, title: document.title, elapsed_ms: Date.now() - started });
+        return;
+      }
+      setTimeout(check, 100);
+    };
+    setTimeout(check, 100);
+  }))()`;
+}
+
+function browserTailExpression() {
+  return `(() => {
+    const textOf = (el) => (el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim();
+    const busySelectors = [
+      '[aria-busy="true"]',
+      '[data-testid*="stop" i]',
+      'button[aria-label*="Stop" i]',
+      'button[aria-label*="Cancel" i]',
+      '.result-streaming'
+    ];
+    return {
+      url: location.href,
+      title: document.title,
+      visible_text: textOf(document.body).slice(0, 50000),
+      busy: busySelectors.some((selector) => Boolean(document.querySelector(selector)))
+    };
+  })()`;
+}
+
+function visibleStateExpression() {
+  return `(() => {
+    const textOf = (el) => (el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim();
+    const visible = (el) => {
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+    };
+    const labelFor = (el) => {
+      if (!el) return '';
+      const id = el.id;
+      const labels = [];
+      if (id) document.querySelectorAll('label[for="' + CSS.escape(id) + '"]').forEach((label) => labels.push(textOf(label)));
+      const parent = el.closest('label');
+      if (parent) labels.push(textOf(parent));
+      const aria = el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.getAttribute('name') || '';
+      if (aria) labels.push(aria);
+      return [...new Set(labels.filter(Boolean))].join(' | ').slice(0, 240);
+    };
+    const field = (el) => ({
+      tag: el.tagName.toLowerCase(),
+      type: el.getAttribute('type') || '',
+      name: el.getAttribute('name') || '',
+      id: el.id || '',
+      label: labelFor(el),
+      required: Boolean(el.required || el.getAttribute('aria-required') === 'true'),
+      disabled: Boolean(el.disabled),
+      visible: visible(el),
+      value_present: el.type === 'file' ? Boolean(el.files && el.files.length) : Boolean((el.value || '').trim()),
+      files: el.type === 'file' ? Array.from(el.files || []).map((file) => ({ name: file.name, size: file.size, type: file.type })) : undefined
+    });
+    const controls = Array.from(document.querySelectorAll('input, textarea, select')).filter(visible).slice(0, 200).map(field);
+    const buttons = Array.from(document.querySelectorAll('button, input[type=button], input[type=submit], [role=button]')).filter(visible).slice(0, 100).map((el) => ({ text: textOf(el).slice(0, 160) || el.value || el.getAttribute('aria-label') || '', type: el.getAttribute('type') || '', disabled: Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true') }));
+    const links = Array.from(document.querySelectorAll('a[href]')).filter(visible).slice(0, 100).map((el) => ({ text: textOf(el).slice(0, 160), href: el.href }));
+    const visibleText = textOf(document.body).slice(0, 30000);
+    const fileInputs = controls.filter((item) => item.type === 'file');
+    const filenames = new Set(fileInputs.flatMap((item) => (item.files || []).map((file) => file.name)));
+    const visibleUploadedFiles = Array.from(filenames).filter((name) => visibleText.includes(name));
+    const requiredMissing = controls.filter((item) => item.required && !item.disabled && item.visible && !item.value_present);
+    const errorNodes = Array.from(document.querySelectorAll('[role=alert], .error, .errors, .invalid, [aria-invalid="true"]')).filter(visible).slice(0, 50).map((el) => textOf(el).slice(0, 300)).filter(Boolean);
+    return {
+      url: location.href, title: document.title, ready_state: document.readyState,
+      visible_text: visibleText, buttons, links, controls,
+      required_missing: requiredMissing,
+      checkboxes: controls.filter((item) => item.type === 'checkbox'),
+      selects: controls.filter((item) => item.tag === 'select'),
+      file_inputs: fileInputs,
+      visible_uploaded_files: visibleUploadedFiles,
+      visible_errors: [...new Set(errorNodes)]
+    };
+  })()`;
+}
+
+function assertScreenRead(workspace: Workspace) {
+  if (!workspace.allow_screen && !workspace.allow_read) throw new Error('browser screen/read access is not enabled for this workspace');
 }
 
 async function websocketTarget(workspace: Workspace, targetId: string, label?: string) {

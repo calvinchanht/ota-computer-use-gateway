@@ -2,7 +2,7 @@ import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { AppConfig, WorkspaceConfig } from '../config/schema.js';
 
-export type Workspace = WorkspaceConfig & { realRoot: string; realAgentDir: string };
+export type Workspace = Omit<WorkspaceConfig, 'api_sets'> & { api_sets?: WorkspaceConfig['api_sets']; realRoot: string; realAgentDir: string };
 
 export async function buildWorkspaces(config: AppConfig): Promise<Map<string, Workspace>> {
   const entries = await Promise.all(config.workspaces.map(resolveWorkspace));

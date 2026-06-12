@@ -129,6 +129,10 @@ components:
         - list_browser_profiles
         - browser_status
         - list_browser_tabs
+        - browser_visible_state
+        - browser_manage_tabs
+        - browser_click_and_wait
+        - browser_upload_file_and_verify
         - browser_cdp_browser_call
         - browser_cdp_browser_batch
         - browser_cdp_call
@@ -156,7 +160,16 @@ components:
         workspace_id:
           type: string
           enum: [catalyst]
-      description: Tool-specific arguments. For browser tab listing, list_browser_tabs defaults to real page targets only; pass type=all and include_iframes/include_workers/include_browser_ui only for raw CDP cleanup/debugging. For file tools include path; for browser/CDP include method/params/target_id/calls; for large-file tools include query, where, select, group_by, metrics, offsets, and dry_run fields as needed.
+      description: |
+        Tool-specific arguments. For browser work, prefer high-level visible-state and tab-hygiene helpers before raw
+        CDP: browser_visible_state returns human-visible text/buttons/forms/required-missing/file upload/error state;
+        browser_manage_tabs lists/focuses/closes real page tabs; browser_click_and_wait clicks by selector/text and
+        waits for visible text, selector, URL substring, or page stability; browser_upload_file_and_verify sets a
+        workspace-relative file input and confirms expected filename/text appears in human-visible page text. For
+        browser tab listing, list_browser_tabs defaults to real page targets only; pass type=all and
+        include_iframes/include_workers/include_browser_ui only for raw CDP cleanup/debugging. For file tools include
+        path; for browser/CDP include method/params/target_id/calls; for large-file tools include query, where,
+        select, group_by, metrics, offsets, and dry_run fields as needed.
     WorkspaceStatusArguments:
       type: object
       additionalProperties: false

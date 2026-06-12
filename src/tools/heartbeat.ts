@@ -3,8 +3,8 @@ import { platformInfo } from '../core/platform.js';
 import type { Workspace } from '../core/workspaces.js';
 
 export function heartbeat(workspaces: Map<string, Workspace>) {
-  return ok('local MCP project agent online', {
-    agent: 'gtp-local-mcp-agent',
+  return ok('local API project agent online', {
+    agent: 'ota-computer-use-gateway',
     version: '0.1.0',
     status: 'online',
     platform: platformInfo(),

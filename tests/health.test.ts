@@ -19,7 +19,7 @@ describe('health payload', () => {
     const payload = healthPayload(config, new Date('2026-01-01T00:00:00Z').getTime());
     const raw = JSON.stringify(payload);
 
-    expect(payload).toMatchObject({ ok: true, service: 'ota-computer-use-gateway', transport: 'http', mcp_path: '/mcp', uptime_seconds: 10, auth_required: true, rate_limit_enabled: true, max_request_bytes: 12345 });
+    expect(payload).toMatchObject({ ok: true, service: 'ota-computer-use-gateway', transport: 'http', api_paths: { tool: '/api/v1/tool', batch: '/api/v1/batch', runs: '/api/v1/runs/{run_id}' }, compatibility_mcp_path: '/mcp', uptime_seconds: 10, auth_required: true, rate_limit_enabled: true, max_request_bytes: 12345 });
     expect(raw).not.toContain('/secret/path');
     expect(raw).not.toContain('TEST_BEARER');
   });

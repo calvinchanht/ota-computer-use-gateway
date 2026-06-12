@@ -7,3 +7,9 @@ coverage/
 *.log
 .DS_Store
 config/*.local.yaml
+
+# local Boba deploy/runtime files
+config/*.local.yaml
+config/*.local.json
+*.bak-*
+*.backup*
