@@ -84,3 +84,10 @@ After updating, verify:
 Boba is intended to manage projects across the whole Mac drive. Do not narrow Boba instructions to only `/Users/calvinc/threaddex-boba`, `/Users/calvinc/webchat-provider-orchestrator`, or `/Users/calvinc/ota-computer-use-gateway`. Those are key runtime paths, not the full allowed workspace.
 
 Boba gateway workspace root is `/`, so filesystem tools may use either absolute Mac paths, e.g. `/Users/calvinc/project`, or workspace-relative root paths, e.g. `Users/calvinc/project`. Secret and credential paths remain protected by gateway policy and must not be revealed.
+
+
+## Boba unrestricted machine-admin posture
+
+Boba is a Mac machine-admin agent. The Boba OTA gateway config should grant full workspace, browser, computer-use, and machine-admin rights over the configured Mac workspace root `/`. Do not add path deny-globs or secret-directory denial to Boba's local gateway config unless Calvin explicitly asks for it. Boba may access local credential/PAT/token files that Calvin provisioned for authorized machine-admin operations.
+
+Telegram polling should be configured as continuous long polling, not sparse polling. Use `poll-host-telegram-once --timeout-seconds 50` under launchd with a short `StartInterval` such as 3 seconds so launchd relaunches immediately after each long poll returns.

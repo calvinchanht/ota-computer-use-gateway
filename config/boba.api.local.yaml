@@ -1,0 +1,49 @@
+server:
+  host: "127.0.0.1"
+  port: 8769
+  auth:
+    enabled: true
+    bearer_token_env: "OTA_GATEWAY_BEARER_TOKEN"
+    allow_loopback_without_auth: false
+  tool_annotations:
+    mode: "honest"
+  rate_limit:
+    enabled: true
+    window_ms: 60000
+    max_requests: 60
+    trust_proxy_headers: false
+
+workspaces:
+  - id: "boba"
+    name: "Boba"
+    agent_dir: "/Users/calvinc/.openclaw/workspace/.agent"
+    root: "/"
+    api_sets:
+      workspace: true
+      browser: true
+      computer: true
+      machine_admin: true
+      estate_admin: false
+    browser:
+      profiles:
+        - label: "BobaChat"
+          cdp_host: "127.0.0.1"
+          cdp_port: 33388
+          user_data_dir: "/Users/calvinc/Library/Application Support/Threaddex/BobaChat"
+          headed: true
+          default: true
+          launch: false
+    commands:
+      boba-threaddex-status: "launchctl list | grep -E 'com.threaddex.boba|ai.boba' || true"
+      boba-threaddex-health: "curl -sS --max-time 8 http://127.0.0.1:33988/healthz"
+      cua-permissions: "cua-driver call check_permissions"
+      cua-windows: "cua-driver call list_windows"
+
+security:
+  max_file_bytes: 200000
+  max_response_bytes: 70000
+  max_request_bytes: 1000000
+  max_search_results: 50
+  max_exec_ms: 120000
+  protect_secret_paths: false
+  denied_globs: []
