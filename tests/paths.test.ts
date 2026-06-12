@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -13,9 +13,15 @@ const config: AppConfig = {
 };
 
 describe('resolveInside', () => {
-  it('rejects absolute paths', async () => {
+  it('allows absolute paths inside the workspace', async () => {
     const workspace = await fixtureWorkspace();
-    await expect(resolveInside(workspace, '/etc/passwd', config)).rejects.toThrow('absolute');
+    await writeFile(path.join(workspace.realRoot, 'abs.txt'), 'ok');
+    await expect(resolveInside(workspace, path.join(workspace.realRoot, 'abs.txt'), config)).resolves.toMatchObject({ relative: 'abs.txt' });
+  });
+
+  it('rejects absolute paths outside the workspace', async () => {
+    const workspace = await fixtureWorkspace();
+    await expect(resolveInside(workspace, '/etc/passwd', config)).rejects.toThrow('outside');
   });
 
   it('rejects symlink escapes', async () => {
@@ -33,6 +39,7 @@ describe('resolveInside', () => {
 
 async function fixtureWorkspace(): Promise<Workspace> {
   const root = await mkdtemp(path.join(tmpdir(), 'gtp-mcp-'));
-  await mkdir(path.join(root, 'src'), { recursive: true });
-  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: false, allow_patch: true, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, browser: { profiles: [] }, commands: {} };
+  const realRoot = await realpath(root);
+  await mkdir(path.join(realRoot, 'src'), { recursive: true });
+  return { id: 'test', name: 'Test', root, realRoot, allow_read: true, allow_write: false, allow_patch: true, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, browser: { profiles: [] }, commands: {} };
 }
