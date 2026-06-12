@@ -30,6 +30,15 @@ describe('resolveInside', () => {
     await expect(resolveInside(workspace, 'escape', config)).rejects.toThrow('outside');
   });
 
+
+
+  it('denies secret-like absolute paths inside a root workspace', async () => {
+    const workspace = await fixtureWorkspace();
+    await mkdir(path.join(workspace.realRoot, 'secrets'), { recursive: true });
+    await writeFile(path.join(workspace.realRoot, 'secrets', 'api-token.txt'), 'secret');
+    await expect(resolveInside(workspace, path.join(workspace.realRoot, 'secrets', 'api-token.txt'), config)).rejects.toThrow('secret');
+  });
+
   it('resolves normal files', async () => {
     const workspace = await fixtureWorkspace();
     await writeFile(path.join(workspace.realRoot, 'ok.txt'), 'ok');
