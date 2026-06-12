@@ -161,6 +161,14 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return JSON.parse(raw);
 }
 
+async function readApiJsonBody(req: IncomingMessage): Promise<{ ok: true; body: unknown } | { ok: false; status: number; error: string }> {
+  try {
+    return { ok: true, body: await readJsonBody(req) };
+  } catch {
+    return { ok: false, status: 400, error: 'invalid_json' };
+  }
+}
+
 function logMcpMethods(body: unknown): void {
   const messages = Array.isArray(body) ? body : [body];
   const methods = messages
@@ -181,26 +189,33 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 
 async function handleApiTool(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
-  const parsedBody = await readJsonBody(req).catch(() => undefined);
+  const parsed = await readApiJsonBody(req);
+  if (!parsed.ok) return sendJson(res, parsed.status, { ok: false, error: parsed.error });
+  const parsedBody = parsed.body;
   const idempotencyKey = idempotencyKeyFor(req, parsedBody);
   const existing = existingRun(idempotencyKey);
   if (existing) return sendJson(res, 200, existing.response);
-  const request = parseApiToolRequest(parsedBody);
-  const args = request.arguments ?? {};
-  if (shouldUseQuotaSaver(request.tool, args)) return handleQuotaSaverApiTool(config, res, request.tool, args, idempotencyKey, safeBodyThread(parsedBody));
-  const result = await runApiTool(config, request.tool, args);
-  const response = { ...result, api: { transport: 'http-json', tool: request.tool, thread: safeBodyThread(parsedBody) } };
-  const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool: request.tool, thread: safeBodyThread(parsedBody) } });
+  const request = parseApiToolRequestSafe(parsedBody);
+  if (!request.ok) return sendJson(res, request.status, { ok: false, error: request.error });
+  const args = request.value.arguments ?? {};
+  if (shouldUseQuotaSaver(request.value.tool, args)) return handleQuotaSaverApiTool(config, res, request.value.tool, args, idempotencyKey, safeBodyThread(parsedBody));
+  const result = await runApiTool(config, request.value.tool, args);
+  const response = { ...result, api: { transport: 'http-json', tool: request.value.tool, thread: safeBodyThread(parsedBody) } };
+  const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool: request.value.tool, thread: safeBodyThread(parsedBody) } });
   return sendJson(res, 200, attachRun(response, record));
 }
 
 async function handleApiBatch(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
-  const parsedBody = await readJsonBody(req).catch(() => undefined);
+  const parsed = await readApiJsonBody(req);
+  if (!parsed.ok) return sendJson(res, parsed.status, { ok: false, error: parsed.error });
+  const parsedBody = parsed.body;
   const idempotencyKey = idempotencyKeyFor(req, parsedBody);
   const existing = existingRun(idempotencyKey);
   if (existing) return sendJson(res, 200, existing.response);
-  const steps = parseApiBatchRequest(parsedBody).steps.slice(0, 20);
+  const parsedBatch = parseApiBatchRequestSafe(parsedBody);
+  if (!parsedBatch.ok) return sendJson(res, parsedBatch.status, { ok: false, error: parsedBatch.error });
+  const steps = parsedBatch.value.steps.slice(0, 20);
   const thread = safeBodyThread(parsedBody);
   if (shouldUseQuotaSaverBatch(steps)) return handleQuotaSaverApiBatch(config, res, steps, idempotencyKey, thread, parsedBody);
   const result = await runApiBatchSteps(config, steps);
@@ -542,6 +557,23 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'run_command' && Boolean(args.tail)) return runArgvTailTool(config, workspace, requiredStringArray(args.cmd, 'cmd'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000);
   if (tool === 'run_command') return runArgvTool(config, workspace, requiredStringArray(args.cmd, 'cmd'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000, optionalNumber(args.max_stdout_bytes) ?? 20000, optionalNumber(args.max_stderr_bytes) ?? 8000);
   throw new Error(`unsupported API tool: ${tool}`);
+}
+
+
+function parseApiToolRequestSafe(body: unknown): { ok: true; value: { tool: string; arguments?: Record<string, unknown> } } | { ok: false; status: number; error: string } {
+  try {
+    return { ok: true, value: parseApiToolRequest(body) };
+  } catch (error) {
+    return { ok: false, status: 400, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function parseApiBatchRequestSafe(body: unknown): { ok: true; value: { steps: Array<{ tool: string; arguments?: Record<string, unknown> }> } } | { ok: false; status: number; error: string } {
+  try {
+    return { ok: true, value: parseApiBatchRequest(body) };
+  } catch (error) {
+    return { ok: false, status: 400, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 function parseApiToolRequest(body: unknown): { tool: string; arguments?: Record<string, unknown> } {
