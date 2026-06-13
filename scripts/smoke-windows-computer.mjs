@@ -58,7 +58,41 @@ async function exerciseLaunch(port, sessionId) {
 }
 
 async function writeConfig(file, workspaceRoot, port) {
-  await writeFile(file, `server:\n  host: 127.0.0.1\n  port: ${port}\nworkspaces:\n  - id: windows-smoke\n    name: Windows Smoke\n    root: ${JSON.stringify(workspaceRoot)}\n    allow_read: true\n    allow_write: false\n    allow_patch: false\n    allow_tests: false\n    windows_computer:\n      enabled: true\n      allow_screenshot: false\n      allow_uia_tree: true\n      allow_mouse: false\n      allow_keyboard: false\n      allow_clipboard: false\n      allow_window_management: true\n      allow_app_launch: true\n      allow_process_attach: false\n      allow_multi_monitor: true\nsecurity:\n  max_file_bytes: 200000\n  max_response_bytes: 50000\n  max_search_results: 10\n  max_exec_ms: 10000\n  denied_globs: []\n`);
+  await writeFile(file, windowsSmokeConfig(workspaceRoot, port));
+}
+
+function windowsSmokeConfig(workspaceRoot, port) {
+  return [
+    'server:',
+    '  host: 127.0.0.1',
+    `  port: ${port}`,
+    'workspaces:',
+    '  - id: windows-smoke',
+    '    name: Windows Smoke',
+    `    root: ${JSON.stringify(workspaceRoot)}`,
+    '    allow_read: true',
+    '    allow_write: false',
+    '    allow_patch: false',
+    '    allow_tests: false',
+    '    windows_computer:',
+    '      enabled: true',
+    '      allow_screenshot: false',
+    '      allow_uia_tree: true',
+    '      allow_mouse: false',
+    '      allow_keyboard: false',
+    '      allow_clipboard: false',
+    '      allow_window_management: true',
+    '      allow_app_launch: true',
+    '      allow_process_attach: false',
+    '      allow_multi_monitor: true',
+    'security:',
+    '  max_file_bytes: 200000',
+    '  max_response_bytes: 50000',
+    '  max_search_results: 10',
+    '  max_exec_ms: 10000',
+    '  denied_globs: []',
+    ''
+  ].join('\n');
 }
 
 async function toolData(port, sessionId, name, args) {
