@@ -60,18 +60,22 @@ export function allowedTools(workspace: Workspace): string[] {
 
   if (sets.browser) base.push('list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch');
   if (sets.computer) base.push('cua_driver_status', 'cua_driver_call', 'cua_driver_batch');
-  if (sets.computer_windows) base.push(...windowsComputerTools());
+  if (sets.computer_windows) base.push(...windowsComputerTools(workspace));
   if (sets.machine_admin) base.push('run_configured_command');
 
   return [...new Set(base)];
 }
 
-function windowsComputerTools() {
-  return [
-    'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_uia_tree',
-    'windows_list_windows', 'windows_focus_window', 'windows_launch_app',
-    'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
-    'windows_type_text', 'windows_key', 'windows_hotkey',
-    'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch'
-  ];
+function windowsComputerTools(workspace: Workspace) {
+  const config = workspace.windows_computer;
+  const tools = ['windows_computer_status', 'windows_list_monitors'];
+  if (config?.allow_screenshot) tools.push('windows_screenshot');
+  if (config?.allow_uia_tree) tools.push('windows_uia_tree');
+  if (config?.allow_window_management) tools.push('windows_list_windows', 'windows_focus_window');
+  if (config?.allow_app_launch) tools.push('windows_launch_app');
+  if (config?.allow_mouse) tools.push('windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll');
+  if (config?.allow_keyboard) tools.push('windows_type_text', 'windows_key', 'windows_hotkey');
+  if (config?.allow_clipboard) tools.push('windows_clipboard_get', 'windows_clipboard_set');
+  if (config?.allow_mouse || config?.allow_keyboard) tools.push('windows_batch');
+  return tools;
 }

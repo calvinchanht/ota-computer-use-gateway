@@ -29,7 +29,6 @@ export async function windowsComputerStatus(workspace: Workspace) {
 export async function windowsListMonitors(workspace: Workspace) {
   ensureWindows();
   ensureEnabled(workspace);
-  ensureCapability(workspace, 'allow_screenshot');
   return ok('windows monitors', await psJson(monitorScript()));
 }
 

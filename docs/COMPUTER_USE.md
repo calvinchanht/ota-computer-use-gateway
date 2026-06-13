@@ -80,6 +80,30 @@ Authority is adjustable, but capability is not intentionally weakened. A trusted
 
 Coordinates are Windows screen coordinates. For multi-monitor work, call `windows_list_monitors` first and choose either an explicit monitor for screenshots or absolute screen coordinates for input. App launch is first-class because desktop development workflows, such as Roblox Studio work, require starting and controlling non-browser applications.
 
+For a non-screenshot validation lane, enable only the required rights instead of using the full `api_sets.computer_windows` macro:
+
+```yaml
+windows_computer:
+  enabled: true
+  allow_screenshot: false
+  allow_uia_tree: true
+  allow_mouse: false
+  allow_keyboard: false
+  allow_clipboard: false
+  allow_window_management: true
+  allow_app_launch: true
+  allow_process_attach: false
+  allow_multi_monitor: true
+```
+
+Run the local HTTP smoke with:
+
+```sh
+npm run smoke:windows-computer
+```
+
+That smoke intentionally avoids `windows_screenshot` and screenshot/image URL serving. It verifies the provider-facing MCP/HTTP contract for monitor discovery, window listing, UI Automation tree reads, and safe app launch.
+
 ## Browser profile defaults
 
 Workspace config can declare profiles:
