@@ -47,7 +47,7 @@ export async function windowsScreenshot(workspace: Workspace, monitor = 'primary
 export async function windowsUiaTree(workspace: Workspace, maxNodes = 120) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_uia_tree');
-  const limit = positiveInteger(maxNodes, 'max_nodes');
+  const limit = boundedInteger(maxNodes, 'max_nodes', 1, 1000);
   ensureWindows();
   return ok('windows uia tree', await psJson(uiaTreeScript(limit)));
 }
@@ -148,6 +148,7 @@ export async function windowsClipboardSet(workspace: Workspace, text: string) {
 }
 
 export async function windowsBatch(workspace: Workspace, calls: WindowsBatchStep[]) {
+  if (!Array.isArray(calls) || calls.length === 0) throw new Error('windows batch requires at least one step');
   if (calls.length > MAX_BATCH_STEPS) throw new Error(`windows batch supports at most ${MAX_BATCH_STEPS} steps`);
   const results: unknown[] = [];
   for (const [index, call] of calls.entries()) {
@@ -398,13 +399,19 @@ function positiveInteger(value: unknown, name: string) {
   return number;
 }
 
+function boundedInteger(value: unknown, name: string, min: number, max: number) {
+  const number = positiveInteger(value, name);
+  if (number < min || number > max) throw new Error(`${name} must be between ${min} and ${max}`);
+  return number;
+}
+
 function screenPoint(x: unknown, y: unknown, prefix = '') {
   const label = prefix ? `${prefix}_` : '';
   return { x: finiteNumber(x, `${label}x`), y: finiteNumber(y, `${label}y`) };
 }
 
-function buttonName(value: string) {
-  const button = value.toLowerCase();
+function buttonName(value: unknown) {
+  const button = String(value ?? 'left').toLowerCase();
   if (!['left', 'right'].includes(button)) throw new Error('button must be left or right');
   return button;
 }

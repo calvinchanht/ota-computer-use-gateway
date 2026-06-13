@@ -27,6 +27,7 @@ describe('windows computer-use capability gates', () => {
   it('rejects malformed window and UIA arguments before host execution', async () => {
     await expect(windowsFocusWindow(fixtureWorkspace(), 1.5)).rejects.toThrow('hwnd must be an integer');
     await expect(windowsUiaTree(fixtureWorkspace(), 0)).rejects.toThrow('max_nodes must be at least 1');
+    await expect(windowsUiaTree(fixtureWorkspace(), 1001)).rejects.toThrow('max_nodes must be between 1 and 1000');
   });
 
   it('rejects empty app launch paths before host execution', async () => {
@@ -55,6 +56,10 @@ describe('windows computer-use capability gates', () => {
   it('rejects oversized Windows batches', async () => {
     const calls = Array.from({ length: 51 }, () => ({ delay_ms: 0 }));
     await expect(windowsBatch(fixtureWorkspace(), calls)).rejects.toThrow('at most 50 steps');
+  });
+
+  it('rejects empty Windows batches', async () => {
+    await expect(windowsBatch(fixtureWorkspace(), [])).rejects.toThrow('requires at least one step');
   });
 });
 
