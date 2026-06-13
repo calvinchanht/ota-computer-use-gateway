@@ -63,6 +63,7 @@ async function exerciseDeniedCapabilities(port, sessionId) {
   await expectToolError(port, sessionId, 'windows_click', { workspace_id: 'windows-smoke', x: 1, y: 1 }, 'allow_mouse');
   await expectToolError(port, sessionId, 'windows_type_text', { workspace_id: 'windows-smoke', text: 'blocked' }, 'allow_keyboard');
   await expectToolError(port, sessionId, 'windows_clipboard_get', { workspace_id: 'windows-smoke' }, 'allow_clipboard');
+  await expectBatchStopped(port, sessionId);
 }
 
 async function writeConfig(file, workspaceRoot, port) {
@@ -114,6 +115,12 @@ async function expectToolError(port, sessionId, name, args, expected) {
   const result = await call(port, sessionId, name, args);
   const text = JSON.stringify(result);
   if (!text.includes(expected)) throw new Error(`${name} did not report ${expected}: ${text}`);
+}
+
+async function expectBatchStopped(port, sessionId) {
+  const data = await toolData(port, sessionId, 'windows_batch', { workspace_id: 'windows-smoke', calls: [{ tool: 'click', args: { x: 1, y: 1 } }, { delay_ms: 1 }] });
+  if (!JSON.stringify(data.stopped_on_error).includes('allow_mouse')) throw new Error(`windows_batch did not stop on allow_mouse: ${JSON.stringify(data)}`);
+  if (data.results.length !== 1) throw new Error(`windows_batch did not stop after first error: ${JSON.stringify(data)}`);
 }
 
 async function initialize(port) {

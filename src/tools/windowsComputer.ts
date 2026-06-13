@@ -139,8 +139,13 @@ export async function windowsClipboardSet(workspace: Workspace, text: string) {
 export async function windowsBatch(workspace: Workspace, calls: WindowsBatchStep[]) {
   if (calls.length > MAX_BATCH_STEPS) throw new Error(`windows batch supports at most ${MAX_BATCH_STEPS} steps`);
   const results: unknown[] = [];
-  for (const [index, call] of calls.entries()) results.push(await runBatchStep(workspace, call, index));
-  return ok('windows batch completed', { results });
+  for (const [index, call] of calls.entries()) {
+    const result = await runBatchStep(workspace, call, index);
+    results.push(result);
+    if ('error' in result) break;
+  }
+  const failed = results.find((row) => typeof row === 'object' && row && 'error' in row) ?? null;
+  return ok(failed ? 'windows batch stopped on error' : 'windows batch completed', { results, stopped_on_error: failed });
 }
 
 async function runBatchStep(workspace: Workspace, step: WindowsBatchStep, index: number) {

@@ -80,6 +80,8 @@ Authority is adjustable, but capability is not intentionally weakened. A trusted
 
 Coordinates are Windows screen coordinates. For multi-monitor work, call `windows_list_monitors` first and choose either an explicit monitor for screenshots or absolute screen coordinates for input. App launch is first-class because desktop development workflows, such as Roblox Studio work, require starting and controlling non-browser applications.
 
+`windows_batch` runs steps sequentially and stops on the first action error. The result includes `stopped_on_error` with the failing row, matching the Mac/Cua batch failure contract. Delay-only rows remain bounded and do not require input rights.
+
 For a non-screenshot validation lane, enable only the required rights instead of using that full macro:
 
 ```yaml
