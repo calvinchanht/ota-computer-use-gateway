@@ -78,7 +78,17 @@ function computerCapabilitySet() {
 }
 
 function windowsComputerCapabilitySet() {
-  return { purpose: 'Windows desktop computer use with monitor capture, UIA, mouse, keyboard, clipboard, windows, and app launch.', full_macro: 'api_sets.computer_windows grants the complete Windows computer-use surface.', partial_rights: 'Use windows_computer.enabled plus individual allow_* rights for narrower lanes such as non-screenshot validation.', tools: ['windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_uia_tree', 'windows_launch_app', 'windows_click', 'windows_type_text', 'windows_batch'] };
+  return { purpose: 'Windows desktop computer use with monitor capture, UIA, mouse, keyboard, clipboard, windows, and app launch.', full_macro: 'api_sets.computer_windows grants the complete Windows computer-use surface.', partial_rights: 'Use windows_computer.enabled plus individual allow_* rights for narrower lanes such as non-screenshot validation.', tools: windowsComputerToolSet() };
+}
+
+function windowsComputerToolSet() {
+  return [
+    'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_uia_tree',
+    'windows_list_windows', 'windows_focus_window', 'windows_launch_app',
+    'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
+    'windows_type_text', 'windows_key', 'windows_hotkey',
+    'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch'
+  ];
 }
 
 function machineAdminCapabilitySet() {
