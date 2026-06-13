@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { windowsBatch, windowsClick, windowsClipboardGet, windowsScreenshot, windowsTypeText } from '../src/tools/windowsComputer.js';
+import { windowsBatch, windowsClick, windowsClipboardGet, windowsFocusWindow, windowsLaunchApp, windowsScreenshot, windowsTypeText, windowsUiaTree } from '../src/tools/windowsComputer.js';
 
 describe('windows computer-use capability gates', () => {
   it('rejects screenshots when screenshot authority is disabled', async () => {
@@ -17,6 +17,20 @@ describe('windows computer-use capability gates', () => {
 
   it('rejects clipboard reads when clipboard authority is disabled', async () => {
     await expect(windowsClipboardGet(fixtureWorkspace({ allow_clipboard: false }))).rejects.toThrow('allow_clipboard');
+  });
+
+  it('rejects malformed mouse arguments before host execution', async () => {
+    await expect(windowsClick(fixtureWorkspace(), Number.NaN, 10)).rejects.toThrow('x must be a finite number');
+    await expect(windowsClick(fixtureWorkspace(), 10, 10, 'middle')).rejects.toThrow('button must be left or right');
+  });
+
+  it('rejects malformed window and UIA arguments before host execution', async () => {
+    await expect(windowsFocusWindow(fixtureWorkspace(), 1.5)).rejects.toThrow('hwnd must be an integer');
+    await expect(windowsUiaTree(fixtureWorkspace(), 0)).rejects.toThrow('max_nodes must be at least 1');
+  });
+
+  it('rejects empty app launch paths before host execution', async () => {
+    await expect(windowsLaunchApp(fixtureWorkspace(), '   ')).rejects.toThrow('file_path must be a non-empty string');
   });
 
   it('stops Windows batches on the first command authorization error', async () => {

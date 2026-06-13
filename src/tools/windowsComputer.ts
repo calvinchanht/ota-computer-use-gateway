@@ -47,8 +47,9 @@ export async function windowsScreenshot(workspace: Workspace, monitor = 'primary
 export async function windowsUiaTree(workspace: Workspace, maxNodes = 120) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_uia_tree');
+  const limit = positiveInteger(maxNodes, 'max_nodes');
   ensureWindows();
-  return ok('windows uia tree', await psJson(uiaTreeScript(maxNodes)));
+  return ok('windows uia tree', await psJson(uiaTreeScript(limit)));
 }
 
 export async function windowsListWindows(workspace: Workspace) {
@@ -61,13 +62,15 @@ export async function windowsListWindows(workspace: Workspace) {
 export async function windowsFocusWindow(workspace: Workspace, hwnd: number) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_window_management');
+  const target = integer(hwnd, 'hwnd');
   ensureWindows();
-  return ok('windows focus window', await psJson(focusWindowScript(hwnd)));
+  return ok('windows focus window', await psJson(focusWindowScript(target)));
 }
 
 export async function windowsLaunchApp(workspace: Workspace, filePath: string, args: string[] = [], cwd?: string) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_app_launch');
+  if (!filePath.trim()) throw new Error('file_path must be a non-empty string');
   ensureWindows();
   return ok('windows app launched', await psJson(launchScript(filePath, args, cwd)));
 }
@@ -75,30 +78,38 @@ export async function windowsLaunchApp(workspace: Workspace, filePath: string, a
 export async function windowsClick(workspace: Workspace, x: number, y: number, button = 'left') {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_mouse');
+  const point = screenPoint(x, y);
+  const mouseButton = buttonName(button);
   ensureWindows();
-  return ok('windows click', await psJson(mouseClickScript(x, y, button)));
+  return ok('windows click', await psJson(mouseClickScript(point.x, point.y, mouseButton)));
 }
 
 export async function windowsDoubleClick(workspace: Workspace, x: number, y: number, button = 'left') {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_mouse');
+  const point = screenPoint(x, y);
+  const mouseButton = buttonName(button);
   ensureWindows();
-  await psJson(mouseClickScript(x, y, button));
-  return ok('windows double click', await psJson(mouseClickScript(x, y, button)));
+  await psJson(mouseClickScript(point.x, point.y, mouseButton));
+  return ok('windows double click', await psJson(mouseClickScript(point.x, point.y, mouseButton)));
 }
 
 export async function windowsDrag(workspace: Workspace, fromX: number, fromY: number, toX: number, toY: number) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_mouse');
+  const from = screenPoint(fromX, fromY, 'from');
+  const to = screenPoint(toX, toY, 'to');
   ensureWindows();
-  return ok('windows drag', await psJson(mouseDragScript(fromX, fromY, toX, toY)));
+  return ok('windows drag', await psJson(mouseDragScript(from.x, from.y, to.x, to.y)));
 }
 
 export async function windowsScroll(workspace: Workspace, x: number, y: number, delta: number) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_mouse');
+  const point = screenPoint(x, y);
+  const scrollDelta = finiteNumber(delta, 'delta');
   ensureWindows();
-  return ok('windows scroll', await psJson(mouseScrollScript(x, y, delta)));
+  return ok('windows scroll', await psJson(mouseScrollScript(point.x, point.y, scrollDelta)));
 }
 
 export async function windowsTypeText(workspace: Workspace, text: string) {
@@ -367,6 +378,35 @@ function num(value: unknown) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error('numeric argument required');
   return number;
+}
+
+function finiteNumber(value: unknown, name: string) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new Error(`${name} must be a finite number`);
+  return number;
+}
+
+function integer(value: unknown, name: string) {
+  const number = finiteNumber(value, name);
+  if (!Number.isInteger(number)) throw new Error(`${name} must be an integer`);
+  return number;
+}
+
+function positiveInteger(value: unknown, name: string) {
+  const number = integer(value, name);
+  if (number < 1) throw new Error(`${name} must be at least 1`);
+  return number;
+}
+
+function screenPoint(x: unknown, y: unknown, prefix = '') {
+  const label = prefix ? `${prefix}_` : '';
+  return { x: finiteNumber(x, `${label}x`), y: finiteNumber(y, `${label}y`) };
+}
+
+function buttonName(value: string) {
+  const button = value.toLowerCase();
+  if (!['left', 'right'].includes(button)) throw new Error('button must be left or right');
+  return button;
 }
 
 function str(value: unknown, fallback = '') {
