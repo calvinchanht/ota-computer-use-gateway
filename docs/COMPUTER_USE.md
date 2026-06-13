@@ -44,7 +44,7 @@ The gateway provides auth, workspace scoping, policy checks, audit, limits, and 
 
 The Windows computer-use layer is a native Windows adapter. It uses monitor capture, Microsoft UI Automation, Win32 window/input APIs, clipboard APIs, and app launch through the local host. It is designed to empower trusted webchat agents, not to handicap them.
 
-Enable it explicitly per workspace:
+Enable it explicitly per workspace. The `api_sets.computer_windows` macro grants the complete Windows computer-use surface:
 
 ```yaml
 api_sets:
@@ -79,6 +79,30 @@ Tools:
 Authority is adjustable, but capability is not intentionally weakened. A trusted local webchat agent can be granted full screen, mouse, keyboard, clipboard, multi-monitor, window-management, and app-launch rights. Less trusted agents can receive a smaller subset from the same contract.
 
 Coordinates are Windows screen coordinates. For multi-monitor work, call `windows_list_monitors` first and choose either an explicit monitor for screenshots or absolute screen coordinates for input. App launch is first-class because desktop development workflows, such as Roblox Studio work, require starting and controlling non-browser applications.
+
+For a non-screenshot validation lane, enable only the required rights instead of using that full macro:
+
+```yaml
+windows_computer:
+  enabled: true
+  allow_screenshot: false
+  allow_uia_tree: true
+  allow_mouse: false
+  allow_keyboard: false
+  allow_clipboard: false
+  allow_window_management: true
+  allow_app_launch: true
+  allow_process_attach: false
+  allow_multi_monitor: true
+```
+
+Run the local HTTP smoke with:
+
+```sh
+npm run smoke:windows-computer
+```
+
+That smoke intentionally avoids `windows_screenshot` and screenshot/image URL serving. It verifies the provider-facing MCP/HTTP contract for monitor discovery, window listing, UI Automation tree reads, and safe app launch.
 
 ## Browser profile defaults
 

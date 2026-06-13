@@ -32,9 +32,48 @@ describe('policy and tool profile consistency', () => {
     expect(policy?.allowed_tools).toContain('run_configured_command');
   });
 
+  it('advertises only enabled Windows computer-use rights for partial Windows lanes', () => {
+    const policy = workspacePolicy(fixtureWorkspace({
+      api_sets: {},
+      windows_computer: {
+        enabled: true,
+        allow_screenshot: false,
+        allow_uia_tree: true,
+        allow_mouse: false,
+        allow_keyboard: false,
+        allow_clipboard: false,
+        allow_window_management: true,
+        allow_app_launch: true,
+        allow_process_attach: false,
+        allow_multi_monitor: true
+      }
+    })).data;
+
+    expect(policy?.allowed_tools).toContain('windows_computer_status');
+    expect(policy?.allowed_tools).toContain('windows_list_monitors');
+    expect(policy?.allowed_tools).toContain('windows_uia_tree');
+    expect(policy?.allowed_tools).toContain('windows_list_windows');
+    expect(policy?.allowed_tools).toContain('windows_launch_app');
+    expect(policy?.allowed_tools).not.toContain('windows_screenshot');
+    expect(policy?.allowed_tools).not.toContain('windows_click');
+    expect(policy?.allowed_tools).not.toContain('windows_type_text');
+    expect(policy?.allowed_tools).not.toContain('windows_clipboard_get');
+  });
+
+  it('explains full Windows macro versus partial Windows rights', () => {
+    const policy = workspacePolicy(fixtureWorkspace()).data;
+    const profile = toolProfile().data;
+    const windowsSet = profile?.api_capability_sets?.sets?.computer_windows;
+
+    expect(policy?.api_set_notes?.computer_windows).toContain('macro grants full Windows rights');
+    expect(policy?.windows_computer_rights?.enabled).toBe(true);
+    expect(windowsSet?.full_macro).toContain('complete Windows computer-use surface');
+    expect(windowsSet?.partial_rights).toContain('individual allow_* rights');
+  });
+
 });
 
-function fixtureWorkspace(): Workspace {
+function fixtureWorkspace(overrides: Partial<Workspace> = {}): Workspace {
   return {
     id: 'test',
     name: 'Test',
@@ -60,6 +99,7 @@ function fixtureWorkspace(): Workspace {
       allow_multi_monitor: true
     },
     browser: { profiles: [] },
-    commands: { test: 'npm test' }
+    commands: { test: 'npm test' },
+    ...overrides
   };
 }

@@ -11,7 +11,7 @@ export function workspacePolicy(workspace: Workspace) {
       workspace: 'OpenClaw-like workspace agent primitives: scoped files, tmp cleanup/delete, artifacts, context, skills, bounded run_command/processes, git/context helpers, and async run recovery.',
       browser: 'Preassigned browser profiles/ports plus CDP-backed tabs, visible state, click/wait, and upload verification.',
       computer: 'Local GUI/computer-use via Cua Driver: screenshots, windows, accessibility tree, mouse, keyboard, and local app control.',
-      computer_windows: 'Windows desktop computer-use via native monitor capture, UI Automation, Win32 window/input APIs, clipboard, and app launch.',
+      computer_windows: 'Windows desktop computer-use via native APIs. The api_sets.computer_windows macro grants full Windows rights; partial lanes should set windows_computer.enabled plus individual rights.',
       machine_admin: 'Host/lane administration and configured operations such as run_configured_command, services, config, tunnels, and deployment workflows. This is separate from normal workspace exec.',
       estate_admin: 'Cross-agent/cross-host Genesis control-plane reports/diagnostics and approved estate runbook operations.'
     },
@@ -23,6 +23,7 @@ export function workspacePolicy(workspace: Workspace) {
       provider_prompts: 'Provider-side confirmation prompts are intentionally minimized for routine scoped workspace/browser/computer work; stop boundaries describe when the agent must pause for Calvin.'
     },
     allowed_tools: allowedTools(workspace),
+    windows_computer_rights: workspace.windows_computer,
     blocked_tools: ['mouse_click', 'keyboard_type'],
     // Provider-side confirmation prompts are harmful for OpenClaw-like chat-thread agents.
     // Routine scoped workspace/computer tools are intentionally not listed as requiring
@@ -60,18 +61,22 @@ export function allowedTools(workspace: Workspace): string[] {
 
   if (sets.browser) base.push('list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch');
   if (sets.computer) base.push('cua_driver_status', 'cua_driver_call', 'cua_driver_batch');
-  if (sets.computer_windows) base.push(...windowsComputerTools());
+  if (sets.computer_windows) base.push(...windowsComputerTools(workspace));
   if (sets.machine_admin) base.push('run_configured_command');
 
   return [...new Set(base)];
 }
 
-function windowsComputerTools() {
-  return [
-    'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_uia_tree',
-    'windows_list_windows', 'windows_focus_window', 'windows_launch_app',
-    'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
-    'windows_type_text', 'windows_key', 'windows_hotkey',
-    'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch'
-  ];
+function windowsComputerTools(workspace: Workspace) {
+  const config = workspace.windows_computer;
+  const tools = ['windows_computer_status', 'windows_list_monitors'];
+  if (config?.allow_screenshot) tools.push('windows_screenshot');
+  if (config?.allow_uia_tree) tools.push('windows_uia_tree');
+  if (config?.allow_window_management) tools.push('windows_list_windows', 'windows_focus_window');
+  if (config?.allow_app_launch) tools.push('windows_launch_app');
+  if (config?.allow_mouse) tools.push('windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll');
+  if (config?.allow_keyboard) tools.push('windows_type_text', 'windows_key', 'windows_hotkey');
+  if (config?.allow_clipboard) tools.push('windows_clipboard_get', 'windows_clipboard_set');
+  if (config?.allow_mouse || config?.allow_keyboard) tools.push('windows_batch');
+  return tools;
 }
