@@ -44,7 +44,7 @@ The gateway provides auth, workspace scoping, policy checks, audit, limits, and 
 
 The Windows computer-use layer is a native Windows adapter. It uses monitor capture, Microsoft UI Automation, Win32 window/input APIs, clipboard APIs, and app launch through the local host. It is designed to empower trusted webchat agents, not to handicap them.
 
-Enable it explicitly per workspace:
+Enable it explicitly per workspace. The `api_sets.computer_windows` macro grants the complete Windows computer-use surface:
 
 ```yaml
 api_sets:
@@ -80,7 +80,7 @@ Authority is adjustable, but capability is not intentionally weakened. A trusted
 
 Coordinates are Windows screen coordinates. For multi-monitor work, call `windows_list_monitors` first and choose either an explicit monitor for screenshots or absolute screen coordinates for input. App launch is first-class because desktop development workflows, such as Roblox Studio work, require starting and controlling non-browser applications.
 
-For a non-screenshot validation lane, enable only the required rights instead of using the full `api_sets.computer_windows` macro:
+For a non-screenshot validation lane, enable only the required rights instead of using that full macro:
 
 ```yaml
 windows_computer:

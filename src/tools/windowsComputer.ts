@@ -27,16 +27,16 @@ export async function windowsComputerStatus(workspace: Workspace) {
 }
 
 export async function windowsListMonitors(workspace: Workspace) {
-  ensureWindows();
   ensureEnabled(workspace);
+  ensureWindows();
   return ok('windows monitors', await psJson(monitorScript()));
 }
 
 export async function windowsScreenshot(workspace: Workspace, monitor = 'primary') {
-  ensureWindows();
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_screenshot');
   ensureMonitorAllowed(workspace, monitor);
+  ensureWindows();
   const paths = screenshotPaths(workspace);
   await mkdir(path.dirname(paths.full), { recursive: true });
   const data = await psObject(screenshotScript(paths.full, monitor));
@@ -45,94 +45,94 @@ export async function windowsScreenshot(workspace: Workspace, monitor = 'primary
 }
 
 export async function windowsUiaTree(workspace: Workspace, maxNodes = 120) {
-  ensureWindows();
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_uia_tree');
+  ensureWindows();
   return ok('windows uia tree', await psJson(uiaTreeScript(maxNodes)));
 }
 
 export async function windowsListWindows(workspace: Workspace) {
-  ensureWindows();
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_window_management');
+  ensureWindows();
   return ok('windows windows', await psJson(listWindowsScript()));
 }
 
 export async function windowsFocusWindow(workspace: Workspace, hwnd: number) {
-  ensureWindows();
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_window_management');
+  ensureWindows();
   return ok('windows focus window', await psJson(focusWindowScript(hwnd)));
 }
 
 export async function windowsLaunchApp(workspace: Workspace, filePath: string, args: string[] = [], cwd?: string) {
-  ensureWindows();
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_app_launch');
+  ensureWindows();
   return ok('windows app launched', await psJson(launchScript(filePath, args, cwd)));
 }
 
 export async function windowsClick(workspace: Workspace, x: number, y: number, button = 'left') {
-  ensureWindows();
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_mouse');
+  ensureWindows();
   return ok('windows click', await psJson(mouseClickScript(x, y, button)));
 }
 
 export async function windowsDoubleClick(workspace: Workspace, x: number, y: number, button = 'left') {
-  ensureWindows();
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_mouse');
+  ensureWindows();
   await psJson(mouseClickScript(x, y, button));
   return ok('windows double click', await psJson(mouseClickScript(x, y, button)));
 }
 
 export async function windowsDrag(workspace: Workspace, fromX: number, fromY: number, toX: number, toY: number) {
-  ensureWindows();
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_mouse');
+  ensureWindows();
   return ok('windows drag', await psJson(mouseDragScript(fromX, fromY, toX, toY)));
 }
 
 export async function windowsScroll(workspace: Workspace, x: number, y: number, delta: number) {
-  ensureWindows();
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_mouse');
+  ensureWindows();
   return ok('windows scroll', await psJson(mouseScrollScript(x, y, delta)));
 }
 
 export async function windowsTypeText(workspace: Workspace, text: string) {
-  ensureWindows();
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_keyboard');
+  ensureWindows();
   return ok('windows typed text', await psJson(typeTextScript(text)));
 }
 
 export async function windowsKey(workspace: Workspace, key: string) {
-  ensureWindows();
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_keyboard');
+  ensureWindows();
   return ok('windows key', await psJson(sendKeysScript(key)));
 }
 
 export async function windowsHotkey(workspace: Workspace, keys: string[]) {
-  ensureWindows();
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_keyboard');
+  ensureWindows();
   return ok('windows hotkey', await psJson(sendKeysScript(hotkeySequence(keys))));
 }
 
 export async function windowsClipboardGet(workspace: Workspace) {
-  ensureWindows();
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_clipboard');
+  ensureWindows();
   return ok('windows clipboard', await psJson(clipboardGetScript()));
 }
 
 export async function windowsClipboardSet(workspace: Workspace, text: string) {
-  ensureWindows();
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_clipboard');
+  ensureWindows();
   return ok('windows clipboard set', await psJson(clipboardSetScript(text)));
 }
 

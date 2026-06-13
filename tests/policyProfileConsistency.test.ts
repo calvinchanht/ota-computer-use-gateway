@@ -60,6 +60,17 @@ describe('policy and tool profile consistency', () => {
     expect(policy?.allowed_tools).not.toContain('windows_clipboard_get');
   });
 
+  it('explains full Windows macro versus partial Windows rights', () => {
+    const policy = workspacePolicy(fixtureWorkspace()).data;
+    const profile = toolProfile().data;
+    const windowsSet = profile?.api_capability_sets?.sets?.computer_windows;
+
+    expect(policy?.api_set_notes?.computer_windows).toContain('macro grants full Windows rights');
+    expect(policy?.windows_computer_rights?.enabled).toBe(true);
+    expect(windowsSet?.full_macro).toContain('complete Windows computer-use surface');
+    expect(windowsSet?.partial_rights).toContain('individual allow_* rights');
+  });
+
 });
 
 function fixtureWorkspace(overrides: Partial<Workspace> = {}): Workspace {

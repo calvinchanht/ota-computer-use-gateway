@@ -11,7 +11,7 @@ export function workspacePolicy(workspace: Workspace) {
       workspace: 'OpenClaw-like workspace agent primitives: scoped files, tmp cleanup/delete, artifacts, context, skills, bounded run_command/processes, git/context helpers, and async run recovery.',
       browser: 'Preassigned browser profiles/ports plus CDP-backed tabs, visible state, click/wait, and upload verification.',
       computer: 'Local GUI/computer-use via Cua Driver: screenshots, windows, accessibility tree, mouse, keyboard, and local app control.',
-      computer_windows: 'Windows desktop computer-use via native monitor capture, UI Automation, Win32 window/input APIs, clipboard, and app launch.',
+      computer_windows: 'Windows desktop computer-use via native APIs. The api_sets.computer_windows macro grants full Windows rights; partial lanes should set windows_computer.enabled plus individual rights.',
       machine_admin: 'Host/lane administration and configured operations such as run_configured_command, services, config, tunnels, and deployment workflows. This is separate from normal workspace exec.',
       estate_admin: 'Cross-agent/cross-host Genesis control-plane reports/diagnostics and approved estate runbook operations.'
     },
@@ -23,6 +23,7 @@ export function workspacePolicy(workspace: Workspace) {
       provider_prompts: 'Provider-side confirmation prompts are intentionally minimized for routine scoped workspace/browser/computer work; stop boundaries describe when the agent must pause for Calvin.'
     },
     allowed_tools: allowedTools(workspace),
+    windows_computer_rights: workspace.windows_computer,
     blocked_tools: ['mouse_click', 'keyboard_type'],
     // Provider-side confirmation prompts are harmful for OpenClaw-like chat-thread agents.
     // Routine scoped workspace/computer tools are intentionally not listed as requiring
