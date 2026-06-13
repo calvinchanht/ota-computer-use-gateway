@@ -71,6 +71,14 @@ describe('policy and tool profile consistency', () => {
     expect(windowsSet?.partial_rights).toContain('individual allow_* rights');
   });
 
+  it('lists every canonical Windows tool in the Windows capability set', () => {
+    const profile = toolProfile().data;
+    const canonicalWindowsTools = profile?.canonical_tools.filter((tool) => tool.startsWith('windows_')) ?? [];
+    const windowsSetTools = profile?.api_capability_sets?.sets?.computer_windows?.tools ?? [];
+
+    for (const tool of canonicalWindowsTools) expect(windowsSetTools).toContain(tool);
+  });
+
 });
 
 function fixtureWorkspace(overrides: Partial<Workspace> = {}): Workspace {

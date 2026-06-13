@@ -39,42 +39,64 @@ function apiCapabilitySets() {
   return {
     model: 'composable_api_sets_not_linear_levels',
     config_key: 'workspaces[].api_sets',
-    sets: {
-      workspace: {
-        purpose: 'Normal agent workspace operations.',
-        tools: ['workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'write_file', 'edit_file', 'apply_patch', 'run_command', 'start_process', 'get_agent_bootstrap', 'get_project_context', 'list_skills', 'record_progress', 'checkpoint_thread']
-      },
-      browser: {
-        purpose: 'Web/browser automation using preassigned profiles and CDP ports.',
-        tools: ['list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_call', 'browser_cdp_batch']
-      },
-      computer: {
-        purpose: 'Local GUI/computer use; independent from machine administration.',
-        tools: ['cua_driver_status', 'cua_driver_call', 'cua_driver_batch']
-      },
-      computer_windows: {
-        purpose: 'Windows desktop computer use with monitor capture, UIA, mouse, keyboard, clipboard, windows, and app launch.',
-        full_macro: 'api_sets.computer_windows grants the complete Windows computer-use surface.',
-        partial_rights: 'Use windows_computer.enabled plus individual allow_* rights for narrower lanes such as non-screenshot validation.',
-        tools: ['windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_uia_tree', 'windows_launch_app', 'windows_click', 'windows_type_text', 'windows_batch']
-      },
-      machine_admin: {
-        purpose: 'Own-machine/lane management through configured commands/processes and scoped service/config/runbook work.',
-        tools: ['run_configured_command', 'run_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process']
-      },
-      estate_admin: {
-        purpose: 'Cross-agent/cross-host Genesis control-plane reporting and approved estate operations.',
-        tools: ['genesis_bootstrap', 'genesis_estate_overview', 'genesis_agent_deep_dive', 'genesis_host_deep_dive', 'genesis_safe_diagnostic']
-      }
-    },
-    examples: {
-      catalyst: ['workspace', 'browser'],
-      cortex: ['workspace', 'browser', 'machine_admin'],
-      boba: ['workspace', 'browser', 'computer', 'machine_admin'],
-      genesis: ['workspace', 'browser', 'computer', 'computer_windows', 'machine_admin', 'estate_admin']
-    },
+    sets: capabilitySetDefinitions(),
+    examples: capabilitySetExamples(),
     policy_flags: ['external_actions', 'destructive_actions', 'secret_return', 'credential_use']
   };
+}
+
+function capabilitySetDefinitions() {
+  return {
+    workspace: workspaceCapabilitySet(),
+    browser: browserCapabilitySet(),
+    computer: computerCapabilitySet(),
+    computer_windows: windowsComputerCapabilitySet(),
+    machine_admin: machineAdminCapabilitySet(),
+    estate_admin: estateAdminCapabilitySet()
+  };
+}
+
+function capabilitySetExamples() {
+  return {
+    catalyst: ['workspace', 'browser'],
+    cortex: ['workspace', 'browser', 'machine_admin'],
+    boba: ['workspace', 'browser', 'computer', 'machine_admin'],
+    genesis: ['workspace', 'browser', 'computer', 'computer_windows', 'machine_admin', 'estate_admin']
+  };
+}
+
+function workspaceCapabilitySet() {
+  return { purpose: 'Normal agent workspace operations.', tools: ['workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'write_file', 'edit_file', 'apply_patch', 'run_command', 'start_process', 'get_agent_bootstrap', 'get_project_context', 'list_skills', 'record_progress', 'checkpoint_thread'] };
+}
+
+function browserCapabilitySet() {
+  return { purpose: 'Web/browser automation using preassigned profiles and CDP ports.', tools: ['list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_call', 'browser_cdp_batch'] };
+}
+
+function computerCapabilitySet() {
+  return { purpose: 'Local GUI/computer use; independent from machine administration.', tools: ['cua_driver_status', 'cua_driver_call', 'cua_driver_batch'] };
+}
+
+function windowsComputerCapabilitySet() {
+  return { purpose: 'Windows desktop computer use with monitor capture, UIA, mouse, keyboard, clipboard, windows, and app launch.', full_macro: 'api_sets.computer_windows grants the complete Windows computer-use surface.', partial_rights: 'Use windows_computer.enabled plus individual allow_* rights for narrower lanes such as non-screenshot validation.', tools: windowsComputerToolSet() };
+}
+
+function windowsComputerToolSet() {
+  return [
+    'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_uia_tree',
+    'windows_list_windows', 'windows_focus_window', 'windows_launch_app',
+    'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
+    'windows_type_text', 'windows_key', 'windows_hotkey',
+    'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch'
+  ];
+}
+
+function machineAdminCapabilitySet() {
+  return { purpose: 'Own-machine/lane management through configured commands/processes and scoped service/config/runbook work.', tools: ['run_configured_command', 'run_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process'] };
+}
+
+function estateAdminCapabilitySet() {
+  return { purpose: 'Cross-agent/cross-host Genesis control-plane reporting and approved estate operations.', tools: ['genesis_bootstrap', 'genesis_estate_overview', 'genesis_agent_deep_dive', 'genesis_host_deep_dive', 'genesis_safe_diagnostic'] };
 }
 
 function apiBehavior() {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { windowsClick, windowsClipboardGet, windowsScreenshot, windowsTypeText } from '../src/tools/windowsComputer.js';
+import { windowsBatch, windowsClick, windowsClipboardGet, windowsFocusWindow, windowsLaunchApp, windowsScreenshot, windowsTypeText, windowsUiaTree } from '../src/tools/windowsComputer.js';
 
 describe('windows computer-use capability gates', () => {
   it('rejects screenshots when screenshot authority is disabled', async () => {
@@ -17,6 +17,49 @@ describe('windows computer-use capability gates', () => {
 
   it('rejects clipboard reads when clipboard authority is disabled', async () => {
     await expect(windowsClipboardGet(fixtureWorkspace({ allow_clipboard: false }))).rejects.toThrow('allow_clipboard');
+  });
+
+  it('rejects malformed mouse arguments before host execution', async () => {
+    await expect(windowsClick(fixtureWorkspace(), Number.NaN, 10)).rejects.toThrow('x must be a finite number');
+    await expect(windowsClick(fixtureWorkspace(), 10, 10, 'middle')).rejects.toThrow('button must be left or right');
+  });
+
+  it('rejects malformed window and UIA arguments before host execution', async () => {
+    await expect(windowsFocusWindow(fixtureWorkspace(), 1.5)).rejects.toThrow('hwnd must be an integer');
+    await expect(windowsUiaTree(fixtureWorkspace(), 0)).rejects.toThrow('max_nodes must be at least 1');
+    await expect(windowsUiaTree(fixtureWorkspace(), 1001)).rejects.toThrow('max_nodes must be between 1 and 1000');
+  });
+
+  it('rejects empty app launch paths before host execution', async () => {
+    await expect(windowsLaunchApp(fixtureWorkspace(), '   ')).rejects.toThrow('file_path must be a non-empty string');
+  });
+
+  it('stops Windows batches on the first command authorization error', async () => {
+    const result = await windowsBatch(fixtureWorkspace({ allow_mouse: false }), [
+      { tool: 'click', args: { x: 10, y: 10 } },
+      { tool: 'type_text', args: { text: 'must not run' } }
+    ]);
+    const data = result.data as any;
+    expect(data.results).toHaveLength(1);
+    expect(data.results[0].error).toContain('allow_mouse');
+    expect(data.stopped_on_error.error).toContain('allow_mouse');
+  });
+
+  it('keeps delay-only Windows batch steps bounded and successful', async () => {
+    const result = await windowsBatch(fixtureWorkspace({ enabled: false }), [{ delay_ms: 1 }]);
+    const data = result.data as any;
+    expect(data.results).toHaveLength(1);
+    expect(data.results[0]).toMatchObject({ index: 0, kind: 'delay', delay_ms: 1 });
+    expect(data.stopped_on_error).toBeNull();
+  });
+
+  it('rejects oversized Windows batches', async () => {
+    const calls = Array.from({ length: 51 }, () => ({ delay_ms: 0 }));
+    await expect(windowsBatch(fixtureWorkspace(), calls)).rejects.toThrow('at most 50 steps');
+  });
+
+  it('rejects empty Windows batches', async () => {
+    await expect(windowsBatch(fixtureWorkspace(), [])).rejects.toThrow('requires at least one step');
   });
 });
 
