@@ -23,6 +23,7 @@ try {
   await exerciseStatus(port, sessionId);
   await exerciseObservation(port, sessionId);
   await exerciseLaunch(port, sessionId);
+  await exerciseDeniedCapabilities(port, sessionId);
   console.log('windows computer non-screenshot smoke ok');
 } finally {
   child.kill('SIGTERM');
@@ -55,6 +56,13 @@ async function exerciseObservation(port, sessionId) {
 async function exerciseLaunch(port, sessionId) {
   const launched = await toolData(port, sessionId, 'windows_launch_app', { workspace_id: 'windows-smoke', file_path: 'cmd.exe', args: ['/c', 'exit'] });
   if (!Number.isInteger(launched.pid)) throw new Error('windows_launch_app returned no integer pid');
+}
+
+async function exerciseDeniedCapabilities(port, sessionId) {
+  await expectToolError(port, sessionId, 'windows_screenshot', { workspace_id: 'windows-smoke' }, 'allow_screenshot');
+  await expectToolError(port, sessionId, 'windows_click', { workspace_id: 'windows-smoke', x: 1, y: 1 }, 'allow_mouse');
+  await expectToolError(port, sessionId, 'windows_type_text', { workspace_id: 'windows-smoke', text: 'blocked' }, 'allow_keyboard');
+  await expectToolError(port, sessionId, 'windows_clipboard_get', { workspace_id: 'windows-smoke' }, 'allow_clipboard');
 }
 
 async function writeConfig(file, workspaceRoot, port) {
@@ -100,6 +108,12 @@ async function toolData(port, sessionId, name, args) {
   const payload = JSON.parse(result.result.content[0].text);
   if (payload.ok === false) throw new Error(`${name} failed: ${payload.message}`);
   return payload.data;
+}
+
+async function expectToolError(port, sessionId, name, args, expected) {
+  const result = await call(port, sessionId, name, args);
+  const text = JSON.stringify(result);
+  if (!text.includes(expected)) throw new Error(`${name} did not report ${expected}: ${text}`);
 }
 
 async function initialize(port) {
