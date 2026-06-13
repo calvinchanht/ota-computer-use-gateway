@@ -3,9 +3,9 @@ info:
   title: Boba Gateway API Action
   version: 0.4.0
   description: |
-    Transparent Boba Gateway JSON API Action for direct private Custom GPT proof.
+    Boba Gateway JSON API Action for Calvin's Boba/Mac Threaddex agent.
 
-    Primary target: webchat agent -> scoped Gateway JSON API -> Boba/Mac Cua Driver proxy.
+    Primary target: Telegram -> Threaddex -> Boba CustomGPT -> scoped Boba/Mac Gateway JSON API. Boba has workspace, browser, computer, and machine_admin API sets; estate_admin is intentionally not enabled.
 
     Important async rule: if any response includes api.status="running", do not retry the original command. Wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. This is normal for Cua Driver/browser-style operations using quota_saver mode.
 servers:
@@ -164,6 +164,20 @@ components:
         - cua_driver_status
         - cua_driver_call
         - cua_driver_batch
+        - browser_tail
+        - apply_patch
+        - git_push_current_branch
+        - run_configured_command
+        - start_process
+        - list_processes
+        - read_process
+        - write_process
+        - stop_process
+        - memory_search
+        - list_skills
+        - read_skill
+        - approval_status
+        - propose_patch
         - infer_file_structure
         - sample_file
         - read_file_chunk
@@ -188,9 +202,12 @@ components:
           type: string
           enum: [boba]
       description: |
-        Tool-specific arguments. Always include workspace_id=boba. Start with get_agent_bootstrap when picking up a
-        new Boba task. Boba has whole-Mac access with workspace root /, but its home/scratch workspace is
-        /Users/calvinc/.openclaw/workspace and startup context is under /Users/calvinc/.openclaw/workspace/.agent.
+        Tool-specific arguments. Always include workspace_id=boba. Start with get_agent_bootstrap, get_tool_profile,
+        and get_workspace_policy when picking up a new Boba task. Boba has whole-Mac workspace root / plus browser,
+        computer-use, and machine_admin capability sets. estate_admin is intentionally not enabled. Boba's Threaddex
+        runtime is /Users/calvinc/threaddex-boba and repo is /Users/calvinc/webchat-provider-orchestrator. The OTA
+        gateway repo is /Users/calvinc/ota-computer-use-gateway. Legacy OpenClaw paths may exist, but they are no
+        longer Boba's primary runtime.
         Roblox Studio is /Applications/RobloxStudio.app; prefer targeted paths such as Applications/RobloxStudio.app
         and Users/calvinc/.openclaw/workspace instead of broad root scans. For screenshots, cua_driver_call
         method=screenshot returns a transient artifact path under .agent/artifacts/screenshots; do not expect inline

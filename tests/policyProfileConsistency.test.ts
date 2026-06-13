@@ -19,6 +19,19 @@ describe('policy and tool profile consistency', () => {
       expect(policy?.allowed_tools, tool).not.toContain(tool);
     }
   });
+
+  it('documents OpenClaw-strength workspace primitives without treating delete or exec as machine admin', () => {
+    const policy = workspacePolicy(fixtureWorkspace()).data;
+    expect(policy?.policy_model?.principle).toContain('not be weaker than OpenClaw');
+    expect(policy?.policy_model?.workspace_exec).toContain('run_command');
+    expect(policy?.policy_model?.workspace_delete).toContain('delete_file');
+    expect(policy?.policy_model?.workspace_delete).toContain('normal scoped workspace editing');
+    expect(policy?.policy_model?.machine_admin).toContain('run_configured_command');
+    expect(policy?.allowed_tools).toContain('delete_file');
+    expect(policy?.allowed_tools).toContain('run_command');
+    expect(policy?.allowed_tools).toContain('run_configured_command');
+  });
+
 });
 
 function fixtureWorkspace(): Workspace {

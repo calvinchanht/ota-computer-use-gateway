@@ -24,3 +24,15 @@ Mutation tools are deferred until policy, audit, and approval are proven.
 - Command execution is routed through a platform adapter so Linux/macOS and future Windows support stay isolated.
 - Workspace tools write audit records under `.agent/audit/tool_calls.jsonl`.
 - `.agent/PANIC_STOP` blocks non-low-risk workspace tools.
+
+## Process tailing
+
+`read_process` supports cursor-based tailing. Clients can pass `cursor` from a prior `next_cursor` value to receive only newly buffered process output. This is the preferred workflow for long-running test/build/watch commands when live progress matters.
+
+## Cursor tail and lifecycle notes
+
+`read_process` and `browser_tail` are cursor-tail APIs. Clients should pass `cursor` from the prior `next_cursor` to retrieve only new output/visible-state deltas.
+
+For long-running commands, prefer `run_command` with `tail=true` or `start_process`, followed by `read_process(cursor)`. Normal `run_command` remains for short commands.
+
+Managed process tools start commands in their own process group. `stop_process` and API shutdown target the process group to avoid leaving shell descendants behind. API services should not be restarted through their own API request path; use an external supervisor lane.

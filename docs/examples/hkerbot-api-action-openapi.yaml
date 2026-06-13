@@ -1,0 +1,199 @@
+openapi: 3.1.0
+info:
+  title: HKerBot Gateway API Action
+  version: 0.4.1
+  description: Private HKerBot Gateway JSON API Action for workspace plus browser webchat.
+servers:
+  - url: https://hkerbot-api.unrealize.com
+paths:
+  /api/v1/tool:
+    post:
+      operationId: hkerbot_gateway_request
+      summary: Run one scoped HKerBot gateway tool call.
+      description: Run one HKerBot tool. Use stable idempotency_key for writes/checkpoints.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayRequest'
+      responses:
+        '200':
+          description: Gateway tool result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResponse'
+  /api/v1/batch:
+    post:
+      operationId: hkerbot_gateway_batch
+      summary: Run multiple scoped HKerBot gateway tool calls.
+      description: Run up to 20 HKerBot tool calls in order. Prefer for read/write/readback flows.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayBatchRequest'
+      responses:
+        '200':
+          description: Gateway batch result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResponse'
+  /api/v1/runs/{run_id}:
+    get:
+      operationId: get_hkerbot_gateway_run
+      summary: Retrieve a previous HKerBot Gateway run.
+      description: Use after interruption or when a previous response includes api.run_id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stored run record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    GatewayRequest:
+      type: object
+      additionalProperties: false
+      required: [tool, arguments]
+      properties:
+        idempotency_key:
+          type: string
+          description: Optional stable retry key.
+        thread:
+          type: object
+          additionalProperties: true
+        tool:
+          $ref: '#/components/schemas/GatewayToolName'
+        arguments:
+          $ref: '#/components/schemas/GatewayArguments'
+    GatewayBatchRequest:
+      type: object
+      additionalProperties: false
+      required: [steps]
+      properties:
+        idempotency_key:
+          type: string
+          description: Optional stable retry key for batch writes/checkpoints.
+        thread:
+          type: object
+          additionalProperties: true
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/GatewayStep'
+    GatewayStep:
+      type: object
+      additionalProperties: false
+      required: [tool, arguments]
+      properties:
+        tool:
+          $ref: '#/components/schemas/GatewayToolName'
+        arguments:
+          $ref: '#/components/schemas/GatewayArguments'
+    GatewayToolName:
+      type: string
+      enum:
+        - workspace_status
+        - get_workspace_policy
+        - get_tool_profile
+        - workspace_inventory
+        - list_dir
+        - stat_path
+        - tree
+        - read_file
+        - read_binary_file
+        - search_files
+        - write_file
+        - write_binary_file
+        - edit_file
+        - propose_patch
+        - apply_patch
+        - git_status
+        - git_diff
+        - git_push_current_branch
+        - get_project_context
+        - get_context_snapshot
+        - get_agent_bootstrap
+        - memory_search
+        - list_skills
+        - read_skill
+        - approval_status
+        - list_artifacts
+        - memory_write
+        - record_artifact
+        - record_progress
+        - record_decision
+        - record_handoff
+        - update_current_task
+        - checkpoint_thread
+        - run_command
+        - start_process
+        - list_processes
+        - read_process
+        - write_process
+        - stop_process
+        - list_browser_profiles
+        - browser_status
+        - list_browser_tabs
+        - browser_visible_state
+        - browser_manage_tabs
+        - browser_click_and_wait
+        - browser_upload_file_and_verify
+        - browser_cdp_browser_call
+        - browser_cdp_browser_batch
+        - browser_cdp_call
+        - browser_cdp_batch
+    GatewayArguments:
+      type: object
+      additionalProperties: true
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [hkerbot]
+      description: >
+        Tool-specific arguments. HKerBot exposes workspace and browser tools plus bounded
+        workspace commands/processes. It does not expose machine_admin, run_configured_command,
+        computer/Cua tools, estate tools, payments, external sends, CAPTCHA, or account/security
+        changes. Use workspace_id hkerbot.
+    GatewayResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        ok:
+          type: boolean
+        summary:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+        warnings:
+          type: array
+          items:
+            type: string
+        api:
+          type: object
+          additionalProperties: true

@@ -11,7 +11,7 @@ const TEXT_DECODER = new TextDecoder('utf-8', { fatal: false });
 const DEFAULT_MAX_BYTES = 50_000;
 const MAX_SCAN_BYTES = 25_000_000;
 const MAX_MATCHES = 200;
-const SKIP_DIRS = new Set(['.git', 'node_modules', '.cache', 'browser-profiles']);
+const SKIP_DIRS = new Set(['.git', 'node_modules', '.cache', '.browser-profiles', 'browser-profiles', 'context-backups', 'data', 'logs', 'memory', 'tmp']);
 
 type Row = Record<string, string>;
 type FilterSpec = Record<string, unknown>;

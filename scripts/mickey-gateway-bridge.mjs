@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
-const DEFAULT_BASE_URL = 'https://mickey-mcp.unrealize.com';
+const DEFAULT_BASE_URL = 'https://mickey-api.unrealize.com';
 const DEFAULT_TOKEN_FILE = '/home/genesis/secrets/ota-computer-use-gateway/mickey-bearer-token';
 const DEFAULT_THREAD = {
   provider: 'chatgpt',

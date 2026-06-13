@@ -114,8 +114,8 @@ function chatThreadOperatingModel() {
     'Do not self-handicap: when a scoped tool is available, use it. Do not ask the operator to confirm routine workspace reads, edits, commands, process work, browser/CDP, or computer-use actions, including local inspection of secrets/ when needed for the task.',
     'The agent is not read-only when workspace policy enables write/patch/exec/process/browser/computer tools. workspace_inventory is read-only only because it is an inventory/metadata helper; it does not restrict write_file, edit_file, run_command, start_process, browser/CDP, or computer-use tools.',
     'Provider safety UI may ask for confirmation, but Gateway policy does not require operator approval for routine scoped local work. Continue after the provider permits the tool call.',
-    'Immediately inspect your MCP tool catalog/policy before saying a capability is unavailable.',
-    'Tool Gateway gives scoped workspace access through MCP tools; do not confuse that with raw SSH/filesystem access.',
+    'Immediately inspect your API tool catalog/policy before saying a capability is unavailable.',
+    'Tool Gateway gives scoped workspace access through API tools; do not confuse that with raw SSH/filesystem access.',
     'Use retrieval and file tools when more local context is needed.',
     'Use browser_cdp_call/browser_cdp_batch for page DOM scripting and Chrome/CDP automation when browser control is enabled.',
     'Do not expect Tool Gateway to inject full context every turn.',
@@ -126,8 +126,8 @@ function chatThreadOperatingModel() {
 
 function capabilityDiscovery(workspace: Workspace) {
   return {
-    rule: 'Before claiming you lack workspace, file, process, browser, memory, skill, or artifact capability, call get_workspace_policy and get_tool_profile and inspect the MCP tool list available in this chat.',
-    workspace_access_model: 'You do not have raw SSH by default. You do have scoped access to the configured workspace root through MCP tools when policy allows them. Use workspace_inventory for broad metadata discovery, especially when direct path listing is blocked by provider-side safety heuristics.',
+    rule: 'Before claiming you lack workspace, file, process, browser, memory, skill, or artifact capability, call get_workspace_policy and get_tool_profile and inspect the API tool list available in this chat.',
+    workspace_access_model: 'You do not have raw SSH by default. You do have scoped access to the configured workspace root through API tools when policy allows them. Use workspace_inventory for broad metadata discovery, especially when direct path listing is blocked by provider-side safety heuristics.',
     core_file_tools: workspace.allow_read ? ['workspace_inventory', 'list_dir', 'tree', 'stat_path', 'search_files', 'read_file', 'read_binary_file'] : [],
     write_file_tools: workspace.allow_write ? ['write_file', 'write_binary_file'] : [],
     patch_tools: workspace.allow_patch ? ['edit_file', 'propose_patch', 'apply_patch'] : [],
@@ -150,7 +150,7 @@ function capabilityDiscovery(workspace: Workspace) {
 function bootstrapNextActions(workspace: Workspace) {
   return [
     'Read agent_start_here, current_task, recent_handoff, recent_progress, and recent_checkpoints.',
-    'Call get_workspace_policy and get_tool_profile early; inspect available MCP tools before declaring limitations.',
+    'Call get_workspace_policy and get_tool_profile early; inspect available API tools before declaring limitations.',
     workspace.allow_read ? 'Confirm scoped file access by calling list_dir on ".", and when useful tree/stat_path/read_file anywhere inside the workspace. Do not treat secrets/ or credential-named files as unavailable when gateway policy grants workspace access. Avoid pasting raw secret contents into chat unless the operator explicitly asks.' : 'Read access is disabled by policy; say so explicitly if asked for files.',
     workspace.allow_write ? 'Use write_file/edit_file/write_binary_file for routine scoped workspace updates without asking the operator to babysit. Record important outputs with record_artifact.' : 'Write access is disabled by policy; do not imply you can write files.',
     'Use browser_cdp_call/browser_cdp_batch or browser_cdp_browser_call/browser_cdp_browser_batch for direct CDP automation when browser control is enabled. Do not look for wrapper browser action tools; the gateway intentionally proxies CDP instead.',

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import sharp from 'sharp';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { ok } from '../core/result.js';
@@ -13,7 +14,11 @@ const MAX_BATCH_STEPS = 25;
 const DEFAULT_SCREENSHOT_CLEANUP_OLDER_THAN_SECONDS = 86400;
 const DEFAULT_SCREENSHOT_KEEP_LATEST = 100;
 const SCREENSHOT_ARTIFACT_PREFIX = 'cua-screenshot-';
-const SCREENSHOT_ARTIFACT_SUFFIX = '.png';
+const SCREENSHOT_PREVIEW_SUFFIX = '-preview.webp';
+const SCREENSHOT_FULL_SUFFIX = '-full.png';
+const SCREENSHOT_WEBP_QUALITY = 85;
+const WINDOW_STATE_ARTIFACT_PREFIX = 'cua-window-state-';
+const WINDOW_STATE_ARTIFACT_SUFFIX = '.md';
 const READ_ONLY_CUA_TOOLS = new Set([
   'check_permissions',
   'list_windows',
@@ -171,7 +176,12 @@ async function boundCursorState(data: unknown) {
   const hasPosition = cursors.some((cursor) => cursor.position && typeof cursor.position === 'object');
   if (!hasPosition) {
     const fallback = await getMacCursorPosition();
-    if (fallback) bounded.fallback_position = fallback;
+    if (fallback) {
+      bounded.position = fallback;
+      bounded.position_source = 'macos_fallback';
+      bounded.fallback_position = fallback;
+      for (const cursor of cursors) if (!cursor.position) cursor.fallback_position = fallback;
+    }
   }
   return bounded;
 }
@@ -191,6 +201,10 @@ async function boundWindowState(workspace: Workspace, data: unknown) {
     if (lower.includes('screenshot') && lower.includes('base64')) {
       const artifact = await writeBase64ScreenshotArtifact(workspace, value);
       return { replacement: null, extra: { [`${key}_artifact`]: artifact, [`${key}_omitted`]: `base64 screenshot payload omitted (${value.length} chars > ${MAX_SCREENSHOT_BASE64})` } };
+    }
+    if (lower === 'tree_markdown' || lower.endsWith('_tree_markdown')) {
+      const artifact = await writeWindowStateTextArtifact(workspace, value);
+      return { replacement: value.slice(0, MAX_SCREENSHOT_BASE64), extra: { [`${key}_artifact`]: artifact, [`${key}_truncated`]: true, [`${key}_omitted`]: `full accessibility tree saved as artifact (${value.length} chars > ${MAX_SCREENSHOT_BASE64})` } };
     }
     return null;
   });
@@ -213,15 +227,17 @@ async function boundedScreenshot(workspace: Workspace, data: unknown, params: Re
     const artifact = await captureScreenshotArtifact(workspace);
     if (artifact) {
       copy.artifact = artifact;
-      copy.note = 'cua-driver returned screenshot metadata only; saved a macOS screencapture artifact instead';
+      copy.preview = artifact.preview;
+      copy.full = artifact.full;
+      copy.note = 'cua-driver returned screenshot metadata only; saved a macOS screencapture PNG plus a half-size WebP preview artifact';
     }
   }
-  copy.retention_note = 'Screenshot artifacts are transient working files. Process them promptly or copy important screenshots to a task/project folder for durable retention.';
+  copy.retention_note = 'Screenshot artifacts are transient working files: default preview is half-size WebP quality 85, full source is PNG, and transient screenshots should be zipped/pruned by retention jobs unless copied to durable task/project artifacts.';
   return copy;
 }
 
 function hasScreenshotPayload(value: Record<string, unknown>) {
-  return ['data', 'base64', 'image', 'image_base64', 'bytes', 'path', 'file', 'artifact'].some((key) => typeof value[key] === 'string' && String(value[key]).length > 0);
+  return ['data', 'base64', 'image', 'image_base64', 'bytes', 'path', 'file'].some((key) => typeof value[key] === 'string' && String(value[key]).length > 0) || Boolean(value.artifact);
 }
 
 async function cleanupScreenshotArtifacts(workspace: Workspace, params: Record<string, unknown>) {
@@ -253,7 +269,7 @@ async function cleanupScreenshotArtifacts(workspace: Workspace, params: Record<s
   for (const item of toDelete) {
     await rm(item.absolute, { force: true }).then(() => { deleted += 1; }, () => undefined);
   }
-  return { enabled: true, directory: agentRelativePath(workspace, dir), pattern: `${SCREENSHOT_ARTIFACT_PREFIX}*${SCREENSHOT_ARTIFACT_SUFFIX}`, older_than_seconds: olderThanSeconds, keep_latest: keepLatest, scanned: screenshots.length, deleted, retained: Math.max(0, screenshots.length - deleted) };
+  return { enabled: true, directory: agentRelativePath(workspace, dir), pattern: `${SCREENSHOT_ARTIFACT_PREFIX}*`, older_than_seconds: olderThanSeconds, keep_latest: keepLatest, scanned: screenshots.length, deleted, retained: Math.max(0, screenshots.length - deleted) };
 }
 
 function optionalNonNegativeNumber(value: unknown, fallback: number | null) {
@@ -264,44 +280,106 @@ function optionalNonNegativeNumber(value: unknown, fallback: number | null) {
 }
 
 function isManagedScreenshotName(name: string) {
-  return name.startsWith(SCREENSHOT_ARTIFACT_PREFIX) && name.endsWith(SCREENSHOT_ARTIFACT_SUFFIX) && !name.includes('/') && !name.includes('..');
+  return name.startsWith(SCREENSHOT_ARTIFACT_PREFIX) && (name.endsWith(SCREENSHOT_FULL_SUFFIX) || name.endsWith(SCREENSHOT_PREVIEW_SUFFIX)) && !name.includes('/') && !name.includes('..');
 }
 
 async function captureScreenshotArtifact(workspace: Workspace) {
   if (process.platform !== 'darwin') return null;
-  const absolutePath = screenshotArtifactPath(workspace);
-  await ensureScreenshotArtifactDir(absolutePath);
-  await execFileAsync('/usr/sbin/screencapture', ['-x', absolutePath], { timeout: 15000, maxBuffer: 1024 * 1024 });
-  return screenshotArtifact(workspace, absolutePath);
+  const paths = screenshotArtifactPaths(workspace);
+  await ensureScreenshotArtifactDir(paths.full);
+  await execFileAsync('/usr/sbin/screencapture', ['-x', paths.full], { timeout: 15000, maxBuffer: 1024 * 1024 });
+  return screenshotArtifactPair(workspace, paths.full, await writeWebpPreview(paths.full, paths.preview));
 }
 
 async function writeBase64ScreenshotArtifact(workspace: Workspace, base64: string) {
-  const absolutePath = screenshotArtifactPath(workspace);
-  await ensureScreenshotArtifactDir(absolutePath);
-  await writeFile(absolutePath, Buffer.from(base64, 'base64'));
-  return screenshotArtifact(workspace, absolutePath);
+  const paths = screenshotArtifactPaths(workspace);
+  await ensureScreenshotArtifactDir(paths.full);
+  await writeFile(paths.full, Buffer.from(base64, 'base64'));
+  return screenshotArtifactPair(workspace, paths.full, await writeWebpPreview(paths.full, paths.preview));
 }
 
 function screenshotArtifactDir(workspace: Workspace) {
   return path.join(workspace.realAgentDir, 'artifacts', 'screenshots');
 }
 
-function screenshotArtifactPath(workspace: Workspace) {
-  const filename = `${SCREENSHOT_ARTIFACT_PREFIX}${new Date().toISOString().replace(/[:.]/g, '-')}${SCREENSHOT_ARTIFACT_SUFFIX}`;
-  return path.join(screenshotArtifactDir(workspace), filename);
+function windowStateArtifactDir(workspace: Workspace) {
+  return path.join(workspace.realAgentDir, 'artifacts', 'window-state');
+}
+
+function screenshotArtifactPaths(workspace: Workspace) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const base = `${SCREENSHOT_ARTIFACT_PREFIX}${stamp}`;
+  const dir = screenshotArtifactDir(workspace);
+  return { full: path.join(dir, `${base}${SCREENSHOT_FULL_SUFFIX}`), preview: path.join(dir, `${base}${SCREENSHOT_PREVIEW_SUFFIX}`) };
+}
+
+async function writeWindowStateTextArtifact(workspace: Workspace, content: string) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const absolutePath = path.join(windowStateArtifactDir(workspace), `${WINDOW_STATE_ARTIFACT_PREFIX}${stamp}${WINDOW_STATE_ARTIFACT_SUFFIX}`);
+  await mkdir(path.dirname(absolutePath), { recursive: true });
+  await writeFile(absolutePath, content);
+  return textArtifact(workspace, absolutePath, 'text/markdown');
+}
+
+async function writeWebpPreview(fullPath: string, previewPath: string) {
+  const image = sharp(fullPath);
+  const metadata = await image.metadata();
+  if (!metadata.width || !metadata.height) throw new Error('screenshot preview generation failed: missing image dimensions');
+  const width = Math.max(1, Math.floor(metadata.width / 2));
+  const height = Math.max(1, Math.floor(metadata.height / 2));
+  await image.resize({ width, height }).webp({ quality: SCREENSHOT_WEBP_QUALITY }).toFile(previewPath);
+  return previewPath;
 }
 
 async function ensureScreenshotArtifactDir(absolutePath: string) {
   await mkdir(path.dirname(absolutePath), { recursive: true });
 }
 
-function screenshotArtifact(workspace: Workspace, absolutePath: string) {
+function screenshotArtifactPair(workspace: Workspace, fullPath: string, previewPath: string) {
+  return {
+    kind: 'screenshot',
+    full: screenshotArtifact(workspace, fullPath, 'png'),
+    preview: screenshotArtifact(workspace, previewPath, 'webp', { quality: SCREENSHOT_WEBP_QUALITY, scale: 0.5 }),
+    default: 'preview'
+  };
+}
+
+function textArtifact(workspace: Workspace, absolutePath: string, mediaType: string, extra: Record<string, unknown> = {}) {
+  const workspacePath = workspaceRelativePath(workspace, absolutePath);
+  const agentPath = agentRelativePath(workspace, absolutePath);
+  return {
+    kind: 'text',
+    format: 'markdown',
+    media_type: mediaType,
+    path: workspacePath,
+    agent_artifact_path: agentPath,
+    url_path: artifactUrlPath(workspace, agentPath),
+    url: artifactUrl(workspace, agentPath),
+    ...extra
+  };
+}
+
+function screenshotArtifact(workspace: Workspace, absolutePath: string, format: 'png' | 'webp', extra: Record<string, unknown> = {}) {
+  const workspacePath = workspaceRelativePath(workspace, absolutePath);
+  const agentPath = agentRelativePath(workspace, absolutePath);
   return {
     kind: 'image',
-    format: 'png',
-    path: workspaceRelativePath(workspace, absolutePath),
-    agent_artifact_path: agentRelativePath(workspace, absolutePath)
+    format,
+    path: workspacePath,
+    agent_artifact_path: agentPath,
+    url_path: artifactUrlPath(workspace, agentPath),
+    url: artifactUrl(workspace, agentPath),
+    ...extra
   };
+}
+
+function artifactUrlPath(workspace: Workspace, workspacePath: string) {
+  return `/api/v1/artifacts/${encodeURIComponent(workspace.id)}/${encodeURIComponent(workspacePath)}`;
+}
+
+function artifactUrl(workspace: Workspace, workspacePath: string) {
+  const base = (process.env.OTA_GATEWAY_PUBLIC_BASE_URL ?? '').replace(/\/$/, '');
+  return base ? `${base}${artifactUrlPath(workspace, workspacePath)}` : undefined;
 }
 
 async function boundLargeStrings(value: unknown, onLargeString?: (key: string, value: string) => Promise<{ replacement: unknown; extra?: Record<string, unknown> } | null>): Promise<unknown> {

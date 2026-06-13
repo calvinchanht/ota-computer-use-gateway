@@ -1,4 +1,6 @@
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { readFile, stat } from 'node:fs/promises';
+import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { AppConfig } from '../config/schema.js';
@@ -14,10 +16,11 @@ import { gitDiff, gitStatus } from '../tools/git.js';
 import { genesisAgentDeepDive, genesisBootstrap, genesisEstateOverview, genesisHostDeepDive, genesisSafeDiagnostic } from '../tools/genesis.js';
 import { agentBootstrap, checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../tools/context.js';
 import { getProjectContext, memoryWrite } from '../tools/memory.js';
-import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
+import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
 import { cuaDriverBatch, cuaDriverCall, cuaDriverStatus, type CuaDriverBatchStep } from '../tools/computer.js';
 import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable, queryTableAggregate, readAround, readFileChunk, readFileLinesLarge, sampleFile, searchFile, searchFiles, tableProfile, updateTableRows } from '../tools/largeFiles.js';
-import { runArgvTool } from '../tools/runCommand.js';
+import { runArgvTailTool, runArgvTool } from '../tools/runCommand.js';
+import { processKill, processList, processLog, processStart, processWrite } from '../tools/processes.js';
 import { listArtifacts, recordArtifact } from '../tools/artifacts.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
@@ -31,6 +34,7 @@ const API_TOOL_PATH = '/api/v1/tool';
 const API_BATCH_PATH = '/api/v1/batch';
 const API_DEBUG_REQUEST_CONTEXT_PATH = '/api/v1/debug/request_context';
 const API_RUNS_PREFIX = '/api/v1/runs/';
+const API_ARTIFACTS_PREFIX = '/api/v1/artifacts/';
 const MAX_RUN_RECORDS = 200;
 
 type ApiRunRecord = {
@@ -65,7 +69,7 @@ export async function listenHttp(config: AppConfig): Promise<void> {
 
   installShutdownHooks(httpServer);
   httpServer.listen(config.server.port, config.server.host, () => {
-    console.error(`OTA gateway MCP HTTP listening on http://${config.server.host}:${config.server.port}${MCP_PATH}`);
+    console.error(`OTA gateway HTTP API listening on http://${config.server.host}:${config.server.port}/api/v1/tool; compatibility transport at ${MCP_PATH}`);
   });
 }
 
@@ -78,6 +82,7 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
   if (requestTooLarge(config, req)) return sendJson(res, 413, { error: 'payload_too_large' });
   if (!isAuthorized(config, req)) return sendAuthError(config, res);
   if (isApiDebugRequestContext(req)) return handleApiDebugRequestContext(req, res);
+  if (isApiArtifactPath(req)) return handleApiArtifact(config, req, res);
   if (isApiRunPath(req)) return handleApiRun(req, res);
   if (isApiTool(req)) return handleApiTool(config, req, res);
   if (isApiBatch(req)) return handleApiBatch(config, req, res);
@@ -92,7 +97,7 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
     if (parsedBody) logMcpMethods(parsedBody);
     await transport.handleRequest(req, res, parsedBody);
   } catch (error) {
-    console.error('MCP HTTP request failed', error);
+    console.error('compatibility transport request failed', error);
     if (!res.headersSent) sendJson(res, 500, { error: 'mcp_request_failed' });
     else res.end();
   } finally {
@@ -110,8 +115,13 @@ function isMcp(req: IncomingMessage): boolean {
 
 function isApi(req: IncomingMessage): boolean {
   const path = req.url?.split('?')[0];
-  return path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || path === API_BATCH_PATH || isApiRunPath(req);
+  return path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || path === API_BATCH_PATH || isApiRunPath(req) || isApiArtifactPath(req);
 }
+
+function isApiArtifactPath(req: IncomingMessage): boolean {
+  return req.url?.split('?')[0]?.startsWith(API_ARTIFACTS_PREFIX) ?? false;
+}
+
 
 function isApiRunPath(req: IncomingMessage): boolean {
   return req.url?.split('?')[0]?.startsWith(API_RUNS_PREFIX) ?? false;
@@ -151,12 +161,20 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return JSON.parse(raw);
 }
 
+async function readApiJsonBody(req: IncomingMessage): Promise<{ ok: true; body: unknown } | { ok: false; status: number; error: string }> {
+  try {
+    return { ok: true, body: await readJsonBody(req) };
+  } catch {
+    return { ok: false, status: 400, error: 'invalid_json' };
+  }
+}
+
 function logMcpMethods(body: unknown): void {
   const messages = Array.isArray(body) ? body : [body];
   const methods = messages
     .map((message) => (message && typeof message === 'object' && 'method' in message ? String((message as { method?: unknown }).method) : null))
     .filter(Boolean);
-  if (methods.length > 0) console.error(`MCP HTTP methods: ${methods.join(',')}`);
+  if (methods.length > 0) console.error(`compatibility transport methods: ${methods.join(',')}`);
 }
 
 function sendCors(res: ServerResponse): void {
@@ -171,37 +189,144 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 
 async function handleApiTool(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
-  const parsedBody = await readJsonBody(req).catch(() => undefined);
+  const parsed = await readApiJsonBody(req);
+  if (!parsed.ok) return sendJson(res, parsed.status, { ok: false, error: parsed.error });
+  const parsedBody = parsed.body;
   const idempotencyKey = idempotencyKeyFor(req, parsedBody);
   const existing = existingRun(idempotencyKey);
   if (existing) return sendJson(res, 200, existing.response);
-  const request = parseApiToolRequest(parsedBody);
-  const args = request.arguments ?? {};
-  if (shouldUseQuotaSaver(request.tool, args)) return handleQuotaSaverApiTool(config, res, request.tool, args, idempotencyKey, safeBodyThread(parsedBody));
-  const result = await runApiTool(config, request.tool, args);
-  const response = { ...result, api: { transport: 'http-json', tool: request.tool, thread: safeBodyThread(parsedBody) } };
-  const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool: request.tool, thread: safeBodyThread(parsedBody) } });
+  const request = parseApiToolRequestSafe(parsedBody);
+  if (!request.ok) return sendJson(res, request.status, { ok: false, error: request.error });
+  const args = request.value.arguments ?? {};
+  if (shouldUseQuotaSaver(request.value.tool, args)) return handleQuotaSaverApiTool(config, res, request.value.tool, args, idempotencyKey, safeBodyThread(parsedBody));
+  const result = await runApiTool(config, request.value.tool, args);
+  const response = { ...result, api: { transport: 'http-json', tool: request.value.tool, thread: safeBodyThread(parsedBody) } };
+  const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool: request.value.tool, thread: safeBodyThread(parsedBody) } });
   return sendJson(res, 200, attachRun(response, record));
 }
 
 async function handleApiBatch(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
-  const parsedBody = await readJsonBody(req).catch(() => undefined);
+  const parsed = await readApiJsonBody(req);
+  if (!parsed.ok) return sendJson(res, parsed.status, { ok: false, error: parsed.error });
+  const parsedBody = parsed.body;
   const idempotencyKey = idempotencyKeyFor(req, parsedBody);
   const existing = existingRun(idempotencyKey);
   if (existing) return sendJson(res, 200, existing.response);
-  const steps = parseApiBatchRequest(parsedBody).steps.slice(0, 20);
+  const parsedBatch = parseApiBatchRequestSafe(parsedBody);
+  if (!parsedBatch.ok) return sendJson(res, parsedBatch.status, { ok: false, error: parsedBatch.error });
+  const steps = parsedBatch.value.steps.slice(0, 20);
+  const thread = safeBodyThread(parsedBody);
+  if (shouldUseQuotaSaverBatch(steps)) return handleQuotaSaverApiBatch(config, res, steps, idempotencyKey, thread, parsedBody);
+  const result = await runApiBatchSteps(config, steps);
+  const response = { ...result, api: { transport: 'http-json', thread } };
+  const record = storeApiRun({ kind: 'batch', ok: result.ok, summary: response.summary, response, idempotency_key: idempotencyKey, request: { steps: steps.map((step) => ({ tool: step.tool })), thread } });
+  return sendJson(res, 200, attachRun(response, record));
+}
+
+
+
+async function handleQuotaSaverApiBatch(config: AppConfig, res: ServerResponse, steps: Array<{ tool: string; arguments?: Record<string, unknown> }>, idempotencyKey: string | undefined, thread: unknown, body: unknown): Promise<void> {
+  const initialWaitMs = boundedAsyncWaitMs(batchOptionalNumber(steps, 'initial_wait_ms') ?? batchOptionalNumber(steps, 'sync_wait_ms') ?? 5000);
+  const pollAfterMs = boundedPollAfterMs(batchOptionalNumber(steps, 'poll_after_ms') ?? 5000);
+  const promise = runApiBatchSteps(config, steps);
+  const result = await promiseWithTimeout(promise, initialWaitMs);
+  if (result) {
+    const response = { ...result, api: { transport: 'http-json', thread, async_mode: 'quota_saver', completed_within_initial_wait_ms: initialWaitMs } };
+    const record = storeApiRun({ kind: 'batch', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { steps: steps.map((step) => ({ tool: step.tool })), thread } });
+    return sendJson(res, 200, attachRun(response, record));
+  }
+
+  const record = storeRunningApiRun({
+    kind: 'batch',
+    ok: true,
+    summary: `running batch; poll get_gateway_run after ${pollAfterMs}ms`,
+    response: {
+      ok: true,
+      summary: `running batch; poll get_gateway_run after ${pollAfterMs}ms`,
+      data: { status: 'running', operation_status: 'running', next_poll_after_ms: pollAfterMs, poll_after_ms: pollAfterMs, instruction: 'Call get_gateway_run after poll_after_ms. Do not retry the original batch.' },
+      api: { transport: 'http-json', thread: safeBodyThread(body), async_mode: 'quota_saver', status: 'running', operation_status: 'running', wait_reason: 'running_batch', poll_after_ms: pollAfterMs, next_poll_after_ms: pollAfterMs }
+    },
+    idempotency_key: idempotencyKey,
+    request: { steps: steps.map((step) => ({ tool: step.tool })), thread }
+  });
+  promise.then((finished) => completeApiRun(record.run_id, finished, { transport: 'http-json', thread, async_mode: 'quota_saver' })).catch((error) => completeApiRun(record.run_id, fail(error instanceof Error ? error.message : String(error)), { transport: 'http-json', thread, async_mode: 'quota_saver' }));
+  return sendJson(res, 202, attachRun(record.response, record));
+}
+
+async function runApiBatchSteps(config: AppConfig, steps: Array<{ tool: string; arguments?: Record<string, unknown> }>): Promise<ToolResult> {
   const results = [];
   for (let index = 0; index < steps.length; index++) {
     const step = steps[index];
     results.push({ index, tool: step.tool, result: await runApiTool(config, step.tool, step.arguments ?? {}) });
   }
-  const ok = results.every((step) => step.result.ok);
-  const response = { ok, summary: `completed ${results.length} API batch steps`, data: { results }, api: { transport: 'http-json', thread: safeBodyThread(parsedBody) } };
-  const record = storeApiRun({ kind: 'batch', ok, summary: response.summary, response, idempotency_key: idempotencyKey, request: { steps: steps.map((step) => ({ tool: step.tool })), thread: safeBodyThread(parsedBody) } });
-  return sendJson(res, 200, attachRun(response, record));
+  return { ok: results.every((step) => step.result.ok), summary: `completed ${results.length} API batch steps`, data: { results }, truncated: false, warnings: [] };
 }
 
+function shouldUseQuotaSaverBatch(steps: Array<{ tool: string; arguments?: Record<string, unknown> }>): boolean {
+  return steps.some((step) => shouldUseQuotaSaver(step.tool, step.arguments ?? {}));
+}
+
+function batchOptionalNumber(steps: Array<{ arguments?: Record<string, unknown> }>, key: string): number | undefined {
+  for (const step of steps) {
+    const value = optionalNumber(step.arguments?.[key]);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+async function handleApiArtifact(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method !== 'GET') return sendJson(res, 405, { error: 'method_not_allowed' });
+  const parsed = parseArtifactRequest(req);
+  if (!parsed) return sendJson(res, 400, { ok: false, error: 'invalid_artifact_path' });
+  const workspaces = await buildWorkspaces(config);
+  const workspace = getWorkspace(workspaces, parsed.workspace_id);
+  const resolved = resolveServedArtifactPath(workspace, parsed.artifact_path);
+  if (!resolved) return sendJson(res, 403, { ok: false, error: 'artifact_path_not_allowed' });
+  const info = await stat(resolved).catch(() => null);
+  if (!info?.isFile()) return sendJson(res, 404, { ok: false, error: 'artifact_not_found' });
+  const body = await readFile(resolved);
+  applyCors(res);
+  res.writeHead(200, {
+    'content-type': artifactContentType(resolved),
+    'content-length': String(body.length),
+    'cache-control': 'private, max-age=300, no-transform',
+    'x-content-type-options': 'nosniff'
+  }).end(body);
+}
+
+function parseArtifactRequest(req: IncomingMessage): { workspace_id: string; artifact_path: string } | null {
+  const rawPath = req.url?.split('?')[0] ?? '';
+  const rest = rawPath.slice(API_ARTIFACTS_PREFIX.length);
+  const slash = rest.indexOf('/');
+  if (slash <= 0) return null;
+  const workspaceId = decodeURIComponent(rest.slice(0, slash));
+  const artifactPath = decodeURIComponent(rest.slice(slash + 1));
+  if (!workspaceId || !artifactPath) return null;
+  return { workspace_id: workspaceId, artifact_path: artifactPath };
+}
+
+function resolveServedArtifactPath(workspace: Workspace, artifactPath: string): string | null {
+  const normalized = path.posix.normalize(artifactPath.replaceAll('\\', '/'));
+  if (normalized.startsWith('../') || normalized === '..' || path.isAbsolute(normalized)) return null;
+  if (!normalized.startsWith('.agent/artifacts/')) return null;
+  const relativeToAgent = normalized.slice('.agent/'.length);
+  const absolute = path.resolve(workspace.realAgentDir, relativeToAgent);
+  const artifactsRoot = path.resolve(workspace.realAgentDir, 'artifacts');
+  const rel = path.relative(artifactsRoot, absolute);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  return absolute;
+}
+
+function artifactContentType(filename: string): string {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.json')) return 'application/json';
+  if (lower.endsWith('.txt') || lower.endsWith('.log')) return 'text/plain; charset=utf-8';
+  return 'application/octet-stream';
+}
 
 function handleApiRun(req: IncomingMessage, res: ServerResponse): void {
   if (req.method !== 'GET') return sendJson(res, 405, { error: 'method_not_allowed' });
@@ -257,15 +382,23 @@ async function handleQuotaSaverApiTool(config: AppConfig, res: ServerResponse, t
   return sendJson(res, 202, attachRun(record.response, record));
 }
 
-function shouldUseQuotaSaver(tool: string, args: Record<string, unknown>): boolean {
+export function shouldUseQuotaSaver(tool: string, args: Record<string, unknown>): boolean {
   const mode = optionalString(args.async_mode) ?? optionalString(args.browser_async_mode);
   if (mode === 'off' || mode === 'sync') return false;
-  return mode === 'quota_saver' || (mode === undefined && (tool.startsWith('browser_cdp') || tool.startsWith('cua_driver_')) && tool !== 'cua_driver_status');
+  return mode === 'quota_saver' || (mode === undefined && defaultQuotaSaverTool(tool));
+}
+
+function defaultQuotaSaverTool(tool: string): boolean {
+  if (tool === 'run_command' || tool === 'search_files') return true;
+  if (tool === 'cua_driver_status') return false;
+  return tool.startsWith('browser_cdp') || tool.startsWith('cua_driver_');
 }
 
 function initialWaitReason(tool: string): string {
   if (tool.startsWith('browser_cdp')) return 'waiting_for_browser';
   if (tool.startsWith('cua_driver')) return 'waiting_for_computer';
+  if (tool === 'search_files') return 'searching_workspace';
+  if (tool === 'run_command') return 'running_command';
   return 'running';
 }
 
@@ -391,6 +524,7 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'browser_status') return browserStatus(workspace, optionalString(args.profile_label));
   if (tool === 'list_browser_tabs') return listBrowserTabs(workspace, optionalString(args.profile_label), Boolean(args.include_urls), browserTargetFilter(args));
   if (tool === 'browser_visible_state') return browserVisibleState(workspace, requiredString(args.target_id, 'target_id'), optionalString(args.profile_label));
+  if (tool === 'browser_tail') return browserTail(workspace, requiredString(args.target_id, 'target_id'), optionalNumber(args.cursor), optionalString(args.profile_label));
   if (tool === 'browser_manage_tabs') return browserManageTabs(workspace, { action: requiredString(args.action, 'action') as any, url_contains: optionalString(args.url_contains), title_contains: optionalString(args.title_contains), target_id: optionalString(args.target_id), include_urls: optionalBoolean(args.include_urls), max_close: optionalNumber(args.max_close) }, optionalString(args.profile_label));
   if (tool === 'browser_click_and_wait') return browserClickAndWait(workspace, { target_id: requiredString(args.target_id, 'target_id'), selector: optionalString(args.selector), text: optionalString(args.text), wait_for_text: optionalString(args.wait_for_text), wait_for_selector: optionalString(args.wait_for_selector), wait_for_url_contains: optionalString(args.wait_for_url_contains), wait_until_stable: optionalBoolean(args.wait_until_stable), timeout_ms: optionalNumber(args.timeout_ms) }, optionalString(args.profile_label));
   if (tool === 'browser_upload_file_and_verify') return browserUploadFileAndVerify(workspace, { target_id: requiredString(args.target_id, 'target_id'), selector: requiredString(args.selector, 'selector'), path: requiredString(args.path, 'path'), verify_visible_text: optionalString(args.verify_visible_text), timeout_ms: optionalNumber(args.timeout_ms) }, optionalString(args.profile_label));
@@ -407,7 +541,7 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'read_file_lines') return readFileLinesLarge(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.start_line) ?? 1, optionalNumber(args.max_lines) ?? 200);
   if (tool === 'read_around') return readAround(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.line) ?? 1, optionalNumber(args.before) ?? 10, optionalNumber(args.after) ?? 20);
   if (tool === 'search_file') return searchFile(config, workspace, requiredString(args.path, 'path'), requiredString(args.query, 'query'), optionalNumber(args.max_matches) ?? 50, optionalNumber(args.context_lines) ?? 0);
-  if (tool === 'search_files') return searchFiles(config, workspace, optionalString(args.root) ?? '.', requiredString(args.query, 'query'), optionalString(args.glob) ?? '**/*', optionalNumber(args.max_matches) ?? 50, optionalNumber(args.context_lines) ?? 0);
+  if (tool === 'search_files') return searchFiles(config, workspace, optionalString(args.root) ?? optionalString(args.path) ?? '.', requiredString(args.query, 'query'), optionalString(args.glob) ?? '**/*', optionalNumber(args.max_matches) ?? 50, optionalNumber(args.context_lines) ?? 0);
   if (tool === 'table_profile') return tableProfile(config, workspace, requiredString(args.path, 'path'), optionalStringArray(args.columns));
   if (tool === 'query_table') return queryTable(config, workspace, requiredString(args.path, 'path'), optionalStringArray(args.select), recordArg(args.where, 'where'), arrayRecordArg(args.sort, 'sort'), optionalNumber(args.limit) ?? 100, optionalNumber(args.offset) ?? 0);
   if (tool === 'query_table_aggregate') return queryTableAggregate(config, workspace, requiredString(args.path, 'path'), optionalStringArray(args.group_by), arrayRecordArg(args.metrics, 'metrics') ?? [{ op: 'count' }], recordArg(args.where, 'where'));
@@ -415,8 +549,31 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'query_json') return queryJson(config, workspace, requiredString(args.path, 'path'), requiredString(args.query, 'query'), optionalNumber(args.max_bytes) ?? 50000);
   if (tool === 'patch_file_lines') return patchFileLines(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.start_line) ?? 1, optionalNumber(args.end_line) ?? optionalNumber(args.start_line) ?? 1, requiredString(args.replacement, 'replacement'), optionalString(args.expected_sha256), args.dry_run !== false);
   if (tool === 'update_table_rows') return updateTableRows(config, workspace, requiredString(args.path, 'path'), recordArg(args.where, 'where') ?? {}, stringRecordArg(args.set, 'set'), args.dry_run !== false, Boolean(args.allow_multiple));
+  if (tool === 'start_process') return processStart(config, workspace, requiredString(args.command, 'command'));
+  if (tool === 'list_processes') return processList();
+  if (tool === 'read_process') return processLog(requiredString(args.process_id, 'process_id'), optionalNumber(args.max_bytes) ?? 50000, optionalNumber(args.cursor));
+  if (tool === 'write_process') return processWrite(requiredString(args.process_id, 'process_id'), requiredString(args.input, 'input'), Boolean(args.close_stdin));
+  if (tool === 'stop_process') return processKill(requiredString(args.process_id, 'process_id'));
+  if (tool === 'run_command' && Boolean(args.tail)) return runArgvTailTool(config, workspace, requiredStringArray(args.cmd, 'cmd'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000);
   if (tool === 'run_command') return runArgvTool(config, workspace, requiredStringArray(args.cmd, 'cmd'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000, optionalNumber(args.max_stdout_bytes) ?? 20000, optionalNumber(args.max_stderr_bytes) ?? 8000);
   throw new Error(`unsupported API tool: ${tool}`);
+}
+
+
+function parseApiToolRequestSafe(body: unknown): { ok: true; value: { tool: string; arguments?: Record<string, unknown> } } | { ok: false; status: number; error: string } {
+  try {
+    return { ok: true, value: parseApiToolRequest(body) };
+  } catch (error) {
+    return { ok: false, status: 400, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function parseApiBatchRequestSafe(body: unknown): { ok: true; value: { steps: Array<{ tool: string; arguments?: Record<string, unknown> }> } } | { ok: false; status: number; error: string } {
+  try {
+    return { ok: true, value: parseApiBatchRequest(body) };
+  } catch (error) {
+    return { ok: false, status: 400, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 function parseApiToolRequest(body: unknown): { tool: string; arguments?: Record<string, unknown> } {
