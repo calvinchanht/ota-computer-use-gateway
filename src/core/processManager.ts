@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { shellInvocation } from './commandAdapter.js';
 import { truncateText } from './text.js';
@@ -24,7 +24,7 @@ export function startManagedProcess(command: string, cwd: string, timeoutMs: num
 }
 
 export function startManagedArgvProcess(command: string, args: string[], cwd: string, timeoutMs: number, displayCommand?: string): ManagedProcess {
-  const child = spawn(command, args, { cwd, env: safeEnv(), detached: true });
+  const child = spawn(command, args, { cwd, env: safeEnv(), detached: process.platform !== 'win32' });
   const item = newProcess(displayCommand ?? [command, ...args].join(' '), cwd, child);
   processes.set(item.id, item);
   attachOutput(item);
@@ -115,6 +115,10 @@ export function managedProcessOutput(item: ManagedProcess, cursor?: number, maxB
 function signalManagedProcess(item: ManagedProcess, signal: NodeJS.Signals): boolean {
   const pid = item.child.pid;
   if (!pid) return false;
+  if (process.platform === 'win32') {
+    const result = spawnSync('taskkill.exe', ['/pid', String(pid), '/t', '/f'], { windowsHide: true });
+    if (!result.error) return true;
+  }
   try {
     // Managed tools run in their own process group so shells and their descendants are cleaned together.
     process.kill(-pid, signal);
@@ -146,7 +150,7 @@ function appendBounded(existing: string, data: Buffer): string {
 }
 
 function safeEnv(): NodeJS.ProcessEnv {
-  const keep = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'SHELL'];
+  const keep = ['PATH', 'Path', 'HOME', 'USERPROFILE', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'SHELL', 'COMSPEC', 'SystemRoot', 'WINDIR'];
   return Object.fromEntries(keep.map((key) => [key, process.env[key] ?? '']));
 }
 

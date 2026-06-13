@@ -2,9 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { ok } from '../core/result.js';
 
-const CONTINUITY_ROOT = '/home/genesis/infunity/infunity-agents/genesis/continuity';
-const AGENT_CARD_DIR = path.join(CONTINUITY_ROOT, 'agent-cards');
-const HOST_CARD_DIR = path.join(CONTINUITY_ROOT, 'machine-profiles');
+const DEFAULT_CONTINUITY_ROOT = '/home/genesis/infunity/infunity-agents/genesis/continuity';
 const MAX_EXCERPT_CHARS = 12000;
 
 const CORE_DOCS = [
@@ -16,6 +14,7 @@ const CORE_DOCS = [
 ];
 
 export async function genesisBootstrap() {
+  const root = continuityRoot();
   const docs = await readDocs(CORE_DOCS, 2500);
   return ok('genesis bootstrap', {
     lane: 'Webchat Genesis',
@@ -27,17 +26,17 @@ export async function genesisBootstrap() {
       'Use genesis_safe_diagnostic for bounded non-mutating diagnostic summaries.',
       'Do not ask for raw secrets or bearer tokens; these tools intentionally do not return them.'
     ],
-    continuity_root: CONTINUITY_ROOT,
+    continuity_root: root,
     docs
   });
 }
 
 export async function genesisEstateOverview() {
   const docs = await readDocs(['CONTROL_PLANE_INDEX.md', 'ESTATE_RUNTIME_TABLE.md', 'HOST_RUNTIME_TABLE.md', 'AGENT_DIRECTORY.md'], 6000);
-  const agents = await listCardNames(AGENT_CARD_DIR);
-  const hosts = await listCardNames(HOST_CARD_DIR);
+  const agents = await listCardNames(agentCardDirs());
+  const hosts = await listCardNames(hostCardDirs());
   return ok('genesis estate overview', {
-    continuity_root: CONTINUITY_ROOT,
+    continuity_root: continuityRoot(),
     agents,
     hosts,
     docs,
@@ -47,10 +46,10 @@ export async function genesisEstateOverview() {
 
 export async function genesisAgentDeepDive(agent: string) {
   const name = safeSlug(agent, 'agent');
-  const card = await readFirstExisting([
-    path.join(AGENT_CARD_DIR, `${name}.md`),
-    path.join(AGENT_CARD_DIR, `${name.toLowerCase()}.md`)
-  ], MAX_EXCERPT_CHARS);
+  const card = await readFirstExisting(agentCardDirs().flatMap((dir) => [
+    path.join(dir, `${name}.md`),
+    path.join(dir, `${name.toLowerCase()}.md`)
+  ]), MAX_EXCERPT_CHARS);
   if (!card) throw new Error(`unknown or undocumented agent card: ${name}`);
   return ok('genesis agent deep dive', {
     agent: name,
@@ -86,9 +85,10 @@ export async function genesisSafeDiagnostic(scope = 'estate', target?: string) {
 }
 
 async function readDocs(names: string[], chars: number) {
+  const root = continuityRoot();
   const out = [];
   for (const name of names) {
-    const file = path.join(CONTINUITY_ROOT, name);
+    const file = path.join(root, name);
     const doc = await readExcerpt(file, chars).catch(() => null);
     if (doc) out.push(doc);
   }
@@ -111,19 +111,41 @@ async function readExcerpt(file: string, chars: number) {
   return { path: file, chars: raw.length, excerpt, truncated: raw.length > excerpt.length };
 }
 
-async function listCardNames(dir: string) {
-  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-  return entries.filter((entry) => entry.isFile() && entry.name.endsWith('.md')).map((entry) => entry.name.replace(/\.md$/, '')).sort();
+async function listCardNames(dirs: string[]) {
+  const names = new Set<string>();
+  for (const dir of dirs) {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith('.md')) names.add(entry.name.replace(/\.md$/, ''));
+    }
+  }
+  return [...names].sort();
 }
 
 async function hostCandidates(name: string) {
-  const base = [path.join(HOST_CARD_DIR, `${name}.md`), path.join(HOST_CARD_DIR, `${name.toLowerCase()}.md`)];
-  const entries = await readdir(HOST_CARD_DIR, { withFileTypes: true }).catch(() => []);
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
-    if (entry.name.toLowerCase().includes(name.toLowerCase())) base.push(path.join(HOST_CARD_DIR, entry.name));
+  const base = hostCardDirs().flatMap((dir) => [path.join(dir, `${name}.md`), path.join(dir, `${name.toLowerCase()}.md`)]);
+  for (const dir of hostCardDirs()) {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
+      if (entry.name.toLowerCase().includes(name.toLowerCase())) base.push(path.join(dir, entry.name));
+    }
   }
   return [...new Set(base)];
+}
+
+function continuityRoot() {
+  return process.env.OTA_GENESIS_CONTINUITY_ROOT || DEFAULT_CONTINUITY_ROOT;
+}
+
+function agentCardDirs() {
+  const root = continuityRoot();
+  return [path.join(root, 'agent-cards'), path.join(root, 'team-charters')];
+}
+
+function hostCardDirs() {
+  const root = continuityRoot();
+  return [path.join(root, 'machine-profiles'), root];
 }
 
 function sanitize(text: string) {

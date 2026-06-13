@@ -13,9 +13,9 @@ await expectText('get_workspace_policy', { workspace_id: workspaceId }, workspac
 await expectToolSurface(sessionId);
 await expectText('list_skills', { workspace_id: workspaceId }, pickupSkill, sessionId);
 await expectText('read_skill', { workspace_id: workspaceId, name: pickupSkill }, 'OpenClaw-like provider chat-thread agent', sessionId);
-await expectText('list_browser_profiles', { workspace_id: workspaceId }, 'Close unused tabs.', sessionId);
-await expectText('browser_status', { workspace_id: workspaceId }, 'Close unused tabs.', sessionId);
-await expectText('list_browser_tabs', { workspace_id: workspaceId }, 'Close unused tabs.', sessionId);
+await expectText('list_browser_profiles', { workspace_id: workspaceId }, 'Use CDP directly through browser_cdp_* tools.', sessionId);
+await expectText('browser_status', { workspace_id: workspaceId }, 'Use CDP directly through browser_cdp_* tools.', sessionId);
+await expectText('list_browser_tabs', { workspace_id: workspaceId }, 'Use CDP directly through browser_cdp_* tools.', sessionId);
 await expectBrowserCdp(sessionId);
 
 if (writeProof) await checkpointAcceptance(sessionId);

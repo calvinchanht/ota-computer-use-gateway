@@ -16,9 +16,9 @@ try {
   await waitForHealth(port);
   const sessionId = await initialize(port);
   await call(port, sessionId, 'get_tool_profile', {});
-  await expectText(port, sessionId, 'list_browser_profiles', { workspace_id: 'smoke' }, 'Close unused tabs.');
+  await expectText(port, sessionId, 'list_browser_profiles', { workspace_id: 'smoke' }, 'Use CDP directly through browser_cdp_* tools.');
   await expectText(port, sessionId, 'browser_status', { workspace_id: 'smoke' }, '127.0.0.1:9222');
-  await expectText(port, sessionId, 'computer_status', { workspace_id: 'smoke' }, 'observe_after');
+  await expectText(port, sessionId, 'get_workspace_policy', { workspace_id: 'smoke' }, 'workspace_exec');
   await exerciseFiles(port, sessionId);
   await exerciseContext(port, sessionId);
   await exerciseSkills(port, sessionId);
@@ -31,6 +31,8 @@ try {
 
 async function seedWorkspace(rootDir) {
   await writeFile(path.join(rootDir, 'README.md'), '# Primitive Smoke\nhello primitive mcp\n');
+  await writeFile(path.join(rootDir, 'command-ok.cjs'), "process.stdout.write('command-ok');\n");
+  await writeFile(path.join(rootDir, 'process-echo.cjs'), 'process.stdin.pipe(process.stdout);\n');
   await mkdir(path.join(rootDir, '.agent/skills/smoke-skill'), { recursive: true });
   await writeFile(path.join(rootDir, '.agent/AGENT_START_HERE.md'), 'Smoke agent start here: call bootstrap first.\n');
   await writeFile(path.join(rootDir, '.agent/PROVIDER_THREAD_PROMPT.md'), 'Smoke provider thread prompt.\n');
@@ -72,12 +74,12 @@ async function exerciseSkills(port, sessionId) {
 
 async function exerciseCommand(port, sessionId) {
   await call(port, sessionId, 'create_local_approval', { workspace_id: 'smoke', action: 'run_command' });
-  await expectText(port, sessionId, 'run_command', { workspace_id: 'smoke', command: 'printf command-ok' }, 'command-ok');
+  await expectText(port, sessionId, 'run_command', { workspace_id: 'smoke', command: 'node command-ok.cjs' }, 'command-ok');
 }
 
 async function exerciseProcess(port, sessionId) {
   await call(port, sessionId, 'create_local_approval', { workspace_id: 'smoke', action: 'start_process' });
-  const started = await call(port, sessionId, 'start_process', { workspace_id: 'smoke', command: 'cat' });
+  const started = await call(port, sessionId, 'start_process', { workspace_id: 'smoke', command: 'node process-echo.cjs' });
   const processId = JSON.parse(started.result.content[0].text).data.process_id;
   await call(port, sessionId, 'write_process', { process_id: processId, input: 'process-ok', close_stdin: true });
   await delay(250);

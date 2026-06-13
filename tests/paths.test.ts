@@ -21,13 +21,16 @@ describe('resolveInside', () => {
 
   it('rejects absolute paths outside the workspace', async () => {
     const workspace = await fixtureWorkspace();
-    await expect(resolveInside(workspace, '/etc/passwd', config)).rejects.toThrow('outside');
+    const outside = await outsideFile();
+    await expect(resolveInside(workspace, outside, config)).rejects.toThrow('outside');
   });
 
   it('rejects symlink escapes', async () => {
     const workspace = await fixtureWorkspace();
-    await symlink('/etc/passwd', path.join(workspace.realRoot, 'escape'));
-    await expect(resolveInside(workspace, 'escape', config)).rejects.toThrow('outside');
+    const outsideRoot = await mkdtemp(path.join(tmpdir(), 'gtp-outside-'));
+    await writeFile(path.join(outsideRoot, 'outside.txt'), 'outside');
+    await symlink(outsideRoot, path.join(workspace.realRoot, 'escape'), 'junction');
+    await expect(resolveInside(workspace, path.join('escape', 'outside.txt'), config)).rejects.toThrow('outside');
   });
 
 
@@ -51,4 +54,11 @@ async function fixtureWorkspace(): Promise<Workspace> {
   const realRoot = await realpath(root);
   await mkdir(path.join(realRoot, 'src'), { recursive: true });
   return { id: 'test', name: 'Test', root, realRoot, allow_read: true, allow_write: false, allow_patch: true, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, browser: { profiles: [] }, commands: {} };
+}
+
+async function outsideFile(): Promise<string> {
+  const root = await mkdtemp(path.join(tmpdir(), 'gtp-outside-'));
+  const file = path.join(root, 'outside.txt');
+  await writeFile(file, 'outside');
+  return file;
 }
