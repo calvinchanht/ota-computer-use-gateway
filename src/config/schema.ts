@@ -15,10 +15,24 @@ export const browserSchema = z.object({
   profiles: z.array(browserProfileSchema).default([])
 }).default({ profiles: [] });
 
+export const windowsComputerSchema = z.object({
+  enabled: z.boolean().default(false),
+  allow_screenshot: z.boolean().default(false),
+  allow_uia_tree: z.boolean().default(false),
+  allow_mouse: z.boolean().default(false),
+  allow_keyboard: z.boolean().default(false),
+  allow_clipboard: z.boolean().default(false),
+  allow_window_management: z.boolean().default(false),
+  allow_app_launch: z.boolean().default(false),
+  allow_process_attach: z.boolean().default(false),
+  allow_multi_monitor: z.boolean().default(true)
+}).prefault({});
+
 export const apiSetsSchema = z.object({
   workspace: z.boolean().optional(),
   browser: z.boolean().optional(),
   computer: z.boolean().optional(),
+  computer_windows: z.boolean().optional(),
   machine_admin: z.boolean().optional(),
   estate_admin: z.boolean().optional()
 }).default({});
@@ -36,6 +50,7 @@ const workspaceBaseSchema = z.object({
   allow_mouse_keyboard: z.boolean().default(false),
   api_sets: apiSetsSchema,
   browser: browserSchema,
+  windows_computer: windowsComputerSchema,
   commands: z.record(z.string(), z.string()).default({}),
   git: z.object({ github_token_file: z.string().min(1).optional() }).default({})
 });
@@ -52,9 +67,24 @@ export const workspaceSchema = workspaceBaseSchema.transform((workspace) => {
     next.allow_patch = true;
     next.allow_tests = true;
   }
-  if (sets.browser || sets.computer) {
+  if (sets.browser || sets.computer || sets.computer_windows) {
     next.allow_screen = true;
     next.allow_mouse_keyboard = true;
+  }
+  if (sets.computer_windows) {
+    next.windows_computer = {
+      ...next.windows_computer,
+      enabled: true,
+      allow_screenshot: true,
+      allow_uia_tree: true,
+      allow_mouse: true,
+      allow_keyboard: true,
+      allow_clipboard: true,
+      allow_window_management: true,
+      allow_app_launch: true,
+      allow_process_attach: true,
+      allow_multi_monitor: true
+    };
   }
   if (sets.machine_admin) {
     next.allow_tests = true;

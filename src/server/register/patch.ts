@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
 import { applyPatch } from '../../tools/applyPatch.js';
 import { proposePatch } from '../../tools/patch.js';
-import { READ_ONLY, WRITE_FILE, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
+import { WRITE_FILE, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
 export function registerPatchTools({ server, config, workspaces }: RegisterContext): void {

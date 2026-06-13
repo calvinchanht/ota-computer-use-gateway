@@ -82,14 +82,24 @@ async function exerciseProcess(port, sessionId) {
   const started = await call(port, sessionId, 'start_process', { workspace_id: 'smoke', command: 'node process-echo.cjs' });
   const processId = JSON.parse(started.result.content[0].text).data.process_id;
   await call(port, sessionId, 'write_process', { process_id: processId, input: 'process-ok', close_stdin: true });
-  await delay(250);
-  await expectText(port, sessionId, 'read_process', { process_id: processId }, 'process-ok');
+  await expectProcessText(port, sessionId, processId, 'process-ok');
 }
 
 async function expectText(port, sessionId, name, args, expected) {
   const result = await call(port, sessionId, name, args);
   const text = JSON.stringify(result);
   if (!text.includes(expected)) throw new Error(`${name} missing ${expected}: ${text}`);
+}
+
+async function expectProcessText(port, sessionId, processId, expected) {
+  const deadline = Date.now() + 3000;
+  let last = null;
+  while (Date.now() < deadline) {
+    last = await call(port, sessionId, 'read_process', { process_id: processId });
+    if (JSON.stringify(last).includes(expected)) return;
+    await delay(50);
+  }
+  throw new Error(`read_process missing ${expected}: ${JSON.stringify(last)}`);
 }
 
 async function writeConfig(file, workspaceRoot, port) {

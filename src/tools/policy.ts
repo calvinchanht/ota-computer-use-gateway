@@ -11,6 +11,7 @@ export function workspacePolicy(workspace: Workspace) {
       workspace: 'OpenClaw-like workspace agent primitives: scoped files, tmp cleanup/delete, artifacts, context, skills, bounded run_command/processes, git/context helpers, and async run recovery.',
       browser: 'Preassigned browser profiles/ports plus CDP-backed tabs, visible state, click/wait, and upload verification.',
       computer: 'Local GUI/computer-use via Cua Driver: screenshots, windows, accessibility tree, mouse, keyboard, and local app control.',
+      computer_windows: 'Windows desktop computer-use via native monitor capture, UI Automation, Win32 window/input APIs, clipboard, and app launch.',
       machine_admin: 'Host/lane administration and configured operations such as run_configured_command, services, config, tunnels, and deployment workflows. This is separate from normal workspace exec.',
       estate_admin: 'Cross-agent/cross-host Genesis control-plane reports/diagnostics and approved estate runbook operations.'
     },
@@ -40,6 +41,7 @@ export function resolvedApiSets(workspace: Workspace) {
     // Backward-compatible inference: old configs used allow_screen/allow_mouse_keyboard for both
     // browser and computer capability. New api_sets configs can distinguish browser from Cua/computer use.
     computer: configured.computer ?? (!hasConfiguredSets && (workspace.allow_screen || workspace.allow_mouse_keyboard)),
+    computer_windows: configured.computer_windows ?? workspace.windows_computer?.enabled ?? false,
     machine_admin: configured.machine_admin ?? false,
     estate_admin: configured.estate_admin ?? false
   };
@@ -58,7 +60,18 @@ export function allowedTools(workspace: Workspace): string[] {
 
   if (sets.browser) base.push('list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch');
   if (sets.computer) base.push('cua_driver_status', 'cua_driver_call', 'cua_driver_batch');
+  if (sets.computer_windows) base.push(...windowsComputerTools());
   if (sets.machine_admin) base.push('run_configured_command');
 
   return [...new Set(base)];
+}
+
+function windowsComputerTools() {
+  return [
+    'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_uia_tree',
+    'windows_list_windows', 'windows_focus_window', 'windows_launch_app',
+    'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
+    'windows_type_text', 'windows_key', 'windows_hotkey',
+    'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch'
+  ];
 }

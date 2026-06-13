@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
 import { approvalStatus, createLocalApproval } from '../../tools/approval.js';
-import { READ_ONLY, WRITE_FILE, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
+import { READ_ONLY, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
 export function registerApprovalTools({ server, workspaces }: RegisterContext): void {

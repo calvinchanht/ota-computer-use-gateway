@@ -24,6 +24,24 @@ workspaces:
     allow_tests: false
     allow_screen: false
     allow_mouse_keyboard: false
+    api_sets:
+      workspace: true
+      browser: false
+      computer: false
+      computer_windows: false
+      machine_admin: false
+      estate_admin: false
+    windows_computer:
+      enabled: false
+      allow_screenshot: false
+      allow_uia_tree: false
+      allow_mouse: false
+      allow_keyboard: false
+      allow_clipboard: false
+      allow_window_management: false
+      allow_app_launch: false
+      allow_process_attach: false
+      allow_multi_monitor: true
     browser:
       profiles:
         - label: "example"

@@ -21,6 +21,11 @@ function canonicalTools(): string[] {
     'list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify',
     'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch',
     'cua_driver_status', 'cua_driver_call', 'cua_driver_batch',
+    'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_uia_tree',
+    'windows_list_windows', 'windows_focus_window', 'windows_launch_app',
+    'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
+    'windows_type_text', 'windows_key', 'windows_hotkey',
+    'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch',
     'workspace_inventory', 'read_file', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
     'run_command', 'run_configured_command', 'list_dir', 'stat_path', 'tree', 'search_files',
     'git_status', 'git_diff', 'git_push_current_branch', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',
@@ -47,6 +52,10 @@ function apiCapabilitySets() {
         purpose: 'Local GUI/computer use; independent from machine administration.',
         tools: ['cua_driver_status', 'cua_driver_call', 'cua_driver_batch']
       },
+      computer_windows: {
+        purpose: 'Windows desktop computer use with monitor capture, UIA, mouse, keyboard, clipboard, windows, and app launch.',
+        tools: ['windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_uia_tree', 'windows_launch_app', 'windows_click', 'windows_type_text', 'windows_batch']
+      },
       machine_admin: {
         purpose: 'Own-machine/lane management through configured commands/processes and scoped service/config/runbook work.',
         tools: ['run_configured_command', 'run_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process']
@@ -60,7 +69,7 @@ function apiCapabilitySets() {
       catalyst: ['workspace', 'browser'],
       cortex: ['workspace', 'browser', 'machine_admin'],
       boba: ['workspace', 'browser', 'computer', 'machine_admin'],
-      genesis: ['workspace', 'browser', 'computer', 'machine_admin', 'estate_admin']
+      genesis: ['workspace', 'browser', 'computer', 'computer_windows', 'machine_admin', 'estate_admin']
     },
     policy_flags: ['external_actions', 'destructive_actions', 'secret_return', 'credential_use']
   };

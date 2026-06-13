@@ -35,7 +35,7 @@ describe('process tools', () => {
     const workspace = await fixtureWorkspace(true);
     const started = await processStart(config, workspace, 'node tail.cjs');
     const processId = String(started.data?.process_id);
-    await waitForOutput(processId, 'first');
+    await expect(waitForOutput(processId, 'first')).resolves.toContain('first');
     const first = processLog(processId).data as { output: string; next_cursor: number; tail_supported: boolean };
     expect(first.tail_supported).toBe(true);
     expect(first.output).toContain('first');

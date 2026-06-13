@@ -46,7 +46,19 @@ function fixtureWorkspace(): Workspace {
     allow_tests: true,
     allow_screen: true,
     allow_mouse_keyboard: true,
-    api_sets: { workspace: true, browser: true, computer: true, machine_admin: true, estate_admin: true },
+    api_sets: { workspace: true, browser: true, computer: true, computer_windows: true, machine_admin: true, estate_admin: true },
+    windows_computer: {
+      enabled: true,
+      allow_screenshot: true,
+      allow_uia_tree: true,
+      allow_mouse: true,
+      allow_keyboard: true,
+      allow_clipboard: true,
+      allow_window_management: true,
+      allow_app_launch: true,
+      allow_process_attach: true,
+      allow_multi_monitor: true
+    },
     browser: { profiles: [] },
     commands: { test: 'npm test' }
   };

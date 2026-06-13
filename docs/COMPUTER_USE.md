@@ -40,6 +40,46 @@ The Mac computer-use layer is Cua Driver proxying. It does not expose gateway se
 
 The gateway provides auth, workspace scoping, policy checks, audit, limits, and bounded output around Cua Driver. It does not present a fake higher-level “safer” computer abstraction.
 
+## Windows computer-use tools
+
+The Windows computer-use layer is a native Windows adapter. It uses monitor capture, Microsoft UI Automation, Win32 window/input APIs, clipboard APIs, and app launch through the local host. It is designed to empower trusted webchat agents, not to handicap them.
+
+Enable it explicitly per workspace:
+
+```yaml
+api_sets:
+  computer_windows: true
+windows_computer:
+  enabled: true
+  allow_screenshot: true
+  allow_uia_tree: true
+  allow_mouse: true
+  allow_keyboard: true
+  allow_clipboard: true
+  allow_window_management: true
+  allow_app_launch: true
+  allow_process_attach: true
+  allow_multi_monitor: true
+```
+
+Tools:
+
+- `windows_computer_status` — report host/platform and configured Windows authority.
+- `windows_list_monitors` — list monitor bounds, working areas, and primary flags.
+- `windows_screenshot` — capture `primary`, `all`, or a monitor index and save PNG/WebP artifacts.
+- `windows_uia_tree` — return a bounded Microsoft UI Automation tree snapshot.
+- `windows_list_windows` — list visible top-level windows with hwnd, title, pid, and bounds.
+- `windows_focus_window` — focus a top-level window by hwnd.
+- `windows_launch_app` — launch a local executable or application path with optional args/cwd.
+- `windows_click`, `windows_double_click`, `windows_drag`, `windows_scroll` — mouse control.
+- `windows_type_text`, `windows_key`, `windows_hotkey` — keyboard control.
+- `windows_clipboard_get`, `windows_clipboard_set` — clipboard text.
+- `windows_batch` — sequence common Windows input actions plus delay steps.
+
+Authority is adjustable, but capability is not intentionally weakened. A trusted local webchat agent can be granted full screen, mouse, keyboard, clipboard, multi-monitor, window-management, and app-launch rights. Less trusted agents can receive a smaller subset from the same contract.
+
+Coordinates are Windows screen coordinates. For multi-monitor work, call `windows_list_monitors` first and choose either an explicit monitor for screenshots or absolute screen coordinates for input. App launch is first-class because desktop development workflows, such as Roblox Studio work, require starting and controlling non-browser applications.
+
 ## Browser profile defaults
 
 Workspace config can declare profiles:
