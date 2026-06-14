@@ -25,6 +25,7 @@ import { listArtifacts, recordArtifact } from '../tools/artifacts.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
 import { healthPayload } from './health.js';
+import { hasValidArtifactSignature } from './artifactSignatures.js';
 import { auditHttpRequest } from './httpAudit.js';
 import { RateLimiter } from './rateLimit.js';
 import { installShutdownHooks } from './shutdown.js';
@@ -80,7 +81,8 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
   if (!allowedMethod(req.method)) return sendJson(res, 405, { error: 'method_not_allowed' });
   if (!rateLimiter.check(config, req)) return sendJson(res, 429, { error: 'rate_limited' });
   if (requestTooLarge(config, req)) return sendJson(res, 413, { error: 'payload_too_large' });
-  if (!isAuthorized(config, req)) return sendAuthError(config, res);
+  const signedArtifact = isApiArtifactPath(req) && hasValidArtifactSignature(req);
+  if (!signedArtifact && !isAuthorized(config, req)) return sendAuthError(config, res);
   if (isApiDebugRequestContext(req)) return handleApiDebugRequestContext(req, res);
   if (isApiArtifactPath(req)) return handleApiArtifact(config, req, res);
   if (isApiRunPath(req)) return handleApiRun(req, res);
@@ -291,6 +293,7 @@ async function handleApiArtifact(config: AppConfig, req: IncomingMessage, res: S
     'content-type': artifactContentType(resolved),
     'content-length': String(body.length),
     'cache-control': 'private, max-age=300, no-transform',
+    'content-disposition': `inline; filename="${path.basename(resolved).replaceAll('\"', '')}"`,
     'x-content-type-options': 'nosniff'
   }).end(body);
 }

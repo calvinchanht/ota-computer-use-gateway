@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { ok } from '../core/result.js';
+import { signedArtifactUrl } from '../server/artifactSignatures.js';
 import { platformInfo } from '../core/platform.js';
 import type { Workspace } from '../core/workspaces.js';
 
@@ -347,6 +348,7 @@ function screenshotArtifactPair(workspace: Workspace, fullPath: string, previewP
 function textArtifact(workspace: Workspace, absolutePath: string, mediaType: string, extra: Record<string, unknown> = {}) {
   const workspacePath = workspaceRelativePath(workspace, absolutePath);
   const agentPath = agentRelativePath(workspace, absolutePath);
+  const url = artifactUrl(workspace, agentPath);
   return {
     kind: 'text',
     format: 'markdown',
@@ -354,7 +356,8 @@ function textArtifact(workspace: Workspace, absolutePath: string, mediaType: str
     path: workspacePath,
     agent_artifact_path: agentPath,
     url_path: artifactUrlPath(workspace, agentPath),
-    url: artifactUrl(workspace, agentPath),
+    url,
+    readable_url: url,
     ...extra
   };
 }
@@ -362,13 +365,15 @@ function textArtifact(workspace: Workspace, absolutePath: string, mediaType: str
 function screenshotArtifact(workspace: Workspace, absolutePath: string, format: 'png' | 'webp', extra: Record<string, unknown> = {}) {
   const workspacePath = workspaceRelativePath(workspace, absolutePath);
   const agentPath = agentRelativePath(workspace, absolutePath);
+  const url = artifactUrl(workspace, agentPath);
   return {
     kind: 'image',
     format,
     path: workspacePath,
     agent_artifact_path: agentPath,
     url_path: artifactUrlPath(workspace, agentPath),
-    url: artifactUrl(workspace, agentPath),
+    url,
+    readable_url: url,
     ...extra
   };
 }
@@ -379,7 +384,7 @@ function artifactUrlPath(workspace: Workspace, workspacePath: string) {
 
 function artifactUrl(workspace: Workspace, workspacePath: string) {
   const base = (process.env.OTA_GATEWAY_PUBLIC_BASE_URL ?? '').replace(/\/$/, '');
-  return base ? `${base}${artifactUrlPath(workspace, workspacePath)}` : undefined;
+  return base ? signedArtifactUrl(base, artifactUrlPath(workspace, workspacePath)) : undefined;
 }
 
 async function boundLargeStrings(value: unknown, onLargeString?: (key: string, value: string) => Promise<{ replacement: unknown; extra?: Record<string, unknown> } | null>): Promise<unknown> {
