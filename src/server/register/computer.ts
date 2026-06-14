@@ -47,7 +47,7 @@ function registerCuaDriverStatus({ server, workspaces }: RegisterContext): void 
 function registerCuaDriverCall({ server, workspaces }: RegisterContext): void {
   server.registerTool('cua_driver_call', {
     title: 'Cua Driver call',
-    description: 'Call one raw Cua Driver command for Mac computer use. Gateway only provides auth, workspace scoping, policy, audit, limits, and bounded output; use Cua Driver method names and params directly.',
+    description: 'Call one raw Cua Driver command for Mac computer use. For method=screenshot, optional params.visual_followup.job_id asks OTA to create a Threaddex visual-followup event and return a pollable sent_to_provider contract.',
     inputSchema: { workspace_id: z.string(), method: z.string().min(1).max(80), params: z.record(z.string(), z.unknown()).default({}) },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
   }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'cua_driver_call', (workspace) => cuaDriverCall(workspace, args.method, args.params)));

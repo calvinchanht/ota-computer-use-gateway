@@ -1,8 +1,58 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { cuaDriverBatch, cuaDriverCall, cuaDriverStatus } from '../src/tools/computer.js';
+import { cuaDriverBatch, cuaDriverCall, cuaDriverStatus, screenshotVisualFollowup } from '../src/tools/computer.js';
 
 describe('cua driver proxy tools', () => {
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.THREADEX_VISUAL_FOLLOWUP_BASE_URL;
+    delete process.env.THREADEX_VISUAL_FOLLOWUP_PUBLIC_BASE_URL;
+    delete process.env.THREADEX_VISUAL_FOLLOWUP_BEARER_TOKEN;
+    delete process.env.THREADEX_JOB_API_BEARER_TOKEN;
+  });
+
+  it('returns an instruction when screenshot visual follow-up has no job id', async () => {
+    const result = await screenshotVisualFollowup({ preview: { readable_url: 'https://boba-api.unrealize.com/api/v1/artifacts/screen.webp?sig=abc' } });
+    expect(result).toMatchObject({ state: 'not_requested', sent_to_provider: false, provider_visible: false, reason: 'threaddex_job_id_required' });
+    expect(String((result as any).instruction)).toContain('params.visual_followup.job_id');
+  });
+
+  it('creates a Threaddex visual follow-up and returns a pollable public status URL', async () => {
+    process.env.THREADEX_VISUAL_FOLLOWUP_BASE_URL = 'http://127.0.0.1:33988';
+    process.env.THREADEX_VISUAL_FOLLOWUP_PUBLIC_BASE_URL = 'https://threaddex-boba.unrealize.com';
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({
+        ok: true,
+        visual_followup: {
+          id: 'vf-1',
+          idempotency_key: 'vf-1',
+          state: 'pending',
+          delivery: 'pending',
+          sent_to_provider: false,
+          provider_visible: false,
+          status_path: '/v1/job/job_123/visual-followup/vf-1/status',
+          status_url: 'http://127.0.0.1:33988/v1/job/job_123/visual-followup/vf-1/status',
+          poll_after_ms: 1000
+        }
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+
+    const result = await screenshotVisualFollowup(
+      { artifact: { preview: { readable_url: 'https://boba-api.unrealize.com/api/v1/artifacts/screen.webp?sig=abc' } } },
+      { visual_followup: { job_id: 'job_123', idempotency_key: 'vf-1' } }
+    ) as any;
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('http://127.0.0.1:33988/v1/job/job_123/visual-followup');
+    expect(JSON.parse(String(calls[0].init.body))).toMatchObject({ idempotency_key: 'vf-1', kind: 'screenshot', source: 'cua_driver', readable_url: 'https://boba-api.unrealize.com/api/v1/artifacts/screen.webp?sig=abc' });
+    expect(result).toMatchObject({ id: 'vf-1', state: 'pending', sent_to_provider: false, provider_visible: false, readable_url: 'https://boba-api.unrealize.com/api/v1/artifacts/screen.webp?sig=abc' });
+    expect(result.status_url).toBe('https://threaddex-boba.unrealize.com/v1/job/job_123/visual-followup/vf-1/status');
+    expect(result.instruction).toContain('Poll visual_followup.status_url');
+  });
+
   it('reports Cua Driver capability status', async () => {
     const result = await cuaDriverStatus(fixtureWorkspace({ allow_screen: true }));
     const data = result.data as any;

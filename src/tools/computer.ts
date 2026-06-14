@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import path from 'node:path';
@@ -234,7 +235,110 @@ async function boundedScreenshot(workspace: Workspace, data: unknown, params: Re
     }
   }
   copy.retention_note = 'Screenshot artifacts are transient working files: default preview is half-size WebP quality 85, full source is PNG, and transient screenshots should be zipped/pruned by retention jobs unless copied to durable task/project artifacts.';
+  copy.visual_followup = await screenshotVisualFollowup(copy, params);
   return copy;
+}
+
+
+export async function screenshotVisualFollowup(screenshot: Record<string, unknown>, params: Record<string, unknown> = {}) {
+  const readableUrl = screenshotReadableUrl(screenshot);
+  if (!readableUrl) return { state: 'not_available', sent_to_provider: false, provider_visible: false, reason: 'readable_url_missing', instruction: 'Screenshot was captured, but no readable URL was available to send as a visible follow-up.' };
+  const input = visualFollowupInput(params, readableUrl);
+  if (!input.job_id) {
+    return {
+      state: 'not_requested',
+      sent_to_provider: false,
+      provider_visible: false,
+      reason: 'threaddex_job_id_required',
+      readable_url: readableUrl,
+      instruction: 'To make this screenshot visible to the model, call screenshot with params.visual_followup.job_id set to the active Threaddex job id, then poll visual_followup.status_url until sent_to_provider is true.'
+    };
+  }
+  try {
+    const response = await fetch(`${input.base_url}/v1/job/${encodeURIComponent(input.job_id)}/visual-followup`, {
+      method: 'POST',
+      headers: visualFollowupHeaders(),
+      body: JSON.stringify({
+        idempotency_key: input.idempotency_key,
+        kind: 'screenshot',
+        source: input.source,
+        readable_url: readableUrl,
+        mime: input.mime,
+        prompt_text: input.prompt_text
+      })
+    });
+    const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok || body.ok !== true || !isRecord(body.visual_followup)) {
+      return { state: 'failed', sent_to_provider: false, provider_visible: false, reason: `visual_followup_request_failed:${response.status}:${String(body.error ?? 'bad_response')}`, readable_url: readableUrl };
+    }
+    return normalizeVisualFollowupContract(body.visual_followup, input.public_base_url, readableUrl);
+  } catch (error) {
+    return { state: 'failed', sent_to_provider: false, provider_visible: false, reason: `visual_followup_request_exception:${error instanceof Error ? error.message : String(error)}`, readable_url: readableUrl };
+  }
+}
+
+function screenshotReadableUrl(screenshot: Record<string, unknown>): string | undefined {
+  const candidates = [
+    nestedString(screenshot, ['preview', 'readable_url']),
+    nestedString(screenshot, ['preview', 'url']),
+    nestedString(screenshot, ['artifact', 'preview', 'readable_url']),
+    nestedString(screenshot, ['artifact', 'preview', 'url']),
+    nestedString(screenshot, ['full', 'readable_url']),
+    nestedString(screenshot, ['artifact', 'full', 'readable_url'])
+  ];
+  return candidates.find((value) => typeof value === 'string' && /^https:\/\//.test(value));
+}
+
+function visualFollowupInput(params: Record<string, unknown>, readableUrl: string) {
+  const visual = isRecord(params.visual_followup) ? params.visual_followup : {};
+  const job_id = stringValue(visual.job_id) ?? stringValue(params.threaddex_job_id) ?? stringValue(params.job_id);
+  const base_url = stripTrailingSlash(stringValue(visual.base_url) ?? stringValue(params.threaddex_base_url) ?? process.env.THREADEX_VISUAL_FOLLOWUP_BASE_URL ?? process.env.THREADEX_JOB_API_BASE_URL ?? 'http://127.0.0.1:33988');
+  const public_base_url = stripTrailingSlash(stringValue(visual.public_base_url) ?? process.env.THREADEX_VISUAL_FOLLOWUP_PUBLIC_BASE_URL ?? '');
+  const idempotency_key = stringValue(visual.idempotency_key) ?? `cua-screenshot:${job_id ?? 'unknown'}:${createHash('sha256').update(readableUrl).digest('hex').slice(0, 16)}`;
+  const source = stringValue(visual.source) ?? 'cua_driver';
+  const mime = stringValue(visual.mime) ?? 'image/webp';
+  const prompt_text = stringValue(visual.prompt_text) ?? `Screenshot follow-up for the current active job:\nscreenshot readable url: ${readableUrl}\nUse this screenshot as visual input for the current job. Do not claim the screenshot is missing if this visible follow-up is present.`;
+  return { job_id, base_url, public_base_url, idempotency_key, source, mime, prompt_text };
+}
+
+function normalizeVisualFollowupContract(contract: Record<string, unknown>, publicBaseUrl: string, readableUrl: string) {
+  const out = { ...contract } as Record<string, unknown>;
+  out.sent_to_provider = contract.sent_to_provider === true;
+  out.provider_visible = contract.provider_visible === true;
+  out.readable_url = readableUrl;
+  if (publicBaseUrl && typeof contract.status_path === 'string') out.status_url = `${publicBaseUrl}${contract.status_path}`;
+  out.instruction = out.sent_to_provider === true
+    ? 'The screenshot URL has been sent as a visible follow-up prompt. Continue using the visible screenshot follow-up.'
+    : 'Do not claim visual inspection yet. Poll visual_followup.status_url until sent_to_provider is true.';
+  return out;
+}
+
+function visualFollowupHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  const bearer = process.env.THREADEX_VISUAL_FOLLOWUP_BEARER_TOKEN ?? process.env.THREADEX_JOB_API_BEARER_TOKEN;
+  if (bearer) headers.authorization = `Bearer ${bearer}`;
+  return headers;
+}
+
+function nestedString(value: Record<string, unknown>, pathParts: string[]): string | undefined {
+  let current: unknown = value;
+  for (const part of pathParts) {
+    if (!isRecord(current)) return undefined;
+    current = current[part];
+  }
+  return typeof current === 'string' && current ? current : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function stripTrailingSlash(value: string): string {
+  return value.replace(/\/$/, '');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function hasScreenshotPayload(value: Record<string, unknown>) {
