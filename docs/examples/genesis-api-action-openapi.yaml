@@ -6,7 +6,7 @@ info:
 
 
     This lane exposes Genesis'' composable API sets for Calvin''s private webchat Genesis: workspace, browser, computer, machine_admin,
-    and estate_admin. Use get_tool_profile and get_workspace_policy first to inspect the live tool/capability policy.
+    and estate_admin. Use get_tool_profile and get_workspace_policy first to inspect the live tool/capability policy. Use the threaddex_* proxy tools through this same single genesis-api.unrealize.com Action for Telegram job read/progress/final delivery; do not configure a separate threaddex-* Action.
 
 
     Hard safety rails still apply: never reveal bearer tokens, PATs, OAuth tokens, cookies, credentials, auth headers, API
@@ -94,6 +94,9 @@ components:
       - genesis_agent_deep_dive
       - genesis_host_deep_dive
       - genesis_safe_diagnostic
+      - threaddex_get_job
+      - threaddex_deliver_job_progress
+      - threaddex_deliver_job
       - workspace_inventory
       - list_dir
       - stat_path
