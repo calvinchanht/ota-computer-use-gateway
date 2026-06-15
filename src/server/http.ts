@@ -494,7 +494,7 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'get_tool_profile') return toolProfile();
   if (!workspace) throw new Error('workspace_id is required');
   if (tool === 'get_workspace_policy') return workspacePolicy(workspace);
-  if (!allowedTools(workspace).includes(tool)) throw new Error(`tool is not exposed by this workspace api_sets profile: ${tool}`);
+  if (!allowedTools(workspace).includes(tool)) throw new Error(toolExposureError(tool));
   if (tool === 'workspace_inventory') return workspaceInventory(config, workspace, optionalNumber(args.max_entries));
   if (tool === 'list_dir') return listDir(config, workspace, String(args.path ?? '.'), optionalNumber(args.max_entries));
   if (tool === 'stat_path') return statPath(config, workspace, requiredString(args.path, 'path'));
@@ -568,6 +568,13 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   throw new Error(`unsupported API tool: ${tool}`);
 }
 
+
+function toolExposureError(tool: string): string {
+  if (tool === 'deliverJob') return 'tool is not exposed by this workspace api_sets profile: deliverJob. Use threaddex_deliver_job through this OTA gateway, or use a separate Threaddex Job API Action.';
+  if (tool === 'deliverJobProgress') return 'tool is not exposed by this workspace api_sets profile: deliverJobProgress. Use threaddex_deliver_job_progress through this OTA gateway, or use a separate Threaddex Job API Action.';
+  if (tool === 'getJob') return 'tool is not exposed by this workspace api_sets profile: getJob. Use threaddex_get_job through this OTA gateway, or use a separate Threaddex Job API Action.';
+  return `tool is not exposed by this workspace api_sets profile: ${tool}`;
+}
 
 function parseApiToolRequestSafe(body: unknown): { ok: true; value: { tool: string; arguments?: Record<string, unknown> } } | { ok: false; status: number; error: string } {
   try {
