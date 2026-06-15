@@ -54,6 +54,8 @@ export function allowedTools(workspace: Workspace): string[] {
 
   if (sets.estate_admin) base.push('genesis_bootstrap', 'genesis_estate_overview', 'genesis_agent_deep_dive', 'genesis_host_deep_dive', 'genesis_safe_diagnostic');
 
+  if (sets.workspace || workspace.allow_read || workspace.allow_write || workspace.allow_tests) base.push('threaddex_get_job', 'threaddex_deliver_job_progress', 'threaddex_deliver_job');
+
   if (sets.workspace || workspace.allow_read) base.push('workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'read_binary_file', 'search_files', 'git_status', 'git_diff', 'git_push_current_branch', 'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'memory_search', 'list_skills', 'read_skill', 'approval_status', 'list_artifacts');
   if (sets.workspace || workspace.allow_write) base.push('write_file', 'write_binary_file', 'edit_file', 'delete_file', 'delete_path', 'memory_write', 'record_artifact', 'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread');
   if (sets.workspace || workspace.allow_patch) base.push('propose_patch', 'apply_patch');
@@ -62,7 +64,7 @@ export function allowedTools(workspace: Workspace): string[] {
   if (sets.browser) base.push('list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch');
   if (sets.computer) base.push('cua_driver_status', 'computer_screen_click', 'computer_window_click', 'cua_driver_call', 'cua_driver_batch');
   if (sets.computer_windows) base.push(...windowsComputerTools(workspace));
-  if (sets.machine_admin) base.push('run_configured_command', 'threaddex_get_job', 'threaddex_deliver_job_progress', 'threaddex_deliver_job');
+  if (sets.machine_admin) base.push('run_configured_command');
 
   return [...new Set(base)];
 }

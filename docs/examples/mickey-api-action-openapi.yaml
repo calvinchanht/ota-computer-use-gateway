@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Mickey Gateway API Action
   version: 0.4.0
-  description: Mickey OTA Gateway JSON API Action for workspace/browser capability in the Threaddex canary lane.
+  description: Single Action endpoint only. Mickey OTA Gateway JSON API Action for workspace/browser capability in the Threaddex canary lane.
 servers:
   - url: https://mickey-api.unrealize.com
 paths:
@@ -122,6 +122,9 @@ components:
         - workspace_status
         - get_workspace_policy
         - get_tool_profile
+        - threaddex_get_job
+        - threaddex_deliver_job_progress
+        - threaddex_deliver_job
         - list_dir
         - stat_path
         - tree
@@ -152,7 +155,8 @@ components:
           type: string
           enum: [mickey]
       description: |
-        Tool-specific arguments. For browser work, prefer high-level visible-state and tab-hygiene helpers before raw
+        Use this single agent Gateway API Action at the configured {agent}-api.unrealize.com host Action for both gateway tools and Threaddex job delivery. For Threaddex job delivery, call threaddex_get_job, threaddex_deliver_job_progress, and threaddex_deliver_job through this same gateway; do not configure a second threaddex-* Action.
+        Tool-specific arguments. For Threaddex job delivery, call threaddex_get_job, threaddex_deliver_job_progress, and threaddex_deliver_job through this same gateway; do not use generic getJob/deliverJob or a separate threaddex-* Action. For browser work, prefer high-level visible-state and tab-hygiene helpers before raw
         CDP: browser_visible_state returns human-visible text/buttons/forms/required-missing/file upload/error state;
         browser_manage_tabs lists/focuses/closes real page tabs; browser_click_and_wait clicks by selector/text and
         waits for visible text, selector, URL substring, or page stability; browser_upload_file_and_verify sets a

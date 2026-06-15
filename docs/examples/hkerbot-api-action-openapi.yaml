@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: HKerBot Gateway API Action
   version: 0.4.1
-  description: Private HKerBot Gateway JSON API Action for workspace plus browser webchat.
+  description: Single Action endpoint only. Private HKerBot Gateway JSON API Action for workspace plus browser webchat.
 servers:
   - url: https://hkerbot-api.unrealize.com
 paths:
@@ -119,6 +119,9 @@ components:
         - workspace_status
         - get_workspace_policy
         - get_tool_profile
+        - threaddex_get_job
+        - threaddex_deliver_job_progress
+        - threaddex_deliver_job
         - workspace_inventory
         - list_dir
         - stat_path
@@ -175,7 +178,7 @@ components:
           type: string
           enum: [hkerbot]
       description: >
-        Tool-specific arguments. HKerBot exposes workspace and browser tools plus bounded
+        Tool-specific arguments. For Threaddex job delivery, call threaddex_get_job, threaddex_deliver_job_progress, and threaddex_deliver_job through this same gateway; do not use generic getJob/deliverJob or a separate threaddex-* Action. HKerBot exposes workspace and browser tools plus bounded
         workspace commands/processes. It does not expose machine_admin, run_configured_command,
         computer/Cua tools, estate tools, payments, external sends, CAPTCHA, or account/security
         changes. Use workspace_id hkerbot.

@@ -3,6 +3,7 @@ info:
   title: Boba Gateway API Action
   version: 0.4.0
   description: |
+    Single Action endpoint only.
     Transparent Boba Gateway JSON API Action for direct private Custom GPT proof.
 
     Primary target: webchat agent -> scoped Gateway JSON API -> Boba/Mac Cua Driver proxy.
@@ -190,7 +191,8 @@ components:
           type: string
           enum: [boba]
       description: |
-        Tool-specific arguments. Always include workspace_id=boba. Start with get_agent_bootstrap when picking up a
+        Use this single agent Gateway API Action at the configured {agent}-api.unrealize.com host Action for both gateway tools and Threaddex job delivery. For Threaddex job delivery, call threaddex_get_job, threaddex_deliver_job_progress, and threaddex_deliver_job through this same gateway; do not configure a second threaddex-* Action.
+        Tool-specific arguments. For Threaddex job delivery, call threaddex_get_job, threaddex_deliver_job_progress, and threaddex_deliver_job through this same gateway; do not use generic getJob/deliverJob or a separate threaddex-* Action. Always include workspace_id=boba. Start with get_agent_bootstrap when picking up a
         new Boba task. Boba has whole-Mac access with workspace root /, but its home/scratch workspace is
         /Users/calvinc/.openclaw/workspace and startup context is under /Users/calvinc/.openclaw/workspace/.agent.
         Roblox Studio is /Applications/RobloxStudio.app; prefer targeted paths such as Applications/RobloxStudio.app
