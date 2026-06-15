@@ -70,8 +70,33 @@ export async function cuaDriverStatus(workspace: Workspace) {
 export async function cuaDriverCall(workspace: Workspace, method: string, params: Record<string, unknown> = {}) {
   const readOnly = authorizeCuaMethod(workspace, method);
   const sanitizedParams = sanitizeCuaArgs(params);
+  if ((method === 'click' || method === 'double_click') && !hasPid(sanitizedParams)) throw new Error(`${method} is the native Cua window/process click and requires params.pid. Use computer_screen_click for global screen coordinates, or call list_windows and then computer_window_click with the target pid/window_id.`);
   const result = await cuaCall(method, sanitizedParams);
   return ok('cua driver call', { method, read_only: readOnly, result: await boundCuaResult(workspace, method, result, sanitizedParams) });
+}
+
+export async function computerScreenClick(workspace: Workspace, x: number, y: number, button = 'left', click_count = 1) {
+  ensureMouseKeyboard(workspace);
+  const params = await screenClickParams(x, y, button, click_count);
+  if (!hasPid(params)) throw new Error('computer_screen_click could not infer a target pid from list_windows. Call cua_driver_call list_windows, verify the target window is visible/frontmost, then use computer_window_click with that pid/window_id.');
+  const method = click_count > 1 ? 'double_click' : 'click';
+  const result = await cuaCall(method, params);
+  return ok('computer screen click', {
+    method,
+    coordinate_space: 'screen',
+    inference: params.pid ? 'frontmost_visible_window_pid' : 'native_global_click',
+    params,
+    result: await boundCuaResult(workspace, method, result, params)
+  });
+}
+
+export async function computerWindowClick(workspace: Workspace, pid: number, x: number, y: number, window_id?: number, button = 'left', click_count = 1) {
+  ensureMouseKeyboard(workspace);
+  if (!Number.isFinite(pid)) throw new Error('computer_window_click requires pid from list_windows or get_window_state');
+  const method = click_count > 1 ? 'double_click' : 'click';
+  const params = clickParams(x, y, button, click_count, { pid, window_id });
+  const result = await cuaCall(method, params);
+  return ok('computer window click', { method, coordinate_space: 'window_or_process', params, result: await boundCuaResult(workspace, method, result, params) });
 }
 
 export async function cuaDriverBatch(workspace: Workspace, calls: CuaDriverBatchStep[]) {
@@ -103,6 +128,66 @@ export async function cuaDriverBatch(workspace: Workspace, calls: CuaDriverBatch
 
   const failed = results.find((row) => 'error' in row);
   return ok(failed ? 'cua driver batch stopped on error' : 'cua driver batch completed', { results, stopped_on_error: failed ?? null });
+}
+
+
+function hasPid(params: Record<string, unknown>): boolean {
+  return typeof params.pid === 'number' || (typeof params.pid === 'string' && params.pid.trim().length > 0);
+}
+
+async function screenClickParams(x: number, y: number, button: string, clickCount: number): Promise<Record<string, unknown>> {
+  const base = clickParams(x, y, button, clickCount);
+  const windows = await safeCuaCall('list_windows', {});
+  const target = windows.ok ? inferTargetWindow(windows.data, x, y) : null;
+  if (target?.pid !== undefined) {
+    base.pid = target.pid;
+    if (target.window_id !== undefined) base.window_id = target.window_id;
+    base.inferred_target = target;
+  }
+  return base;
+}
+
+function clickParams(x: number, y: number, button: string, clickCount: number, target: { pid?: number; window_id?: number } = {}): Record<string, unknown> {
+  const params: Record<string, unknown> = { x, y };
+  if (button) params.button = button;
+  if (clickCount > 1) params.click_count = clickCount;
+  if (target.pid !== undefined) params.pid = target.pid;
+  if (target.window_id !== undefined) params.window_id = target.window_id;
+  return params;
+}
+
+function inferTargetWindow(data: unknown, x: number, y: number): { pid?: number; window_id?: number; title?: string; app?: string; reason: string } | null {
+  const payload = data as { windows?: unknown[] };
+  const windows = Array.isArray(payload.windows) ? payload.windows.filter(isRecord) : [];
+  const visible = windows.filter((window) => window.is_on_screen !== false && window.visible !== false);
+  const containing = visible.find((window) => pointInWindow(window, x, y));
+  const selected = containing ?? visible.find((window) => window.is_focused === true || window.focused === true || window.frontmost === true) ?? visible[0];
+  if (!selected) return null;
+  const pid = numberValue(selected.pid);
+  if (pid === undefined) return null;
+  return {
+    pid,
+    window_id: numberValue(selected.window_id) ?? numberValue(selected.id),
+    title: typeof selected.title === 'string' ? selected.title : undefined,
+    app: typeof selected.app === 'string' ? selected.app : typeof selected.app_name === 'string' ? selected.app_name : undefined,
+    reason: containing ? 'window_under_coordinate' : 'frontmost_or_first_visible_window'
+  };
+}
+
+function pointInWindow(window: Record<string, unknown>, x: number, y: number): boolean {
+  const bounds = isRecord(window.bounds) ? window.bounds : window;
+  const left = numberValue(bounds.x) ?? numberValue(bounds.left);
+  const top = numberValue(bounds.y) ?? numberValue(bounds.top);
+  const width = numberValue(bounds.width);
+  const height = numberValue(bounds.height);
+  if (left === undefined || top === undefined || width === undefined || height === undefined) return false;
+  return x >= left && x <= left + width && y >= top && y <= top + height;
+}
+
+function numberValue(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return undefined;
 }
 
 function authorizeCuaMethod(workspace: Workspace, method: string) {

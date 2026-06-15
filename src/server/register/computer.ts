@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { cuaDriverBatch, cuaDriverCall, cuaDriverStatus } from '../../tools/computer.js';
+import { computerScreenClick, computerWindowClick, cuaDriverBatch, cuaDriverCall, cuaDriverStatus } from '../../tools/computer.js';
 import {
   windowsBatch,
   windowsClick,
@@ -31,6 +31,8 @@ const cuaBatchStepSchema = z.union([
 export function registerComputerTools(context: RegisterContext): void {
   registerCuaDriverStatus(context);
   registerCuaDriverCall(context);
+  registerComputerScreenClick(context);
+  registerComputerWindowClick(context);
   registerCuaDriverBatch(context);
   registerWindowsTools(context);
 }
@@ -51,6 +53,24 @@ function registerCuaDriverCall({ server, workspaces }: RegisterContext): void {
     inputSchema: { workspace_id: z.string(), method: z.string().min(1).max(80), params: z.record(z.string(), z.unknown()).default({}) },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
   }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'cua_driver_call', (workspace) => cuaDriverCall(workspace, args.method, args.params)));
+}
+
+function registerComputerScreenClick({ server, workspaces }: RegisterContext): void {
+  server.registerTool('computer_screen_click', {
+    title: 'Computer screen click',
+    description: 'Click global Mac screen coordinates. The gateway infers the target process/window when native Cua requires a pid; use for screenshot-coordinate interactions.',
+    inputSchema: { workspace_id: z.string(), x: z.number(), y: z.number(), button: z.string().default('left'), click_count: z.number().int().min(1).max(2).default(1) },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_screen_click', (workspace) => computerScreenClick(workspace, args.x, args.y, args.button, args.click_count)));
+}
+
+function registerComputerWindowClick({ server, workspaces }: RegisterContext): void {
+  server.registerTool('computer_window_click', {
+    title: 'Computer window click',
+    description: 'Click in a known Mac app/window/process context. Pass pid from list_windows or get_window_state; window_id is optional when available.',
+    inputSchema: { workspace_id: z.string(), pid: z.number(), window_id: z.number().optional(), x: z.number(), y: z.number(), button: z.string().default('left'), click_count: z.number().int().min(1).max(2).default(1) },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_window_click', (workspace) => computerWindowClick(workspace, args.pid, args.x, args.y, args.window_id, args.button, args.click_count)));
 }
 
 function registerCuaDriverBatch({ server, workspaces }: RegisterContext): void {

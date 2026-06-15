@@ -20,7 +20,7 @@ function canonicalTools(): string[] {
     'genesis_bootstrap', 'genesis_estate_overview', 'genesis_agent_deep_dive', 'genesis_host_deep_dive', 'genesis_safe_diagnostic',
     'list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify',
     'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch',
-    'cua_driver_status', 'cua_driver_call', 'cua_driver_batch',
+    'cua_driver_status', 'computer_screen_click', 'computer_window_click', 'cua_driver_call', 'cua_driver_batch',
     'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_uia_tree',
     'windows_list_windows', 'windows_focus_window', 'windows_launch_app',
     'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
@@ -50,7 +50,7 @@ function apiCapabilitySets() {
       },
       computer: {
         purpose: 'Local GUI/computer use; independent from machine administration.',
-        tools: ['cua_driver_status', 'cua_driver_call', 'cua_driver_batch']
+        tools: ['cua_driver_status', 'computer_screen_click', 'computer_window_click', 'cua_driver_call', 'cua_driver_batch']
       },
       computer_windows: {
         purpose: 'Windows desktop computer use with monitor capture, UIA, mouse, keyboard, clipboard, windows, and app launch.',
@@ -111,6 +111,8 @@ function toolAsync() {
     browser_cdp_browser_batch: quotaSaverAsync(),
     browser_cdp_call: quotaSaverAsync(),
     browser_cdp_batch: quotaSaverAsync(),
+    computer_screen_click: quotaSaverAsync('Mac computer'),
+    computer_window_click: quotaSaverAsync('Mac computer'),
     cua_driver_call: quotaSaverAsync('Cua Driver'),
     cua_driver_batch: quotaSaverAsync('Cua Driver'),
     search_files: quotaSaverAsync('workspace search'),

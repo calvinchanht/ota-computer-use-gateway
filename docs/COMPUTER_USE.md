@@ -35,6 +35,8 @@ The gateway scopes access to the configured profile/target and keeps it behind M
 The Mac computer-use layer is Cua Driver proxying. It does not expose gateway semantic wrappers for Cua Driver features. Use Cua Driver method names and params directly.
 
 - `cua_driver_status` — return Cua Driver availability, permissions, adapter path, allowed methods, and Mac computer-use posture.
+- `computer_screen_click` — click global Mac screen coordinates without passing a pid; preferred for screenshot-coordinate interactions.
+- `computer_window_click` — click in a known app/window/process context using a current pid from `list_windows` / `get_window_state`.
 - `cua_driver_call` — call one raw Cua Driver method through the scoped gateway.
 - `cua_driver_batch` — send a sequence of raw Cua Driver command steps; also supports gateway-side `{ "delay_ms": number }` sequencing steps.
 

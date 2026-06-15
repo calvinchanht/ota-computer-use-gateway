@@ -162,6 +162,8 @@ components:
         - browser_cdp_call
         - browser_cdp_batch
         - cua_driver_status
+        - computer_screen_click
+        - computer_window_click
         - cua_driver_call
         - cua_driver_batch
         - infer_file_structure
@@ -203,7 +205,7 @@ components:
         text, selector, URL substring, or page stability; browser_upload_file_and_verify sets a workspace-relative
         file input and confirms expected filename/text appears in human-visible page text. For browser tab listing,
         list_browser_tabs defaults to real page targets only; pass type=all and
-        include_iframes/include_workers/include_browser_ui only for raw CDP cleanup/debugging. For Cua Driver use
+        include_iframes/include_workers/include_browser_ui only for raw CDP cleanup/debugging. For Mac computer-use prefer computer_screen_click for global screenshot coordinates and computer_window_click after list_windows identifies a pid/window_id. For raw Cua Driver use
         cua_driver_status, cua_driver_call with method/params, or cua_driver_batch with calls including raw Cua method
         steps or delay_ms steps. For async quota_saver behavior, initial_wait_ms may be set; if api.status=running,
         poll get_gateway_run instead of retrying the original side-effectful call. For file tools include path; for

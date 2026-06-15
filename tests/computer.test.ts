@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { cuaDriverBatch, cuaDriverCall, cuaDriverStatus, screenshotVisualFollowup } from '../src/tools/computer.js';
+import { computerWindowClick, cuaDriverBatch, cuaDriverCall, cuaDriverStatus, screenshotVisualFollowup } from '../src/tools/computer.js';
 
 describe('cua driver proxy tools', () => {
 
@@ -71,6 +71,14 @@ describe('cua driver proxy tools', () => {
 
   it('rejects non-allowlisted Cua Driver methods', async () => {
     await expect(cuaDriverCall(fixtureWorkspace({ allow_screen: true, allow_mouse_keyboard: true }), 'shell')).rejects.toThrow('cua driver method is not allowed');
+  });
+
+  it('explains that raw native click requires pid and points to high-level click tools', async () => {
+    await expect(cuaDriverCall(fixtureWorkspace({ allow_mouse_keyboard: true }), 'click', { x: 720, y: 450 })).rejects.toThrow('Use computer_screen_click for global screen coordinates');
+  });
+
+  it('requires pid for explicit window click', async () => {
+    await expect(computerWindowClick(fixtureWorkspace({ allow_mouse_keyboard: true }), Number.NaN, 720, 450)).rejects.toThrow('computer_window_click requires pid');
   });
 
   it('supports delay rows in Cua Driver batches without requiring screen/input permission', async () => {

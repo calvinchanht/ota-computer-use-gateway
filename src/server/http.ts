@@ -17,7 +17,7 @@ import { genesisAgentDeepDive, genesisBootstrap, genesisEstateOverview, genesisH
 import { agentBootstrap, checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../tools/context.js';
 import { getProjectContext, memoryWrite } from '../tools/memory.js';
 import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
-import { cuaDriverBatch, cuaDriverCall, cuaDriverStatus, type CuaDriverBatchStep } from '../tools/computer.js';
+import { computerScreenClick, computerWindowClick, cuaDriverBatch, cuaDriverCall, cuaDriverStatus, type CuaDriverBatchStep } from '../tools/computer.js';
 import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable, queryTableAggregate, readAround, readFileChunk, readFileLinesLarge, sampleFile, searchFile, searchFiles, tableProfile, updateTableRows } from '../tools/largeFiles.js';
 import { runArgvTailTool, runArgvTool } from '../tools/runCommand.js';
 import { processKill, processList, processLog, processStart, processWrite } from '../tools/processes.js';
@@ -394,12 +394,12 @@ export function shouldUseQuotaSaver(tool: string, args: Record<string, unknown>)
 function defaultQuotaSaverTool(tool: string): boolean {
   if (tool === 'run_command' || tool === 'search_files') return true;
   if (tool === 'cua_driver_status') return false;
-  return tool.startsWith('browser_cdp') || tool.startsWith('cua_driver_');
+  return tool.startsWith('browser_cdp') || tool.startsWith('cua_driver_') || tool.startsWith('computer_');
 }
 
 function initialWaitReason(tool: string): string {
   if (tool.startsWith('browser_cdp')) return 'waiting_for_browser';
-  if (tool.startsWith('cua_driver')) return 'waiting_for_computer';
+  if (tool.startsWith('cua_driver') || tool.startsWith('computer_')) return 'waiting_for_computer';
   if (tool === 'search_files') return 'searching_workspace';
   if (tool === 'run_command') return 'running_command';
   return 'running';
@@ -537,6 +537,8 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'browser_cdp_batch') return browserCdpBatch(workspace, requiredString(args.target_id, 'target_id'), requiredCdpBatchSteps(args.calls) as Parameters<typeof browserCdpBatch>[2], optionalString(args.profile_label));
   if (tool === 'cua_driver_status') return cuaDriverStatus(workspace);
   if (tool === 'cua_driver_call') return cuaDriverCall(workspace, requiredString(args.method, 'method'), recordArg(args.params, 'params') ?? {});
+  if (tool === 'computer_screen_click') return computerScreenClick(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left', optionalNumber(args.click_count) ?? 1);
+  if (tool === 'computer_window_click') return computerWindowClick(workspace, requiredNumber(args.pid, 'pid'), requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalNumber(args.window_id), optionalString(args.button) ?? 'left', optionalNumber(args.click_count) ?? 1);
   if (tool === 'cua_driver_batch') return cuaDriverBatch(workspace, requiredCuaBatchSteps(args.calls));
   if (tool === 'infer_file_structure') return inferFileStructure(config, workspace, requiredString(args.path, 'path'));
   if (tool === 'sample_file') return sampleFile(config, workspace, requiredString(args.path, 'path'), optionalString(args.mode) ?? 'head_tail_random', optionalNumber(args.head_lines) ?? 20, optionalNumber(args.tail_lines) ?? 20, optionalNumber(args.random_lines) ?? 20, optionalNumber(args.max_bytes) ?? 20000);
@@ -601,6 +603,12 @@ function recordArg(value: unknown, name: string): Record<string, unknown> | unde
 function requiredString(value: unknown, name: string): string {
   if (typeof value !== 'string' || !value) throw new Error(`${name} is required`);
   return value;
+}
+
+function requiredNumber(value: unknown, name: string): number {
+  const number = optionalNumber(value);
+  if (number === undefined) throw new Error(`${name} is required`);
+  return number;
 }
 
 function optionalNumber(value: unknown): number | undefined {

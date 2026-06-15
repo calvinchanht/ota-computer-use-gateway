@@ -36,10 +36,12 @@ The MVP workspace enables:
 Boba/Mac computer use is exposed as a scoped Cua Driver proxy, not as gateway semantic wrapper tools. Provider-facing agents should recognize and use Cua Driver directly:
 
 - `cua_driver_status`
+- `computer_screen_click`
+- `computer_window_click`
 - `cua_driver_call`
 - `cua_driver_batch`
 
-`cua_driver_call` calls one allowed Cua Driver method with native Cua Driver params. Read-only methods (`check_permissions`, `list_windows`, `get_screen_size`, `get_window_state`, `get_accessibility_tree`, `get_agent_cursor_state`, `screenshot`) require screen policy. Local input/control methods (`click`, `double_click`, `drag`, `hotkey`, `press_key`, `set_value`, `type_text`, `type_text_chars`, `zoom`) require mouse/keyboard policy.
+`computer_screen_click` clicks global screen coordinates and is the preferred tool for screenshot-coordinate interactions; it does not require the model to pass a pid. `computer_window_click` clicks within a specific app/window/process context and requires a current `pid` from `list_windows` or `get_window_state`. `cua_driver_call` calls one allowed raw Cua Driver method with native Cua Driver params. Read-only methods (`check_permissions`, `list_windows`, `get_screen_size`, `get_window_state`, `get_accessibility_tree`, `get_agent_cursor_state`, `screenshot`) require screen policy. Local input/control methods (`click`, `double_click`, `drag`, `hotkey`, `press_key`, `set_value`, `type_text`, `type_text_chars`, `zoom`) require mouse/keyboard policy.
 
 `cua_driver_batch` runs raw Cua Driver command steps sequentially and supports gateway-side `{ "delay_ms": number }` steps. This is transport sequencing only, not a semantic computer-use wrapper.
 
