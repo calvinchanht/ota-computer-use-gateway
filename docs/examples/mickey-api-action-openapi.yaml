@@ -122,9 +122,6 @@ components:
         - workspace_status
         - get_workspace_policy
         - get_tool_profile
-        - threaddex_get_job
-        - threaddex_deliver_job_progress
-        - threaddex_deliver_job
         - list_dir
         - stat_path
         - tree
@@ -155,8 +152,8 @@ components:
           type: string
           enum: [mickey]
       description: |
-        Use this single agent Gateway API Action at the configured {agent}-api.unrealize.com host Action for both gateway tools and Threaddex job delivery. For Threaddex job delivery, call threaddex_get_job, threaddex_deliver_job_progress, and threaddex_deliver_job through this same gateway; do not configure a second threaddex-* Action.
-        Tool-specific arguments. For Threaddex job delivery, call threaddex_get_job, threaddex_deliver_job_progress, and threaddex_deliver_job through this same gateway; do not use generic getJob/deliverJob or a separate threaddex-* Action. For browser work, prefer high-level visible-state and tab-hygiene helpers before raw
+        Use this OTA capability Action for workspace/browser/computer tools under /ota only.
+        Use the companion native Threaddex Job API under /threaddex on the same host for getJob, progress, and final delivery.
         CDP: browser_visible_state returns human-visible text/buttons/forms/required-missing/file upload/error state;
         browser_manage_tabs lists/focuses/closes real page tabs; browser_click_and_wait clicks by selector/text and
         waits for visible text, selector, URL substring, or page stability; browser_upload_file_and_verify sets a

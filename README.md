@@ -96,3 +96,13 @@ npm run smoke:primitives
 ## Mickey / provider runtime
 
 - [Mickey no-App bridge](docs/MICKEY_NO_APP_BRIDGE.md) — ChatGPT Project as source shell + scoped Gateway JSON API runtime.
+
+## Agent host path split
+
+For single-host Custom GPT Action setup, keep a strict service boundary on the same public agent hostname:
+
+- `/ota/...` is the OTA capability gateway for workspace, file, command, browser, computer, memory, artifact, approval, and estate tools.
+- `/threaddex/...` is the native Threaddex Job API for job read, progress, final delivery, schedules, agent messages, and thread anchors.
+
+Do not expose or document `threaddex_*` job proxy tools from OTA. The old proxy code was a temporary bridge and is intentionally removed from the Mickey testbed first.
+

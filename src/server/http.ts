@@ -20,7 +20,6 @@ import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browser
 import { computerScreenClick, computerWindowClick, cuaDriverBatch, cuaDriverCall, cuaDriverStatus, type CuaDriverBatchStep } from '../tools/computer.js';
 import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable, queryTableAggregate, readAround, readFileChunk, readFileLinesLarge, sampleFile, searchFile, searchFiles, tableProfile, updateTableRows } from '../tools/largeFiles.js';
 import { runArgvTailTool, runArgvTool } from '../tools/runCommand.js';
-import { threaddexDeliverJob, threaddexDeliverJobProgress, threaddexGetJob } from '../tools/threaddex.js';
 import { processKill, processList, processLog, processStart, processWrite } from '../tools/processes.js';
 import { listArtifacts, recordArtifact } from '../tools/artifacts.js';
 import { createServer } from './create.js';
@@ -37,6 +36,7 @@ const API_BATCH_PATH = '/api/v1/batch';
 const API_DEBUG_REQUEST_CONTEXT_PATH = '/api/v1/debug/request_context';
 const API_RUNS_PREFIX = '/api/v1/runs/';
 const API_ARTIFACTS_PREFIX = '/api/v1/artifacts/';
+const OTA_PATH_PREFIX = '/ota';
 const MAX_RUN_RECORDS = 200;
 
 type ApiRunRecord = {
@@ -76,6 +76,7 @@ export async function listenHttp(config: AppConfig): Promise<void> {
 }
 
 async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, startedAt: number, req: IncomingMessage, res: ServerResponse) {
+  stripOtaPathPrefix(req);
   if (isHealth(req)) return sendJson(res, 200, healthPayload(config, startedAt));
   if (req.method === 'OPTIONS') return sendCors(res);
   if (!isMcp(req) && !isApi(req)) return sendJson(res, 404, { error: 'not_found' });
@@ -106,6 +107,14 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
   } finally {
     await transport.close().catch(() => undefined);
   }
+}
+
+function stripOtaPathPrefix(req: IncomingMessage): void {
+  if (!req.url) return;
+  const url = new URL(req.url, 'http://localhost');
+  if (url.pathname !== OTA_PATH_PREFIX && !url.pathname.startsWith(`${OTA_PATH_PREFIX}/`)) return;
+  url.pathname = url.pathname.slice(OTA_PATH_PREFIX.length) || '/';
+  req.url = `${url.pathname}${url.search}`;
 }
 
 function isHealth(req: IncomingMessage): boolean {
@@ -562,17 +571,14 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'stop_process') return processKill(requiredString(args.process_id, 'process_id'));
   if (tool === 'run_command' && Boolean(args.tail)) return runArgvTailTool(config, workspace, requiredStringArray(args.cmd, 'cmd'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000);
   if (tool === 'run_command') return runArgvTool(config, workspace, requiredStringArray(args.cmd, 'cmd'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000, optionalNumber(args.max_stdout_bytes) ?? 20000, optionalNumber(args.max_stderr_bytes) ?? 8000);
-  if (tool === 'threaddex_get_job') return threaddexGetJob(workspace, requiredString(args.job_id, 'job_id'));
-  if (tool === 'threaddex_deliver_job_progress') return threaddexDeliverJobProgress(workspace, requiredString(args.job_id, 'job_id'), requiredString(args.text, 'text'), optionalStringOrNumber(args.seq), optionalString(args.protocol_version), optionalString(args.schema_version));
-  if (tool === 'threaddex_deliver_job') return threaddexDeliverJob(workspace, requiredString(args.job_id, 'job_id'), requiredString(args.text, 'text'), optionalString(args.protocol_version), optionalString(args.schema_version));
   throw new Error(`unsupported API tool: ${tool}`);
 }
 
 
 function toolExposureError(tool: string): string {
-  if (tool === 'deliverJob') return 'tool is not exposed by this workspace api_sets profile: deliverJob. Use threaddex_deliver_job through this OTA gateway, or use a separate Threaddex Job API Action.';
-  if (tool === 'deliverJobProgress') return 'tool is not exposed by this workspace api_sets profile: deliverJobProgress. Use threaddex_deliver_job_progress through this OTA gateway, or use a separate Threaddex Job API Action.';
-  if (tool === 'getJob') return 'tool is not exposed by this workspace api_sets profile: getJob. Use threaddex_get_job through this OTA gateway, or use a separate Threaddex Job API Action.';
+  if (tool === 'deliverJob') return 'tool is not exposed by the OTA capability gateway. Use the Threaddex Job API path on the same agent host, for example /threaddex/v1/job/{job_id}/deliver.';
+  if (tool === 'deliverJobProgress') return 'tool is not exposed by the OTA capability gateway. Use the Threaddex Job API path on the same agent host, for example /threaddex/v1/job/{job_id}/progress.';
+  if (tool === 'getJob') return 'tool is not exposed by the OTA capability gateway. Use the Threaddex Job API path on the same agent host, for example /threaddex/v1/job/{job_id}.';
   return `tool is not exposed by this workspace api_sets profile: ${tool}`;
 }
 

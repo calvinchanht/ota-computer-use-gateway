@@ -27,7 +27,7 @@ function canonicalTools(): string[] {
     'windows_type_text', 'windows_key', 'windows_hotkey',
     'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch',
     'workspace_inventory', 'read_file', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
-    'run_command', 'run_configured_command', 'threaddex_get_job', 'threaddex_deliver_job_progress', 'threaddex_deliver_job', 'list_dir', 'stat_path', 'tree', 'search_files',
+    'run_command', 'run_configured_command', 'list_dir', 'stat_path', 'tree', 'search_files',
     'git_status', 'git_diff', 'git_push_current_branch', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',
     'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'memory_search', 'memory_write',
     'list_skills', 'read_skill', 'approval_status', 'list_artifacts', 'record_artifact',
@@ -60,7 +60,7 @@ function apiCapabilitySets() {
       },
       machine_admin: {
         purpose: 'Own-machine/lane management through configured commands/processes and scoped service/config/runbook work.',
-        tools: ['run_configured_command', 'threaddex_get_job', 'threaddex_deliver_job_progress', 'threaddex_deliver_job', 'run_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process']
+        tools: ['run_configured_command', 'run_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process']
       },
       estate_admin: {
         purpose: 'Cross-agent/cross-host Genesis control-plane reporting and approved estate operations.',
