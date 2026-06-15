@@ -1,12 +1,12 @@
 openapi: 3.1.0
 info:
-  title: Mickey Gateway API Action
-  version: 0.4.0
-  description: Single Action endpoint only. Mickey OTA Gateway JSON API Action for workspace/browser capability in the Threaddex canary lane.
+  title: Mickey OTA + Threaddex API Action
+  version: 0.5.0
+  description: "Mickey single-host Action with strict path boundary: /ota for capability tools and /threaddex for native Job API delivery."
 servers:
   - url: https://mickey-api.unrealize.com
 paths:
-  /api/v1/tool:
+  /ota/api/v1/tool:
     post:
       operationId: gateway_request
       summary: Run one scoped Mickey gateway tool call.
@@ -26,7 +26,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GatewayResponse'
-  /api/v1/batch:
+  /ota/api/v1/batch:
     post:
       operationId: gateway_batch
       summary: Run multiple scoped Mickey gateway tool calls.
@@ -46,7 +46,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GatewayResponse'
-  /api/v1/runs/{run_id}:
+  /ota/api/v1/runs/{run_id}:
     get:
       operationId: get_gateway_run
       summary: Retrieve a previous Gateway JSON API run.
@@ -66,6 +66,175 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GatewayResponse'
+  /threaddex/v1/schema:
+    get:
+      operationId: getThreaddexSchema
+      summary: Read Mickey Threaddex Job API schema metadata.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Job API schema metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /threaddex/v1/job/{job_id}:
+    get:
+      operationId: getJob
+      summary: Read a Mickey Threaddex job by id.
+      description: Use the job_id from a Telegram job prompt. Pass job_token when supplied by the job prompt.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: job_token
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Public job payload.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /threaddex/v1/job/{job_id}/progress:
+    post:
+      operationId: deliverJobProgress
+      summary: Deliver non-final progress for a Mickey Threaddex job.
+      description: Use for Telegram job progress. Pass job_token when supplied by the job prompt.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: job_token
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required: [text]
+              properties:
+                text:
+                  type: string
+                seq:
+                  oneOf:
+                    - type: integer
+                    - type: string
+                progress_seq:
+                  oneOf:
+                    - type: integer
+                    - type: string
+                protocol_version:
+                  type: string
+                schema_version:
+                  type: string
+      responses:
+        '200':
+          description: Progress delivery result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /threaddex/v1/job/{job_id}/deliver:
+    post:
+      operationId: deliverJob
+      summary: Deliver the final result for a Mickey Threaddex job.
+      description: Use for the substantive final answer. Pass job_token when supplied by the job prompt.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: job_token
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required: [text]
+              properties:
+                text:
+                  type: string
+                protocol_version:
+                  type: string
+                schema_version:
+                  type: string
+      responses:
+        '200':
+          description: Final delivery result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /threaddex/v1/job/{job_id}/continuation:
+    post:
+      operationId: requestJobContinuation
+      summary: Request a continuation for a Mickey Threaddex job instead of final delivery.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: job_token
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: true
+      responses:
+        '200':
+          description: Continuation request result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+
 components:
   securitySchemes:
     bearerAuth:
@@ -152,8 +321,7 @@ components:
           type: string
           enum: [mickey]
       description: |
-        Use this OTA capability Action for workspace/browser/computer tools under /ota only.
-        Use the companion native Threaddex Job API under /threaddex on the same host for getJob, progress, and final delivery.
+        Tool-specific arguments. For browser work, prefer high-level visible-state and tab-hygiene helpers before raw
         CDP: browser_visible_state returns human-visible text/buttons/forms/required-missing/file upload/error state;
         browser_manage_tabs lists/focuses/closes real page tabs; browser_click_and_wait clicks by selector/text and
         waits for visible text, selector, URL substring, or page stability; browser_upload_file_and_verify sets a
