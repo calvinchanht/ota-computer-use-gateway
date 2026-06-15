@@ -13,6 +13,7 @@ import { registerMemoryTools } from './register/memory.js';
 import { registerPatchTools } from './register/patch.js';
 import { registerProcessTools } from './register/processes.js';
 import { registerSkillTools } from './register/skills.js';
+import { registerThreaddexTools } from './register/threaddex.js';
 import { registerWorkspaceTools } from './register/workspace.js';
 import { setToolAnnotationMode } from './register/annotations.js';
 import type { RegisterContext } from './register/types.js';
@@ -35,6 +36,7 @@ export function registerTools(server: McpServer, config: AppConfig, workspaces: 
   registerPatchTools(context);
   registerApprovalTools(context);
   registerProcessTools(context);
+  registerThreaddexTools(context);
 }
 
 function filteredServer(server: McpServer, config: AppConfig): McpServer {

@@ -207,7 +207,7 @@ components:
         list_browser_tabs defaults to real page targets only; pass type=all and
         include_iframes/include_workers/include_browser_ui only for raw CDP cleanup/debugging. For Mac computer-use prefer computer_screen_click for global screenshot coordinates and computer_window_click after list_windows identifies a pid/window_id. For raw Cua Driver use
         cua_driver_status, cua_driver_call with method/params, or cua_driver_batch with calls including raw Cua method
-        steps or delay_ms steps. For async quota_saver behavior, initial_wait_ms may be set; if api.status=running,
+        steps or delay_ms steps. For Boba/Threaddex job delivery, use threaddex_get_job, threaddex_deliver_job_progress, and threaddex_deliver_job through this same gateway instead of generic deliverJob against boba-api. For async quota_saver behavior, initial_wait_ms may be set; if api.status=running,
         poll get_gateway_run instead of retrying the original side-effectful call. For file tools include path; for
         context tools include title/body as needed; for browser/CDP include method/params/target_id/calls; for large-
         file tools include query, where, select, group_by, metrics, offsets, and dry_run fields as needed.

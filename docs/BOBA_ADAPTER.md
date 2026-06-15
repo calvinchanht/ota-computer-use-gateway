@@ -81,3 +81,14 @@ On 2026-05-30, Genesis verified:
 1. Keep Boba screenshot artifacts short-lived; copy important screenshots into task/project folders before relying on them as durable evidence.
 2. Continue Roblox Studio task-specific smokes with local-only harmless actions before publishing/uploading/saving anything.
 3. Consider adding higher-level webchat bundle tools if repeated ChatGPT Action confirmation clicks become annoying.
+
+
+## Local Threaddex Job API proxy
+
+Boba Gateway exposes scoped local Threaddex proxy tools for webchat agents that only have the `boba-api` Action configured:
+
+- `threaddex_get_job`
+- `threaddex_deliver_job_progress`
+- `threaddex_deliver_job`
+
+Use these explicit names instead of sending generic `getJob`, `deliverJobProgress`, or `deliverJob` to `boba-api.unrealize.com`. The proxy forwards only to the configured local Boba Threaddex Job API base/bearer environment and avoids wrong-surface tool failures.

@@ -20,6 +20,7 @@ import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browser
 import { computerScreenClick, computerWindowClick, cuaDriverBatch, cuaDriverCall, cuaDriverStatus, type CuaDriverBatchStep } from '../tools/computer.js';
 import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable, queryTableAggregate, readAround, readFileChunk, readFileLinesLarge, sampleFile, searchFile, searchFiles, tableProfile, updateTableRows } from '../tools/largeFiles.js';
 import { runArgvTailTool, runArgvTool } from '../tools/runCommand.js';
+import { threaddexDeliverJob, threaddexDeliverJobProgress, threaddexGetJob } from '../tools/threaddex.js';
 import { processKill, processList, processLog, processStart, processWrite } from '../tools/processes.js';
 import { listArtifacts, recordArtifact } from '../tools/artifacts.js';
 import { createServer } from './create.js';
@@ -561,6 +562,9 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'stop_process') return processKill(requiredString(args.process_id, 'process_id'));
   if (tool === 'run_command' && Boolean(args.tail)) return runArgvTailTool(config, workspace, requiredStringArray(args.cmd, 'cmd'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000);
   if (tool === 'run_command') return runArgvTool(config, workspace, requiredStringArray(args.cmd, 'cmd'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000, optionalNumber(args.max_stdout_bytes) ?? 20000, optionalNumber(args.max_stderr_bytes) ?? 8000);
+  if (tool === 'threaddex_get_job') return threaddexGetJob(workspace, requiredString(args.job_id, 'job_id'));
+  if (tool === 'threaddex_deliver_job_progress') return threaddexDeliverJobProgress(workspace, requiredString(args.job_id, 'job_id'), requiredString(args.text, 'text'), optionalStringOrNumber(args.seq), optionalString(args.protocol_version), optionalString(args.schema_version));
+  if (tool === 'threaddex_deliver_job') return threaddexDeliverJob(workspace, requiredString(args.job_id, 'job_id'), requiredString(args.text, 'text'), optionalString(args.protocol_version), optionalString(args.schema_version));
   throw new Error(`unsupported API tool: ${tool}`);
 }
 
@@ -609,6 +613,10 @@ function requiredNumber(value: unknown, name: string): number {
   const number = optionalNumber(value);
   if (number === undefined) throw new Error(`${name} is required`);
   return number;
+}
+
+function optionalStringOrNumber(value: unknown): string | number | undefined {
+  return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value)) ? value : undefined;
 }
 
 function optionalNumber(value: unknown): number | undefined {
