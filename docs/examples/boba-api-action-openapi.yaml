@@ -319,7 +319,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
       description: |
         Tool-specific arguments. For browser work, prefer high-level visible-state and tab-hygiene helpers before raw
         CDP: browser_visible_state returns human-visible text/buttons/forms/required-missing/file upload/error state;
@@ -336,7 +336,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
     ListDirArguments:
       type: object
       additionalProperties: false
@@ -344,7 +344,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
         path:
           type: string
         max_entries:
@@ -358,7 +358,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
         path:
           type: string
         start_line:
@@ -375,7 +375,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
         path:
           type: string
         content:
@@ -391,7 +391,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
     GitDiffArguments:
       type: object
       additionalProperties: false
@@ -399,7 +399,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
         max_bytes:
           type: integer
           minimum: 1
@@ -411,7 +411,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
         title:
           type: string
           maxLength: 120
@@ -431,7 +431,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
         type:
           type: string
           enum: [note, decision, progress, handoff]
@@ -455,7 +455,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
     BrowserStatusArguments:
       type: object
       additionalProperties: false
@@ -463,7 +463,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
         profile_label:
           type: string
     ListBrowserTabsArguments:
@@ -473,7 +473,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
         profile_label:
           type: string
         include_urls:
@@ -487,7 +487,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
         profile_label:
           type: string
         method:
@@ -504,7 +504,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
         profile_label:
           type: string
         calls:
@@ -520,7 +520,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
         profile_label:
           type: string
         target_id:
@@ -539,7 +539,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
         profile_label:
           type: string
         target_id:
@@ -584,7 +584,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [mickey]
+          enum: [boba]
         path:
           type: string
         root:

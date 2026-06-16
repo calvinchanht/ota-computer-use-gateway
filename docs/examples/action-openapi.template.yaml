@@ -1,16 +1,16 @@
 openapi: 3.1.0
 info:
-  title: Catalyst OTA + Threaddex API Action
+  title: {{displayName}} OTA + Threaddex API Action
   version: 0.5.0
-  description: "Catalyst single-host Action with strict path boundary: /ota for capability tools and /threaddex for native Job API delivery."
+  description: "{{displayName}} single-host Action with strict path boundary: /ota for capability tools and /threaddex for native Job API delivery."
 servers:
-  - url: https://catalyst-api.unrealize.com
+  - url: {{serverUrl}}
 paths:
   /ota/api/v1/tool:
     post:
       operationId: gateway_request
-      summary: Run one scoped Catalyst gateway tool call.
-      description: Runs one scoped OTA capability tool call in workspace_id catalyst. Do not use this operation for Threaddex job retrieval or delivery; use the native /threaddex operations getJob, deliverJobProgress, deliverJob, and requestJobContinuation instead.
+      summary: Run one scoped {{displayName}} gateway tool call.
+      description: Runs one scoped OTA capability tool call in workspace_id {{agentId}}. Do not use this operation for Threaddex job retrieval or delivery; use the native /threaddex operations getJob, deliverJobProgress, deliverJob, and requestJobContinuation instead.
       security:
         - bearerAuth: []
       requestBody:
@@ -29,8 +29,8 @@ paths:
   /ota/api/v1/batch:
     post:
       operationId: gateway_batch
-      summary: Run multiple scoped Catalyst gateway tool calls.
-      description: Runs up to 20 scoped Catalyst OTA capability tool calls in order. Prefer this for multi-step read/write/read-back or checkpoint flows. Do not use batch for Threaddex job retrieval or delivery; use /threaddex operations directly.
+      summary: Run multiple scoped {{displayName}} gateway tool calls.
+      description: Runs up to 20 scoped {{displayName}} OTA capability tool calls in order. Prefer this for multi-step read/write/read-back or checkpoint flows. Do not use batch for Threaddex job retrieval or delivery; use /threaddex operations directly.
       security:
         - bearerAuth: []
       requestBody:
@@ -69,7 +69,7 @@ paths:
   /threaddex/v1/schema:
     get:
       operationId: getThreaddexSchema
-      summary: Read Catalyst Threaddex Job API schema metadata.
+      summary: Read {{displayName}} Threaddex Job API schema metadata.
       security:
         - bearerAuth: []
       responses:
@@ -84,7 +84,7 @@ paths:
   /threaddex/v1/job/{job_id}:
     get:
       operationId: getJob
-      summary: Read a Catalyst Threaddex job by id.
+      summary: Read a {{displayName}} Threaddex job by id.
       description: Use the job_id from a Telegram job prompt. This is the correct operation for job retrieval. Do not call gateway_request with tool=getJob. Pass job_token when supplied by the job prompt.
       security:
         - bearerAuth: []
@@ -111,7 +111,7 @@ paths:
   /threaddex/v1/job/{job_id}/progress:
     post:
       operationId: deliverJobProgress
-      summary: Deliver non-final progress for a Catalyst Threaddex job.
+      summary: Deliver non-final progress for a {{displayName}} Threaddex job.
       description: Use for Telegram job progress. This is the correct operation for progress delivery. Do not call gateway_request with tool=deliverJobProgress. Pass job_token when supplied by the job prompt.
       security:
         - bearerAuth: []
@@ -161,7 +161,7 @@ paths:
   /threaddex/v1/job/{job_id}/deliver:
     post:
       operationId: deliverJob
-      summary: Deliver the final result for a Catalyst Threaddex job.
+      summary: Deliver the final result for a {{displayName}} Threaddex job.
       description: Use for the substantive final answer. Pass job_token when supplied by the job prompt.
       security:
         - bearerAuth: []
@@ -203,7 +203,7 @@ paths:
   /threaddex/v1/job/{job_id}/continuation:
     post:
       operationId: requestJobContinuation
-      summary: Request a continuation for a Catalyst Threaddex job instead of final delivery.
+      summary: Request a continuation for a {{displayName}} Threaddex job instead of final delivery.
       security:
         - bearerAuth: []
       parameters:
@@ -319,7 +319,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
       description: |
         Tool-specific arguments. For browser work, prefer high-level visible-state and tab-hygiene helpers before raw
         CDP: browser_visible_state returns human-visible text/buttons/forms/required-missing/file upload/error state;
@@ -336,7 +336,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
     ListDirArguments:
       type: object
       additionalProperties: false
@@ -344,7 +344,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
         path:
           type: string
         max_entries:
@@ -358,7 +358,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
         path:
           type: string
         start_line:
@@ -375,7 +375,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
         path:
           type: string
         content:
@@ -391,7 +391,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
     GitDiffArguments:
       type: object
       additionalProperties: false
@@ -399,7 +399,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
         max_bytes:
           type: integer
           minimum: 1
@@ -411,7 +411,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
         title:
           type: string
           maxLength: 120
@@ -431,7 +431,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
         type:
           type: string
           enum: [note, decision, progress, handoff]
@@ -455,7 +455,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
     BrowserStatusArguments:
       type: object
       additionalProperties: false
@@ -463,7 +463,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
         profile_label:
           type: string
     ListBrowserTabsArguments:
@@ -473,7 +473,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
         profile_label:
           type: string
         include_urls:
@@ -487,7 +487,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
         profile_label:
           type: string
         method:
@@ -504,7 +504,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
         profile_label:
           type: string
         calls:
@@ -520,7 +520,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
         profile_label:
           type: string
         target_id:
@@ -539,7 +539,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
         profile_label:
           type: string
         target_id:
@@ -584,7 +584,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [catalyst]
+          enum: [{{agentId}}]
         path:
           type: string
         root:

@@ -10,7 +10,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "lint": "eslint .",
-    "check": "npm run build && npm test",
+    "check": "npm run build && npm run validate:action-schemas && npm test",
     "smoke:stdio": "npm run build && node scripts/smoke-stdio.mjs",
     "smoke:http": "npm run build && node scripts/smoke-http.mjs",
     "smoke:primitives": "npm run build && node scripts/smoke-primitives.mjs",
@@ -20,7 +20,9 @@
     "smoke:mickey-acceptance": "node scripts/smoke-provider-acceptance.mjs",
     "smoke:catalyst-acceptance": "OTA_GATEWAY_SMOKE_WORKSPACE=catalyst OTA_GATEWAY_ACCEPTANCE_SKILL=catalyst-pickup node scripts/smoke-provider-acceptance.mjs",
     "status:catalyst-connector": "node scripts/catalyst-connector-status.mjs",
-    "audit:retention": "node scripts/audit-retention.mjs"
+    "audit:retention": "node scripts/audit-retention.mjs",
+    "generate:action-schemas": "node scripts/generate-action-schemas.mjs",
+    "validate:action-schemas": "node scripts/validate-action-schemas.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
