@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { computerScreenClick, computerWindowClick, cuaDriverBatch, cuaDriverCall, cuaDriverStatus } from '../../tools/computer.js';
+import { computerScreenClick, computerScreenDrag, computerScreenMouseMove, computerScreenScroll, computerWindowClick, computerWindowDrag, computerWindowMouseMove, computerWindowScroll, cuaDriverBatch, cuaDriverCall, cuaDriverStatus } from '../../tools/computer.js';
 import {
   windowsBatch,
   windowsClick,
@@ -33,6 +33,12 @@ export function registerComputerTools(context: RegisterContext): void {
   registerCuaDriverCall(context);
   registerComputerScreenClick(context);
   registerComputerWindowClick(context);
+  registerComputerScreenMouseMove(context);
+  registerComputerWindowMouseMove(context);
+  registerComputerScreenDrag(context);
+  registerComputerWindowDrag(context);
+  registerComputerScreenScroll(context);
+  registerComputerWindowScroll(context);
   registerCuaDriverBatch(context);
   registerWindowsTools(context);
 }
@@ -71,6 +77,61 @@ function registerComputerWindowClick({ server, workspaces }: RegisterContext): v
     inputSchema: { workspace_id: z.string(), pid: z.number(), window_id: z.number().optional(), x: z.number(), y: z.number(), button: z.string().default('left'), click_count: z.number().int().min(1).max(2).default(1) },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
   }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_window_click', (workspace) => computerWindowClick(workspace, args.pid, args.x, args.y, args.window_id, args.button, args.click_count)));
+}
+
+
+function registerComputerScreenMouseMove({ server, workspaces }: RegisterContext): void {
+  server.registerTool('computer_screen_mouse_move', {
+    title: 'Computer screen mouse move',
+    description: 'Move the visible Cua agent cursor overlay to global Mac screen coordinates. This is a hover/pointing helper; native app events are sent by click/drag/scroll tools.',
+    inputSchema: { workspace_id: z.string(), x: z.number(), y: z.number() },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_screen_mouse_move', (workspace) => computerScreenMouseMove(workspace, args.x, args.y)));
+}
+
+function registerComputerWindowMouseMove({ server, workspaces }: RegisterContext): void {
+  server.registerTool('computer_window_mouse_move', {
+    title: 'Computer window mouse move',
+    description: 'Move the visible Cua agent cursor overlay to window-local coordinates for a known Mac app/window/process. Pass pid from list_windows or get_window_state.',
+    inputSchema: { workspace_id: z.string(), pid: z.number(), window_id: z.number().optional(), x: z.number(), y: z.number() },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_window_mouse_move', (workspace) => computerWindowMouseMove(workspace, args.pid, args.x, args.y, args.window_id)));
+}
+
+function registerComputerScreenDrag({ server, workspaces }: RegisterContext): void {
+  server.registerTool('computer_screen_drag', {
+    title: 'Computer screen drag',
+    description: 'Drag between global Mac screen coordinates. The gateway infers the target process/window and translates to native Cua window-local coordinates.',
+    inputSchema: { workspace_id: z.string(), from_x: z.number(), from_y: z.number(), to_x: z.number(), to_y: z.number(), button: z.string().default('left'), duration_ms: z.number().int().min(0).max(10000).optional(), steps: z.number().int().min(1).max(200).optional() },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_screen_drag', (workspace) => computerScreenDrag(workspace, args.from_x, args.from_y, args.to_x, args.to_y, args.button, args.duration_ms, args.steps)));
+}
+
+function registerComputerWindowDrag({ server, workspaces }: RegisterContext): void {
+  server.registerTool('computer_window_drag', {
+    title: 'Computer window drag',
+    description: 'Drag in a known Mac app/window/process using window-local coordinates. Pass pid from list_windows or get_window_state; window_id is optional when available.',
+    inputSchema: { workspace_id: z.string(), pid: z.number(), window_id: z.number().optional(), from_x: z.number(), from_y: z.number(), to_x: z.number(), to_y: z.number(), button: z.string().default('left'), duration_ms: z.number().int().min(0).max(10000).optional(), steps: z.number().int().min(1).max(200).optional() },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_window_drag', (workspace) => computerWindowDrag(workspace, args.pid, args.from_x, args.from_y, args.to_x, args.to_y, args.window_id, args.button, args.duration_ms, args.steps)));
+}
+
+function registerComputerScreenScroll({ server, workspaces }: RegisterContext): void {
+  server.registerTool('computer_screen_scroll', {
+    title: 'Computer screen scroll',
+    description: 'Scroll the target Mac app/window inferred from global screen coordinates. Native Cua scroll uses the target pid focused region.',
+    inputSchema: { workspace_id: z.string(), x: z.number(), y: z.number(), direction: z.enum(['up', 'down', 'left', 'right']), amount: z.number().int().min(1).max(50).default(3), by: z.enum(['line', 'page']).default('line') },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_screen_scroll', (workspace) => computerScreenScroll(workspace, args.x, args.y, args.direction, args.amount, args.by)));
+}
+
+function registerComputerWindowScroll({ server, workspaces }: RegisterContext): void {
+  server.registerTool('computer_window_scroll', {
+    title: 'Computer window scroll',
+    description: 'Scroll a known Mac app/window/process by pid. Uses native Cua focused-region scrolling.',
+    inputSchema: { workspace_id: z.string(), pid: z.number(), window_id: z.number().optional(), direction: z.enum(['up', 'down', 'left', 'right']), amount: z.number().int().min(1).max(50).default(3), by: z.enum(['line', 'page']).default('line') },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'computer_window_scroll', (workspace) => computerWindowScroll(workspace, args.pid, args.direction, args.window_id, args.amount, args.by)));
 }
 
 function registerCuaDriverBatch({ server, workspaces }: RegisterContext): void {

@@ -17,7 +17,7 @@ import { genesisAgentDeepDive, genesisBootstrap, genesisEstateOverview, genesisH
 import { agentBootstrap, checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../tools/context.js';
 import { getProjectContext, memoryWrite } from '../tools/memory.js';
 import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
-import { computerScreenClick, computerWindowClick, cuaDriverBatch, cuaDriverCall, cuaDriverStatus, type CuaDriverBatchStep } from '../tools/computer.js';
+import { computerScreenClick, computerScreenDrag, computerScreenMouseMove, computerScreenScroll, computerWindowClick, computerWindowDrag, computerWindowMouseMove, computerWindowScroll, cuaDriverBatch, cuaDriverCall, cuaDriverStatus, type CuaDriverBatchStep } from '../tools/computer.js';
 import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable, queryTableAggregate, readAround, readFileChunk, readFileLinesLarge, sampleFile, searchFile, searchFiles, tableProfile, updateTableRows } from '../tools/largeFiles.js';
 import { runArgvTailTool, runArgvTool } from '../tools/runCommand.js';
 import { processKill, processList, processLog, processStart, processWrite } from '../tools/processes.js';
@@ -599,6 +599,12 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'cua_driver_call') return cuaDriverCall(workspace, requiredString(args.method, 'method'), recordArg(args.params, 'params') ?? {});
   if (tool === 'computer_screen_click') return computerScreenClick(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left', optionalNumber(args.click_count) ?? 1);
   if (tool === 'computer_window_click') return computerWindowClick(workspace, requiredNumber(args.pid, 'pid'), requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalNumber(args.window_id), optionalString(args.button) ?? 'left', optionalNumber(args.click_count) ?? 1);
+  if (tool === 'computer_screen_mouse_move') return computerScreenMouseMove(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'));
+  if (tool === 'computer_window_mouse_move') return computerWindowMouseMove(workspace, requiredNumber(args.pid, 'pid'), requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalNumber(args.window_id));
+  if (tool === 'computer_screen_drag') return computerScreenDrag(workspace, requiredNumber(args.from_x, 'from_x'), requiredNumber(args.from_y, 'from_y'), requiredNumber(args.to_x, 'to_x'), requiredNumber(args.to_y, 'to_y'), optionalString(args.button) ?? 'left', optionalNumber(args.duration_ms), optionalNumber(args.steps));
+  if (tool === 'computer_window_drag') return computerWindowDrag(workspace, requiredNumber(args.pid, 'pid'), requiredNumber(args.from_x, 'from_x'), requiredNumber(args.from_y, 'from_y'), requiredNumber(args.to_x, 'to_x'), requiredNumber(args.to_y, 'to_y'), optionalNumber(args.window_id), optionalString(args.button) ?? 'left', optionalNumber(args.duration_ms), optionalNumber(args.steps));
+  if (tool === 'computer_screen_scroll') return computerScreenScroll(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), requiredString(args.direction, 'direction'), optionalNumber(args.amount) ?? 3, optionalString(args.by) ?? 'line');
+  if (tool === 'computer_window_scroll') return computerWindowScroll(workspace, requiredNumber(args.pid, 'pid'), requiredString(args.direction, 'direction'), optionalNumber(args.window_id), optionalNumber(args.amount) ?? 3, optionalString(args.by) ?? 'line');
   if (tool === 'cua_driver_batch') return cuaDriverBatch(workspace, requiredCuaBatchSteps(args.calls));
   if (tool === 'infer_file_structure') return inferFileStructure(config, workspace, requiredString(args.path, 'path'));
   if (tool === 'sample_file') return sampleFile(config, workspace, requiredString(args.path, 'path'), optionalString(args.mode) ?? 'head_tail_random', optionalNumber(args.head_lines) ?? 20, optionalNumber(args.tail_lines) ?? 20, optionalNumber(args.random_lines) ?? 20, optionalNumber(args.max_bytes) ?? 20000);

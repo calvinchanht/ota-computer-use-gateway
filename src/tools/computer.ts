@@ -28,12 +28,16 @@ const READ_ONLY_CUA_TOOLS = new Set([
   'get_window_state',
   'get_accessibility_tree',
   'get_agent_cursor_state',
+  'get_cursor_position',
   'screenshot'
 ]);
 const MUTATING_CUA_TOOLS = new Set([
   'click',
   'double_click',
+  'right_click',
   'drag',
+  'scroll',
+  'move_cursor',
   'hotkey',
   'press_key',
   'set_value',
@@ -70,33 +74,82 @@ export async function cuaDriverStatus(workspace: Workspace) {
 export async function cuaDriverCall(workspace: Workspace, method: string, params: Record<string, unknown> = {}) {
   const readOnly = authorizeCuaMethod(workspace, method);
   const sanitizedParams = sanitizeCuaArgs(params);
-  if ((method === 'click' || method === 'double_click') && !hasPid(sanitizedParams)) throw new Error(`${method} is the native Cua window/process click and requires params.pid. Use computer_screen_click for global screen coordinates, or call list_windows and then computer_window_click with the target pid/window_id.`);
+  if (requiresNativePid(method) && !hasPid(sanitizedParams)) throw new Error(`${method} is a native Cua window/process mouse command and requires params.pid. Use computer_screen_* for global screen coordinates, or call list_windows/get_window_state and then use computer_window_* with the target pid/window_id.`);
   const result = await cuaCall(method, sanitizedParams);
   return ok('cua driver call', { method, read_only: readOnly, result: await boundCuaResult(workspace, method, result, sanitizedParams) });
 }
 
 export async function computerScreenClick(workspace: Workspace, x: number, y: number, button = 'left', click_count = 1) {
   ensureMouseKeyboard(workspace);
-  const params = await screenClickParams(x, y, button, click_count);
-  if (!hasPid(params)) throw new Error('computer_screen_click could not infer a target pid from list_windows. Call cua_driver_call list_windows, verify the target window is visible/frontmost, then use computer_window_click with that pid/window_id.');
-  const method = click_count > 1 ? 'double_click' : 'click';
+  const target = await inferRequiredScreenTarget('computer_screen_click', x, y);
+  const point = windowPointParams(target, x, y) as { x: number; y: number };
+  const { method, params } = clickCommand(clickParams(point.x, point.y, { pid: target.pid, window_id: target.window_id }), button, click_count);
   const result = await cuaCall(method, params);
-  return ok('computer screen click', {
-    method,
-    coordinate_space: 'screen',
-    inference: params.pid ? 'frontmost_visible_window_pid' : 'native_global_click',
-    params,
-    result: await boundCuaResult(workspace, method, result, params)
-  });
+  return ok('computer screen click', await screenMouseResult(method, target, params, result, workspace));
 }
 
 export async function computerWindowClick(workspace: Workspace, pid: number, x: number, y: number, window_id?: number, button = 'left', click_count = 1) {
   ensureMouseKeyboard(workspace);
-  if (!Number.isFinite(pid)) throw new Error('computer_window_click requires pid from list_windows or get_window_state');
-  const method = click_count > 1 ? 'double_click' : 'click';
-  const params = clickParams(x, y, button, click_count, { pid, window_id });
+  ensurePid('computer_window_click', pid);
+  const { method, params } = clickCommand(clickParams(x, y, { pid, window_id }), button, click_count);
   const result = await cuaCall(method, params);
   return ok('computer window click', { method, coordinate_space: 'window_or_process', params, result: await boundCuaResult(workspace, method, result, params) });
+}
+
+export async function computerScreenMouseMove(workspace: Workspace, x: number, y: number) {
+  ensureMouseKeyboard(workspace);
+  const params = { x, y };
+  const method = 'move_cursor';
+  const result = await cuaCall(method, params);
+  return ok('computer screen mouse move', { method, coordinate_space: 'screen', cursor_kind: 'agent_overlay', params, result: await boundCuaResult(workspace, method, result, params) });
+}
+
+export async function computerWindowMouseMove(workspace: Workspace, pid: number, x: number, y: number, window_id?: number) {
+  ensureMouseKeyboard(workspace);
+  ensurePid('computer_window_mouse_move', pid);
+  const target = await findRequiredWindowTarget('computer_window_mouse_move', pid, window_id);
+  const params = screenPointFromWindowTarget(target, x, y);
+  const method = 'move_cursor';
+  const result = await cuaCall(method, params);
+  return ok('computer window mouse move', { method, coordinate_space: 'window_or_process', cursor_kind: 'agent_overlay', target, params, result: await boundCuaResult(workspace, method, result, params) });
+}
+
+export async function computerScreenDrag(workspace: Workspace, from_x: number, from_y: number, to_x: number, to_y: number, button = 'left', duration_ms?: number, steps?: number) {
+  ensureMouseKeyboard(workspace);
+  const target = await inferRequiredScreenTarget('computer_screen_drag', from_x, from_y);
+  const from = windowPointParams(target, from_x, from_y, 'from') as { from_x: number; from_y: number };
+  const to = windowPointParams(target, to_x, to_y, 'to') as { to_x: number; to_y: number };
+  const params = dragParams(from, to, { pid: target.pid, window_id: target.window_id }, button, duration_ms, steps);
+  const method = 'drag';
+  const result = await cuaCall(method, params);
+  return ok('computer screen drag', await screenMouseResult(method, target, params, result, workspace));
+}
+
+export async function computerWindowDrag(workspace: Workspace, pid: number, from_x: number, from_y: number, to_x: number, to_y: number, window_id?: number, button = 'left', duration_ms?: number, steps?: number) {
+  ensureMouseKeyboard(workspace);
+  ensurePid('computer_window_drag', pid);
+  const params = dragParams({ from_x, from_y }, { to_x, to_y }, { pid, window_id }, button, duration_ms, steps);
+  const method = 'drag';
+  const result = await cuaCall(method, params);
+  return ok('computer window drag', { method, coordinate_space: 'window_or_process', params, result: await boundCuaResult(workspace, method, result, params) });
+}
+
+export async function computerScreenScroll(workspace: Workspace, x: number, y: number, direction: string, amount = 3, by = 'line') {
+  ensureMouseKeyboard(workspace);
+  const target = await inferRequiredScreenTarget('computer_screen_scroll', x, y);
+  const params = scrollParams(target.pid, direction, amount, by, target.window_id);
+  const method = 'scroll';
+  const result = await cuaCall(method, params);
+  return ok('computer screen scroll', await screenMouseResult(method, target, params, result, workspace));
+}
+
+export async function computerWindowScroll(workspace: Workspace, pid: number, direction: string, window_id?: number, amount = 3, by = 'line') {
+  ensureMouseKeyboard(workspace);
+  ensurePid('computer_window_scroll', pid);
+  const params = scrollParams(pid, direction, amount, by, window_id);
+  const method = 'scroll';
+  const result = await cuaCall(method, params);
+  return ok('computer window scroll', { method, coordinate_space: 'window_or_process', params, result: await boundCuaResult(workspace, method, result, params) });
 }
 
 export async function cuaDriverBatch(workspace: Workspace, calls: CuaDriverBatchStep[]) {
@@ -131,38 +184,110 @@ export async function cuaDriverBatch(workspace: Workspace, calls: CuaDriverBatch
 }
 
 
+type InferredWindowTarget = { pid: number; window_id?: number; title?: string; app?: string; reason: string; bounds?: { x: number; y: number; width: number; height: number } };
+
 function hasPid(params: Record<string, unknown>): boolean {
   return typeof params.pid === 'number' || (typeof params.pid === 'string' && params.pid.trim().length > 0);
 }
 
-async function screenClickParams(x: number, y: number, button: string, clickCount: number): Promise<Record<string, unknown>> {
-  const base = clickParams(x, y, button, clickCount);
-  const windows = await safeCuaCall('list_windows', {});
-  const target = windows.ok ? inferTargetWindow(windows.data, x, y) : null;
-  if (target?.pid !== undefined) {
-    base.pid = target.pid;
-    if (target.window_id !== undefined) base.window_id = target.window_id;
-    base.inferred_target = target;
-  }
-  return base;
+function requiresNativePid(method: string): boolean {
+  return ['click', 'double_click', 'right_click', 'drag', 'scroll'].includes(method);
 }
 
-function clickParams(x: number, y: number, button: string, clickCount: number, target: { pid?: number; window_id?: number } = {}): Record<string, unknown> {
+async function inferRequiredScreenTarget(tool: string, x: number, y: number): Promise<InferredWindowTarget> {
+  const windows = await safeCuaCall('list_windows', {});
+  const target = windows.ok ? inferTargetWindow(windows.data, x, y) : null;
+  if (!target) throw new Error(`${tool} could not infer a target pid from list_windows. Call cua_driver_call list_windows, verify the target window is visible/frontmost, then use the matching computer_window_* tool with that pid/window_id.`);
+  return target;
+}
+
+async function findRequiredWindowTarget(tool: string, pid: number, windowId?: number): Promise<InferredWindowTarget> {
+  const windows = await safeCuaCall('list_windows', {});
+  const target = windows.ok ? findWindowTarget(windows.data, pid, windowId) : null;
+  if (!target) throw new Error(`${tool} could not resolve window bounds for pid/window_id. Call cua_driver_call list_windows and verify the target window is visible, or use computer_screen_mouse_move with global coordinates.`);
+  return target;
+}
+
+function clickCommand(params: Record<string, unknown>, button: string, clickCount: number): { method: string; params: Record<string, unknown> } {
+  const normalizedButton = (button || 'left').toLowerCase();
+  if (normalizedButton === 'right') {
+    if (clickCount > 1) throw new Error('right double-click is not supported by native Cua; use click_count=1 for right_click');
+    return { method: 'right_click', params };
+  }
+  if (normalizedButton !== 'left') throw new Error(`unsupported Mac mouse button for click: ${button}`);
+  return { method: clickCount > 1 ? 'double_click' : 'click', params };
+}
+
+function clickParams(x: number, y: number, target: { pid?: number; window_id?: number } = {}): Record<string, unknown> {
   const params: Record<string, unknown> = { x, y };
-  if (button) params.button = button;
-  if (clickCount > 1) params.click_count = clickCount;
   if (target.pid !== undefined) params.pid = target.pid;
   if (target.window_id !== undefined) params.window_id = target.window_id;
   return params;
 }
 
-function inferTargetWindow(data: unknown, x: number, y: number): { pid?: number; window_id?: number; title?: string; app?: string; reason: string } | null {
+function dragParams(from: { from_x: number; from_y: number }, to: { to_x: number; to_y: number }, target: { pid?: number; window_id?: number }, button: string, durationMs?: number, steps?: number): Record<string, unknown> {
+  const params: Record<string, unknown> = { ...from, ...to };
+  if (target.pid !== undefined) params.pid = target.pid;
+  if (target.window_id !== undefined) params.window_id = target.window_id;
+  if (button) params.button = button;
+  if (durationMs !== undefined) params.duration_ms = durationMs;
+  if (steps !== undefined) params.steps = steps;
+  return params;
+}
+
+function scrollParams(pid: number, direction: string, amount: number, by: string, windowId?: number): Record<string, unknown> {
+  const params: Record<string, unknown> = { pid, direction, amount, by };
+  if (windowId !== undefined) params.window_id = windowId;
+  return params;
+}
+
+function windowPointParams(target: InferredWindowTarget, x: number, y: number, prefix?: 'from' | 'to'): Record<string, number> {
+  const localX = target.bounds ? x - target.bounds.x : x;
+  const localY = target.bounds ? y - target.bounds.y : y;
+  if (prefix === 'from') return { from_x: localX, from_y: localY };
+  if (prefix === 'to') return { to_x: localX, to_y: localY };
+  return { x: localX, y: localY };
+}
+
+function screenPointFromWindowTarget(target: InferredWindowTarget, x: number, y: number): Record<string, number> {
+  return { x: target.bounds ? target.bounds.x + x : x, y: target.bounds ? target.bounds.y + y : y };
+}
+
+async function screenMouseResult(method: string, target: InferredWindowTarget, params: Record<string, unknown>, result: unknown, workspace: Workspace) {
+  return {
+    method,
+    coordinate_space: 'screen',
+    inference: target.reason,
+    inferred_target: target,
+    params,
+    result: await boundCuaResult(workspace, method, result, params)
+  };
+}
+
+function ensurePid(tool: string, pid: number): void {
+  if (!Number.isFinite(pid)) throw new Error(`${tool} requires pid from list_windows or get_window_state`);
+}
+
+function inferTargetWindow(data: unknown, x: number, y: number): InferredWindowTarget | null {
+  const windows = visibleWindows(data);
+  const containing = windows.find((window) => pointInWindow(window, x, y));
+  const selected = containing ?? windows.find((window) => window.is_focused === true || window.focused === true || window.frontmost === true) ?? windows[0];
+  return selected ? targetFromWindow(selected, containing ? 'window_under_coordinate' : 'frontmost_or_first_visible_window') : null;
+}
+
+function findWindowTarget(data: unknown, pid: number, windowId?: number): InferredWindowTarget | null {
+  const windows = visibleWindows(data);
+  const selected = windows.find((window) => numberValue(window.pid) === pid && (windowId === undefined || numberValue(window.window_id) === windowId || numberValue(window.id) === windowId)) ?? windows.find((window) => numberValue(window.pid) === pid);
+  return selected ? targetFromWindow(selected, windowId === undefined ? 'pid_visible_window' : 'pid_window_id') : null;
+}
+
+function visibleWindows(data: unknown): Record<string, unknown>[] {
   const payload = data as { windows?: unknown[] };
   const windows = Array.isArray(payload.windows) ? payload.windows.filter(isRecord) : [];
-  const visible = windows.filter((window) => window.is_on_screen !== false && window.visible !== false);
-  const containing = visible.find((window) => pointInWindow(window, x, y));
-  const selected = containing ?? visible.find((window) => window.is_focused === true || window.focused === true || window.frontmost === true) ?? visible[0];
-  if (!selected) return null;
+  return windows.filter((window) => window.is_on_screen !== false && window.visible !== false);
+}
+
+function targetFromWindow(selected: Record<string, unknown>, reason: string): InferredWindowTarget | null {
   const pid = numberValue(selected.pid);
   if (pid === undefined) return null;
   return {
@@ -170,18 +295,25 @@ function inferTargetWindow(data: unknown, x: number, y: number): { pid?: number;
     window_id: numberValue(selected.window_id) ?? numberValue(selected.id),
     title: typeof selected.title === 'string' ? selected.title : undefined,
     app: typeof selected.app === 'string' ? selected.app : typeof selected.app_name === 'string' ? selected.app_name : undefined,
-    reason: containing ? 'window_under_coordinate' : 'frontmost_or_first_visible_window'
+    reason,
+    bounds: windowBounds(selected)
   };
 }
 
 function pointInWindow(window: Record<string, unknown>, x: number, y: number): boolean {
+  const bounds = windowBounds(window);
+  if (!bounds) return false;
+  return x >= bounds.x && x <= bounds.x + bounds.width && y >= bounds.y && y <= bounds.y + bounds.height;
+}
+
+function windowBounds(window: Record<string, unknown>): { x: number; y: number; width: number; height: number } | undefined {
   const bounds = isRecord(window.bounds) ? window.bounds : window;
-  const left = numberValue(bounds.x) ?? numberValue(bounds.left);
-  const top = numberValue(bounds.y) ?? numberValue(bounds.top);
+  const x = numberValue(bounds.x) ?? numberValue(bounds.left);
+  const y = numberValue(bounds.y) ?? numberValue(bounds.top);
   const width = numberValue(bounds.width);
   const height = numberValue(bounds.height);
-  if (left === undefined || top === undefined || width === undefined || height === undefined) return false;
-  return x >= left && x <= left + width && y >= top && y <= top + height;
+  if (x === undefined || y === undefined || width === undefined || height === undefined) return undefined;
+  return { x, y, width, height };
 }
 
 function numberValue(value: unknown): number | undefined {

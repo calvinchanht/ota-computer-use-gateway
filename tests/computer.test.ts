@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { computerWindowClick, cuaDriverBatch, cuaDriverCall, cuaDriverStatus, screenshotVisualFollowup } from '../src/tools/computer.js';
+import { computerWindowClick, computerWindowDrag, computerWindowMouseMove, computerWindowScroll, cuaDriverBatch, cuaDriverCall, cuaDriverStatus, screenshotVisualFollowup } from '../src/tools/computer.js';
 
 describe('cua driver proxy tools', () => {
 
@@ -73,12 +73,19 @@ describe('cua driver proxy tools', () => {
     await expect(cuaDriverCall(fixtureWorkspace({ allow_screen: true, allow_mouse_keyboard: true }), 'shell')).rejects.toThrow('cua driver method is not allowed');
   });
 
-  it('explains that raw native click requires pid and points to high-level click tools', async () => {
-    await expect(cuaDriverCall(fixtureWorkspace({ allow_mouse_keyboard: true }), 'click', { x: 720, y: 450 })).rejects.toThrow('Use computer_screen_click for global screen coordinates');
+  it('explains that raw native mouse commands require pid and point to high-level screen/window tools', async () => {
+    await expect(cuaDriverCall(fixtureWorkspace({ allow_mouse_keyboard: true }), 'click', { x: 720, y: 450 })).rejects.toThrow('Use computer_screen_* for global screen coordinates');
+    await expect(cuaDriverCall(fixtureWorkspace({ allow_mouse_keyboard: true }), 'right_click', { x: 720, y: 450 })).rejects.toThrow('native Cua window/process mouse command');
+    await expect(cuaDriverCall(fixtureWorkspace({ allow_mouse_keyboard: true }), 'drag', { from_x: 10, from_y: 10, to_x: 20, to_y: 20 })).rejects.toThrow('native Cua window/process mouse command');
+    await expect(cuaDriverCall(fixtureWorkspace({ allow_mouse_keyboard: true }), 'scroll', { direction: 'down' })).rejects.toThrow('native Cua window/process mouse command');
   });
 
-  it('requires pid for explicit window click', async () => {
-    await expect(computerWindowClick(fixtureWorkspace({ allow_mouse_keyboard: true }), Number.NaN, 720, 450)).rejects.toThrow('computer_window_click requires pid');
+  it('requires pid for explicit window mouse controls', async () => {
+    const workspace = fixtureWorkspace({ allow_mouse_keyboard: true });
+    await expect(computerWindowClick(workspace, Number.NaN, 720, 450)).rejects.toThrow('computer_window_click requires pid');
+    await expect(computerWindowMouseMove(workspace, Number.NaN, 720, 450)).rejects.toThrow('computer_window_mouse_move requires pid');
+    await expect(computerWindowDrag(workspace, Number.NaN, 10, 10, 20, 20)).rejects.toThrow('computer_window_drag requires pid');
+    await expect(computerWindowScroll(workspace, Number.NaN, 'down')).rejects.toThrow('computer_window_scroll requires pid');
   });
 
   it('supports delay rows in Cua Driver batches without requiring screen/input permission', async () => {
