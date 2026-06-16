@@ -21,6 +21,7 @@ import { computerScreenClick, computerWindowClick, cuaDriverBatch, cuaDriverCall
 import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable, queryTableAggregate, readAround, readFileChunk, readFileLinesLarge, sampleFile, searchFile, searchFiles, tableProfile, updateTableRows } from '../tools/largeFiles.js';
 import { runArgvTailTool, runArgvTool } from '../tools/runCommand.js';
 import { processKill, processList, processLog, processStart, processWrite } from '../tools/processes.js';
+import { threaddexDeliverJob, threaddexDeliverJobProgress, threaddexGetJob } from '../tools/threaddex.js';
 import { listArtifacts, recordArtifact } from '../tools/artifacts.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
@@ -504,6 +505,9 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (!workspace) throw new Error('workspace_id is required');
   if (tool === 'get_workspace_policy') return workspacePolicy(workspace);
   if (!allowedTools(workspace).includes(tool)) throw new Error(toolExposureError(tool));
+  if (tool === 'threaddex_get_job') return threaddexGetJob(workspace, requiredString(args.job_id, 'job_id'));
+  if (tool === 'threaddex_deliver_job_progress') return threaddexDeliverJobProgress(workspace, requiredString(args.job_id, 'job_id'), requiredString(args.text, 'text'), args.seq as string | number | undefined, optionalString(args.protocol_version), optionalString(args.schema_version));
+  if (tool === 'threaddex_deliver_job') return threaddexDeliverJob(workspace, requiredString(args.job_id, 'job_id'), requiredString(args.text, 'text'), optionalString(args.protocol_version), optionalString(args.schema_version));
   if (tool === 'workspace_inventory') return workspaceInventory(config, workspace, optionalNumber(args.max_entries));
   if (tool === 'list_dir') return listDir(config, workspace, String(args.path ?? '.'), optionalNumber(args.max_entries));
   if (tool === 'stat_path') return statPath(config, workspace, requiredString(args.path, 'path'));
