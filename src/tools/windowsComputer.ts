@@ -299,7 +299,23 @@ function artifactPair(workspace: Workspace, full: string, preview: string) {
 
 function artifact(workspace: Workspace, absolute: string, format: string) {
   const agentPath = `.agent/${path.relative(workspace.realAgentDir, absolute).replaceAll(path.sep, '/')}`;
-  return { kind: 'image', format, agent_artifact_path: agentPath, path: agentPath };
+  return {
+    kind: 'image',
+    format,
+    agent_artifact_path: agentPath,
+    path: agentPath,
+    url_path: artifactUrlPath(workspace, agentPath),
+    url: artifactUrl(workspace, agentPath)
+  };
+}
+
+function artifactUrlPath(workspace: Workspace, agentPath: string) {
+  return `/api/v1/artifacts/${encodeURIComponent(workspace.id)}/${encodeURIComponent(agentPath)}`;
+}
+
+function artifactUrl(workspace: Workspace, agentPath: string) {
+  const base = (process.env.OTA_GATEWAY_PUBLIC_BASE_URL ?? '').replace(/\/$/, '');
+  return base ? `${base}${artifactUrlPath(workspace, agentPath)}` : undefined;
 }
 
 async function delayStep(ms: number, index: number, started: number) {

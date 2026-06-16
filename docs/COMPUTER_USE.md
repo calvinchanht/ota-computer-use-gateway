@@ -66,7 +66,7 @@ Tools:
 
 - `windows_computer_status` — report host/platform and configured Windows authority.
 - `windows_list_monitors` — list monitor bounds, working areas, and primary flags.
-- `windows_screenshot` — capture `primary`, `all`, or a monitor index and save PNG/WebP artifacts.
+- `windows_screenshot` — capture `primary`, `all`, or a monitor index and save PNG/WebP artifacts with `url_path` metadata for provider fetches.
 - `windows_uia_tree` — return a bounded Microsoft UI Automation tree snapshot.
 - `windows_list_windows` — list visible top-level windows with hwnd, title, pid, and bounds.
 - `windows_focus_window` — focus a top-level window by hwnd.
@@ -79,6 +79,8 @@ Tools:
 Authority is adjustable, but capability is not intentionally weakened. A trusted local webchat agent can be granted full screen, mouse, keyboard, clipboard, multi-monitor, window-management, and app-launch rights. Less trusted agents can receive a smaller subset from the same contract.
 
 Coordinates are Windows screen coordinates. For multi-monitor work, call `windows_list_monitors` first and choose either an explicit monitor for screenshots or absolute screen coordinates for input. App launch is first-class because desktop development workflows, such as Roblox Studio work, require starting and controlling non-browser applications.
+
+Screenshot results are artifact-first. They include a full PNG artifact and a WebP preview artifact under `.agent/artifacts/windows-screenshots/`. Each artifact includes `url_path` for the gateway artifact API and includes an absolute `url` when `OTA_GATEWAY_PUBLIC_BASE_URL` is configured.
 
 Mouse coordinates and scroll deltas must be finite numbers. Mouse button values are explicit: `left` or `right`. Window handles and UIA node limits must be valid integers.
 
