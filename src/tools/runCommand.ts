@@ -4,6 +4,7 @@ import { describeManagedProcess, startManagedArgvProcess } from '../core/process
 import { ok } from '../core/result.js';
 import { resolveInside } from '../core/paths.js';
 import { truncateText } from '../core/text.js';
+import { assertNoJobLifecycleCommand, commandTextFromArgv } from './jobLifecycleGuard.js';
 import type { AppConfig } from '../config/schema.js';
 import type { Workspace } from '../core/workspaces.js';
 
@@ -13,6 +14,7 @@ export async function runConfiguredCommand(workspace: Workspace, commandId: stri
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   const command = workspace.commands[commandId];
   if (!command) throw new Error(`unknown command id: ${commandId}`);
+  assertNoJobLifecycleCommand(command);
   const result = await runShellCommand(command, workspace.realRoot);
   const output = truncateText(result.stdout + result.stderr, MAX_OUTPUT_BYTES);
   return ok('configured command finished', { command_id: commandId, exit_code: result.code, output: output.text, truncated: output.truncated });
@@ -20,6 +22,7 @@ export async function runConfiguredCommand(workspace: Workspace, commandId: stri
 
 export async function runShellTool(config: AppConfig, workspace: Workspace, command: string) {
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
+  assertNoJobLifecycleCommand(command);
   const result = await runShellCommand(command, workspace.realRoot, config.security.max_exec_ms);
   const output = truncateText(result.stdout + result.stderr, MAX_OUTPUT_BYTES);
   return ok('command finished', { exit_code: result.code, output: output.text, truncated: output.truncated });
@@ -29,6 +32,7 @@ export async function runArgvTool(config: AppConfig, workspace: Workspace, cmd: 
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   if (!Array.isArray(cmd) || cmd.length === 0) throw new Error('cmd array is required');
   const [command, ...args] = cmd.map(String);
+  assertNoJobLifecycleCommand(commandTextFromArgv([command, ...args]));
   const cwd = await resolveInside(workspace, cwdPath, config);
   const timeout = Math.min(Math.max(1, timeoutMs), config.security.max_exec_ms);
   const result = await runCommand(command, args, cwd.absolute, timeout);
@@ -41,6 +45,7 @@ export async function runArgvTailTool(config: AppConfig, workspace: Workspace, c
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   if (!Array.isArray(cmd) || cmd.length === 0) throw new Error('cmd array is required');
   const [command, ...args] = cmd.map(String);
+  assertNoJobLifecycleCommand(commandTextFromArgv([command, ...args]));
   const cwd = await resolveInside(workspace, cwdPath, config);
   const timeout = Math.min(Math.max(1, timeoutMs), config.security.max_exec_ms);
   const item = startManagedArgvProcess(command, args, cwd.absolute, timeout, cmd.join(' '));
