@@ -295,6 +295,8 @@ components:
         - stat_path
         - tree
         - read_file
+        - read_file_chunk
+        - read_file_lines
         - read_binary_file
         - write_file
         - write_binary_file
