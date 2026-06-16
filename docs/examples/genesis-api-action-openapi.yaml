@@ -1,24 +1,12 @@
 openapi: 3.1.0
 info:
-  title: Webchat Genesis Gateway API Action
-  version: 0.1.0
-  description: 'Private Webchat Genesis JSON API Action proof.
-
-
-    This lane exposes Genesis'' composable API sets for Calvin''s private webchat Genesis: workspace, browser, computer, machine_admin,
-    and estate_admin. Use get_tool_profile and get_workspace_policy first to inspect the live tool/capability policy. Use the threaddex_* proxy tools through this same single genesis-api.unrealize.com Action for Telegram job read/progress/final delivery; do not configure a separate threaddex-* Action.
-
-
-    Hard safety rails still apply: never reveal bearer tokens, PATs, OAuth tokens, cookies, credentials, auth headers, API
-    keys, HAR secrets, raw secret file contents, or private key material. Do not send external messages/email/chat, upload/submit
-    forms, make payments, accept terms, solve CAPTCHA/human verification, change account/security settings, or perform destructive
-    deletes unless Calvin explicitly approves that workflow. Stop on system/security prompts unless explicitly handled.
-
-    '
+  title: Webchat Genesis OTA + Threaddex API Action
+  version: 0.5.0
+  description: 'Genesis single-host Action with strict path boundary: /ota for Gateway capability tools and /threaddex for native Job API delivery. Use /threaddex getJob/deliverJobProgress/deliverJob/requestJobContinuation for Telegram jobs; do not tunnel job lifecycle through gateway_request or run_command.'
 servers:
 - url: https://genesis-api.unrealize.com
 paths:
-  /api/v1/tool:
+  /ota/api/v1/tool:
     post:
       operationId: genesis_gateway_request
       summary: Run one scoped Webchat Genesis report call.
@@ -38,7 +26,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GatewayResponse'
-  /api/v1/runs/{run_id}:
+  /ota/api/v1/batch:
+    post:
+      operationId: genesis_gateway_batch
+      summary: Run multiple scoped Genesis gateway tool calls.
+      description: Runs multiple /ota Gateway tool calls. Do not use this for Threaddex job retrieval or delivery.
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayBatchRequest'
+      responses:
+        '200':
+          description: Gateway batch result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayResponse'
+  /ota/api/v1/runs/{run_id}:
     get:
       operationId: get_genesis_gateway_run
       summary: Retrieve a previous Webchat Genesis run.
@@ -58,12 +66,214 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GatewayResponse'
+  /threaddex/v1/schema:
+    get:
+      operationId: getThreaddexSchema
+      summary: Read Genesis Threaddex Job API schema metadata.
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Job API schema metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /threaddex/v1/job/{job_id}:
+    get:
+      operationId: getJob
+      summary: Read a Genesis Threaddex job by id.
+      description: Use this for Telegram job retrieval. Do not call genesis_gateway_request with any threaddex_* tool.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: job_token
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Public job payload.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /threaddex/v1/job/{job_id}/progress:
+    post:
+      operationId: deliverJobProgress
+      summary: Deliver non-final progress for a Genesis Threaddex job.
+      description: Use this for Telegram job progress. Do not call genesis_gateway_request or run_command for progress delivery.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: job_token
+        in: query
+        required: false
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: true
+              required:
+              - text
+              properties:
+                text:
+                  type: string
+                seq:
+                  oneOf:
+                  - type: integer
+                  - type: string
+                progress_seq:
+                  oneOf:
+                  - type: integer
+                  - type: string
+                protocol_version:
+                  type: string
+                schema_version:
+                  type: string
+      responses:
+        '200':
+          description: Progress delivery result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /threaddex/v1/job/{job_id}/deliver:
+    post:
+      operationId: deliverJob
+      summary: Deliver the final result for a Genesis Threaddex job.
+      description: Use this for the substantive final answer. Do not call genesis_gateway_request or run_command for final delivery.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: job_token
+        in: query
+        required: false
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: true
+              required:
+              - text
+              properties:
+                text:
+                  type: string
+                protocol_version:
+                  type: string
+                schema_version:
+                  type: string
+      responses:
+        '200':
+          description: Final delivery result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /threaddex/v1/job/{job_id}/continuation:
+    post:
+      operationId: requestJobContinuation
+      summary: Request a continuation for a Genesis Threaddex job instead of final delivery.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: job_token
+        in: query
+        required: false
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: true
+      responses:
+        '200':
+          description: Continuation request result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
   schemas:
+    GatewayBatchRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - steps
+      properties:
+        idempotency_key:
+          type: string
+          description: Optional stable retry key.
+        thread:
+          type: object
+          additionalProperties: true
+          description: Explicit thread identity metadata.
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/GatewayStep'
+    GatewayStep:
+      type: object
+      additionalProperties: false
+      required:
+      - tool
+      - arguments
+      properties:
+        tool:
+          $ref: '#/components/schemas/GatewayToolName'
+        arguments:
+          $ref: '#/components/schemas/GatewayArguments'
     GatewayRequest:
       type: object
       additionalProperties: false
@@ -94,9 +304,6 @@ components:
       - genesis_agent_deep_dive
       - genesis_host_deep_dive
       - genesis_safe_diagnostic
-      - threaddex_get_job
-      - threaddex_deliver_job_progress
-      - threaddex_deliver_job
       - workspace_inventory
       - list_dir
       - stat_path

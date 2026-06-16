@@ -21,7 +21,6 @@ import { computerScreenClick, computerWindowClick, cuaDriverBatch, cuaDriverCall
 import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable, queryTableAggregate, readAround, readFileChunk, readFileLinesLarge, sampleFile, searchFile, searchFiles, tableProfile, updateTableRows } from '../tools/largeFiles.js';
 import { runArgvTailTool, runArgvTool } from '../tools/runCommand.js';
 import { processKill, processList, processLog, processStart, processWrite } from '../tools/processes.js';
-import { threaddexDeliverJob, threaddexDeliverJobProgress, threaddexGetJob } from '../tools/threaddex.js';
 import { listArtifacts, recordArtifact } from '../tools/artifacts.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
@@ -38,6 +37,7 @@ const API_DEBUG_REQUEST_CONTEXT_PATH = '/api/v1/debug/request_context';
 const API_RUNS_PREFIX = '/api/v1/runs/';
 const API_ARTIFACTS_PREFIX = '/api/v1/artifacts/';
 const OTA_PATH_PREFIX = '/ota';
+const THREADEX_PATH_PREFIX = '/threaddex';
 const MAX_RUN_RECORDS = 200;
 
 type ApiRunRecord = {
@@ -80,13 +80,14 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
   stripOtaPathPrefix(req);
   if (isHealth(req)) return sendJson(res, 200, healthPayload(config, startedAt));
   if (req.method === 'OPTIONS') return sendCors(res);
-  if (!isMcp(req) && !isApi(req)) return sendJson(res, 404, { error: 'not_found' });
+  if (!isMcp(req) && !isApi(req) && !isThreaddexApi(req)) return sendJson(res, 404, { error: 'not_found' });
   if (!allowedMethod(req.method)) return sendJson(res, 405, { error: 'method_not_allowed' });
   if (!rateLimiter.check(config, req)) return sendJson(res, 429, { error: 'rate_limited' });
   if (requestTooLarge(config, req)) return sendJson(res, 413, { error: 'payload_too_large' });
   const signedArtifact = isApiArtifactPath(req) && hasValidArtifactSignature(req);
   if (!signedArtifact && !isAuthorized(config, req)) return sendAuthError(config, res);
   if (isApiDebugRequestContext(req)) return handleApiDebugRequestContext(req, res);
+  if (isThreaddexApi(req)) return handleThreaddexApi(req, res);
   if (isApiArtifactPath(req)) return handleApiArtifact(config, req, res);
   if (isApiRunPath(req)) return handleApiRun(req, res);
   if (isApiTool(req)) return handleApiTool(config, req, res);
@@ -129,6 +130,10 @@ function isMcp(req: IncomingMessage): boolean {
 function isApi(req: IncomingMessage): boolean {
   const path = req.url?.split('?')[0];
   return path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || path === API_BATCH_PATH || isApiRunPath(req) || isApiArtifactPath(req);
+}
+
+function isThreaddexApi(req: IncomingMessage): boolean {
+  return req.url?.split('?')[0]?.startsWith(`${THREADEX_PATH_PREFIX}/`) ?? false;
 }
 
 function isApiArtifactPath(req: IncomingMessage): boolean {
@@ -198,6 +203,50 @@ function sendCors(res: ServerResponse): void {
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   applyCors(res);
   res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
+}
+
+
+async function handleThreaddexApi(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const rawUrl = new URL(req.url ?? '/', 'http://localhost');
+  const path = rawUrl.pathname;
+  if (path === `${THREADEX_PATH_PREFIX}/v1/schema` && req.method === 'GET') {
+    return sendJson(res, 200, { ok: true, service: 'threaddex-job-api-proxy', protocol_version: 'job-api/1.0.1', schema_version: '1.0.3' });
+  }
+  const match = path.match(/^\/threaddex\/v1\/job\/([^/]+)(?:\/(progress|deliver|continuation))?$/);
+  if (!match) return sendJson(res, 404, { ok: false, error: 'not_found' });
+  const [, encodedJobId, action] = match;
+  if (!encodedJobId) return sendJson(res, 400, { ok: false, error: 'job_id_required' });
+  if (!action && req.method !== 'GET') return sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+  if (action && req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+  const body = req.method === 'POST' ? await readJsonBody(req).catch(() => undefined) : undefined;
+  const localPath = `/v1/job/${encodedJobId}${action ? `/${action}` : ''}`;
+  const base = threaddexJobApiBaseUrl();
+  const headers = await threaddexProxyHeaders(req.method === 'POST');
+  const upstream = await fetch(`${base}${localPath}`, { method: req.method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  const contentType = upstream.headers.get('content-type') ?? 'application/json';
+  const text = await upstream.text();
+  applyCors(res);
+  res.writeHead(upstream.status, { 'content-type': contentType }).end(text);
+}
+
+async function threaddexProxyHeaders(hasBody: boolean): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
+  if (hasBody) headers['content-type'] = 'application/json';
+  const token = await threaddexProxyBearerToken();
+  if (token) headers.authorization = `Bearer ${token}`;
+  return headers;
+}
+
+async function threaddexProxyBearerToken(): Promise<string | undefined> {
+  const direct = process.env.THREADEX_JOB_API_BEARER_TOKEN ?? process.env.THREADEX_VISUAL_FOLLOWUP_BEARER_TOKEN;
+  if (direct) return direct;
+  const file = process.env.THREADEX_JOB_API_BEARER_TOKEN_FILE ?? process.env.THREADEX_VISUAL_FOLLOWUP_BEARER_TOKEN_FILE;
+  if (!file) return undefined;
+  return (await readFile(file, 'utf8')).trim();
+}
+
+function threaddexJobApiBaseUrl(): string {
+  return (process.env.THREADEX_JOB_API_BASE_URL ?? process.env.THREADEX_VISUAL_FOLLOWUP_BASE_URL ?? 'http://127.0.0.1:33986').replace(/\/$/, '');
 }
 
 async function handleApiTool(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -505,9 +554,6 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (!workspace) throw new Error('workspace_id is required');
   if (tool === 'get_workspace_policy') return workspacePolicy(workspace);
   if (!allowedTools(workspace).includes(tool)) throw new Error(toolExposureError(tool));
-  if (tool === 'threaddex_get_job') return threaddexGetJob(workspace, requiredString(args.job_id, 'job_id'));
-  if (tool === 'threaddex_deliver_job_progress') return threaddexDeliverJobProgress(workspace, requiredString(args.job_id, 'job_id'), requiredString(args.text, 'text'), args.seq as string | number | undefined, optionalString(args.protocol_version), optionalString(args.schema_version));
-  if (tool === 'threaddex_deliver_job') return threaddexDeliverJob(workspace, requiredString(args.job_id, 'job_id'), requiredString(args.text, 'text'), optionalString(args.protocol_version), optionalString(args.schema_version));
   if (tool === 'workspace_inventory') return workspaceInventory(config, workspace, optionalNumber(args.max_entries));
   if (tool === 'list_dir') return listDir(config, workspace, String(args.path ?? '.'), optionalNumber(args.max_entries));
   if (tool === 'stat_path') return statPath(config, workspace, requiredString(args.path, 'path'));
