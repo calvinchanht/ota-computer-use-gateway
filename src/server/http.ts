@@ -225,8 +225,43 @@ async function handleThreaddexApi(req: IncomingMessage, res: ServerResponse): Pr
   const upstream = await fetch(`${base}${localPath}`, { method: req.method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   const contentType = upstream.headers.get('content-type') ?? 'application/json';
   const text = await upstream.text();
+  if (!upstream.ok) return sendJson(res, upstream.status, threaddexProxyErrorBody(upstream.status, localPath, text));
   applyCors(res);
   res.writeHead(upstream.status, { 'content-type': contentType }).end(text);
+}
+
+export function threaddexProxyErrorBody(status: number, localPath: string, text: string): Record<string, unknown> {
+  const upstream = parseUpstreamError(text);
+  const error = stringValue(upstream.error) ?? `threaddex_upstream_${status}`;
+  return {
+    ...upstream,
+    ok: false,
+    error,
+    proxy: 'threaddex',
+    upstream_status: status,
+    upstream_path: localPath,
+    hint: threaddexProxyHint(status, error, localPath)
+  };
+}
+
+function parseUpstreamError(text: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : { upstream_body_preview: text.slice(0, 500) };
+  } catch {
+    return { upstream_body_preview: text.slice(0, 500) };
+  }
+}
+
+function threaddexProxyHint(status: number, error: string, localPath: string): string {
+  if (status === 404 && error === 'job_not_found') return `The job id was not found in this agent host. Verify the job belongs to this CustomGPT/action host before retrying: ${localPath}`;
+  if (status === 401) return 'The Threaddex proxy could not authorize to the local Job API. Check hidden Action auth and server-side bearer configuration; do not print tokens.';
+  if (status === 409) return 'The local Job API rejected the current job state or schema. Report this response visibly with secrets redacted.';
+  return 'The Threaddex proxy received a non-2xx local Job API response. Report this response visibly with secrets redacted.';
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
 async function threaddexProxyHeaders(hasBody: boolean): Promise<Record<string, string>> {

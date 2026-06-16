@@ -164,7 +164,7 @@ paths:
     post:
       operationId: deliverJob
       summary: Deliver the final result for a Genesis Threaddex job.
-      description: Use this for the substantive final answer. Do not call genesis_gateway_request or run_command for final delivery.
+      description: Use this for the substantive final answer. Do not call genesis_gateway_request or run_command for final delivery. If this API call fails, report the full visible error details in chat with secrets-type information redacted instead of replying ok.
       security:
       - bearerAuth: []
       parameters:
