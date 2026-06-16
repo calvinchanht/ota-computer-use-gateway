@@ -1,22 +1,16 @@
 openapi: 3.1.0
 info:
-  title: Boba Gateway API Action
-  version: 0.4.0
-  description: |
-    Single Action endpoint only.
-    Transparent Boba Gateway JSON API Action for direct private Custom GPT proof.
-
-    Primary target: webchat agent -> scoped Gateway JSON API -> Boba/Mac Cua Driver proxy.
-
-    Important async rule: if any response includes api.status="running", do not retry the original command. Wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. This is normal for Cua Driver/browser-style operations using quota_saver mode.
+  title: Boba OTA + Threaddex API Action
+  version: 0.5.0
+  description: "Boba single-host Action with strict path boundary: /ota for capability tools and /threaddex for native Job API delivery."
 servers:
   - url: https://boba-api.unrealize.com
 paths:
-  /api/v1/tool:
+  /ota/api/v1/tool:
     post:
       operationId: gateway_request
       summary: Run one scoped Boba gateway tool call.
-      description: Runs one scoped Boba Gateway tool call. Use get_tool_profile first. For writes/mutations use idempotency_key. If api.status=running, poll get_gateway_run with api.run_id; do not retry.
+      description: Runs one scoped OTA capability tool call in workspace_id boba. Do not use this operation for Threaddex job retrieval or delivery; use the native /threaddex operations getJob, deliverJobProgress, deliverJob, and requestJobContinuation instead.
       security:
         - bearerAuth: []
       requestBody:
@@ -32,11 +26,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GatewayResponse'
-  /api/v1/batch:
+  /ota/api/v1/batch:
     post:
       operationId: gateway_batch
       summary: Run multiple scoped Boba gateway tool calls.
-      description: Runs up to 20 scoped Boba tool calls in order. Prefer for read/read-back and Cua sequences. If api.status=running, poll get_gateway_run; do not retry.
+      description: Runs up to 20 scoped Boba OTA capability tool calls in order. Prefer this for multi-step read/write/read-back or checkpoint flows. Do not use batch for Threaddex job retrieval or delivery; use /threaddex operations directly.
       security:
         - bearerAuth: []
       requestBody:
@@ -52,11 +46,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GatewayResponse'
-  /api/v1/runs/{run_id}:
+  /ota/api/v1/runs/{run_id}:
     get:
       operationId: get_gateway_run
       summary: Retrieve a previous Gateway JSON API run.
-      description: Retrieve a stored run result. Use after stream interruption or api.status=running responses.
+      description: Use this after a UI/stream interruption or when a previous response included api.run_id.
       security:
         - bearerAuth: []
       parameters:
@@ -72,6 +66,175 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GatewayResponse'
+  /threaddex/v1/schema:
+    get:
+      operationId: getThreaddexSchema
+      summary: Read Boba Threaddex Job API schema metadata.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Job API schema metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /threaddex/v1/job/{job_id}:
+    get:
+      operationId: getJob
+      summary: Read a Boba Threaddex job by id.
+      description: Use the job_id from a Telegram job prompt. This is the correct operation for job retrieval. Do not call gateway_request with tool=getJob. Pass job_token when supplied by the job prompt.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: job_token
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Public job payload.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /threaddex/v1/job/{job_id}/progress:
+    post:
+      operationId: deliverJobProgress
+      summary: Deliver non-final progress for a Boba Threaddex job.
+      description: Use for Telegram job progress. This is the correct operation for progress delivery. Do not call gateway_request with tool=deliverJobProgress. Pass job_token when supplied by the job prompt.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: job_token
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required: [text]
+              properties:
+                text:
+                  type: string
+                seq:
+                  oneOf:
+                    - type: integer
+                    - type: string
+                progress_seq:
+                  oneOf:
+                    - type: integer
+                    - type: string
+                protocol_version:
+                  type: string
+                schema_version:
+                  type: string
+      responses:
+        '200':
+          description: Progress delivery result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /threaddex/v1/job/{job_id}/deliver:
+    post:
+      operationId: deliverJob
+      summary: Deliver the final result for a Boba Threaddex job.
+      description: Use for the substantive final answer. Pass job_token when supplied by the job prompt.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: job_token
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required: [text]
+              properties:
+                text:
+                  type: string
+                protocol_version:
+                  type: string
+                schema_version:
+                  type: string
+      responses:
+        '200':
+          description: Final delivery result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /threaddex/v1/job/{job_id}/continuation:
+    post:
+      operationId: requestJobContinuation
+      summary: Request a continuation for a Boba Threaddex job instead of final delivery.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: job_token
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: true
+      responses:
+        '200':
+          description: Continuation request result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+
 components:
   securitySchemes:
     bearerAuth:
@@ -124,10 +287,10 @@ components:
     GatewayToolName:
       type: string
       enum:
+        - heartbeat
         - workspace_status
-        - get_tool_profile
         - get_workspace_policy
-        - workspace_inventory
+        - get_tool_profile
         - list_dir
         - stat_path
         - tree
@@ -136,52 +299,19 @@ components:
         - write_file
         - write_binary_file
         - edit_file
-        - delete_file
-        - delete_path
+        - search_files
         - git_status
         - git_diff
-        - get_agent_bootstrap
-        - get_context_snapshot
-        - get_project_context
-        - record_progress
-        - record_decision
-        - record_handoff
-        - update_current_task
-        - checkpoint_thread
-        - memory_write
-        - list_artifacts
-        - record_artifact
-        - list_browser_profiles
+        - run_command
+        - start_process
+        - list_processes
+        - read_process
+        - write_process
+        - stop_process
         - browser_status
         - list_browser_tabs
         - browser_visible_state
-        - browser_manage_tabs
-        - browser_click_and_wait
-        - browser_upload_file_and_verify
-        - browser_cdp_browser_call
-        - browser_cdp_browser_batch
-        - browser_cdp_call
-        - browser_cdp_batch
-        - cua_driver_status
-        - computer_screen_click
-        - computer_window_click
-        - cua_driver_call
-        - cua_driver_batch
-        - infer_file_structure
-        - sample_file
-        - read_file_chunk
-        - read_file_lines
-        - search_file
-        - search_files
-        - read_around
-        - table_profile
-        - query_table
-        - query_table_aggregate
-        - json_profile
-        - query_json
-        - patch_file_lines
-        - update_table_rows
-        - run_command
+        - browser_tail
     GatewayArguments:
       type: object
       additionalProperties: true
@@ -189,37 +319,24 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
       description: |
-        Use this single agent Gateway API Action at the configured {agent}-api.unrealize.com host Action for both gateway tools and Threaddex job delivery. For Threaddex job delivery, call threaddex_get_job, threaddex_deliver_job_progress, and threaddex_deliver_job through this same gateway; do not configure a second threaddex-* Action.
-        Tool-specific arguments. For Threaddex job delivery, call threaddex_get_job, threaddex_deliver_job_progress, and threaddex_deliver_job through this same gateway; do not use generic getJob/deliverJob or a separate threaddex-* Action. Always include workspace_id=boba. Start with get_agent_bootstrap when picking up a
-        new Boba task. Boba has whole-Mac access with workspace root /, but its home/scratch workspace is
-        /Users/calvinc/.openclaw/workspace and startup context is under /Users/calvinc/.openclaw/workspace/.agent.
-        Roblox Studio is /Applications/RobloxStudio.app; prefer targeted paths such as Applications/RobloxStudio.app
-        and Users/calvinc/.openclaw/workspace instead of broad root scans. For screenshots, cua_driver_call
-        method=screenshot returns a transient artifact path under .agent/artifacts/screenshots; do not expect inline
-        PNG/base64. Screenshot calls clean managed cua-screenshot-*.png artifacts older than 86400 seconds by default
-        and keep the latest 100; process screenshots promptly or copy important images to a task/project folder.
-        Optional screenshot params include cleanup_screenshots_older_than_seconds and keep_latest_screenshots. For
-        browser work, prefer high-level visible-state and tab-hygiene helpers before raw CDP: browser_visible_state
-        returns human-visible text/buttons/forms/required-missing/file upload/error state; browser_manage_tabs
-        lists/focuses/closes real page tabs; browser_click_and_wait clicks by selector/text and waits for visible
-        text, selector, URL substring, or page stability; browser_upload_file_and_verify sets a workspace-relative
-        file input and confirms expected filename/text appears in human-visible page text. For browser tab listing,
-        list_browser_tabs defaults to real page targets only; pass type=all and
-        include_iframes/include_workers/include_browser_ui only for raw CDP cleanup/debugging. For Mac computer-use prefer computer_screen_click for global screenshot coordinates and computer_window_click after list_windows identifies a pid/window_id. For raw Cua Driver use
-        cua_driver_status, cua_driver_call with method/params, or cua_driver_batch with calls including raw Cua method
-        steps or delay_ms steps. For Boba/Threaddex job delivery, use threaddex_get_job, threaddex_deliver_job_progress, and threaddex_deliver_job through this same gateway instead of generic deliverJob against boba-api. For async quota_saver behavior, initial_wait_ms may be set; if api.status=running,
-        poll get_gateway_run instead of retrying the original side-effectful call. For file tools include path; for
-        context tools include title/body as needed; for browser/CDP include method/params/target_id/calls; for large-
-        file tools include query, where, select, group_by, metrics, offsets, and dry_run fields as needed.
+        Tool-specific arguments. For browser work, prefer high-level visible-state and tab-hygiene helpers before raw
+        CDP: browser_visible_state returns human-visible text/buttons/forms/required-missing/file upload/error state;
+        browser_manage_tabs lists/focuses/closes real page tabs; browser_click_and_wait clicks by selector/text and
+        waits for visible text, selector, URL substring, or page stability; browser_upload_file_and_verify sets a
+        workspace-relative file input and confirms expected filename/text appears in human-visible page text. For
+        browser tab listing, list_browser_tabs defaults to real page targets only; pass type=all and
+        include_iframes/include_workers/include_browser_ui only for raw CDP cleanup/debugging. For file tools include
+        path; for browser/CDP include method/params/target_id/calls; for large-file tools include query, where,
+        select, group_by, metrics, offsets, and dry_run fields as needed.
     WorkspaceStatusArguments:
       type: object
       additionalProperties: false
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
     ListDirArguments:
       type: object
       additionalProperties: false
@@ -227,7 +344,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
         path:
           type: string
         max_entries:
@@ -241,7 +358,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
         path:
           type: string
         start_line:
@@ -258,7 +375,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
         path:
           type: string
         content:
@@ -274,7 +391,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
     GitDiffArguments:
       type: object
       additionalProperties: false
@@ -282,7 +399,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
         max_bytes:
           type: integer
           minimum: 1
@@ -294,7 +411,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
         title:
           type: string
           maxLength: 120
@@ -314,7 +431,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
         type:
           type: string
           enum: [note, decision, progress, handoff]
@@ -338,7 +455,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
     BrowserStatusArguments:
       type: object
       additionalProperties: false
@@ -346,7 +463,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
         profile_label:
           type: string
     ListBrowserTabsArguments:
@@ -356,7 +473,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
         profile_label:
           type: string
         include_urls:
@@ -370,7 +487,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
         profile_label:
           type: string
         method:
@@ -387,7 +504,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
         profile_label:
           type: string
         calls:
@@ -403,7 +520,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
         profile_label:
           type: string
         target_id:
@@ -422,7 +539,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
         profile_label:
           type: string
         target_id:
@@ -467,7 +584,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [boba]
+          enum: [mickey]
         path:
           type: string
         root:
