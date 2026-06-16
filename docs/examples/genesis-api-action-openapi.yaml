@@ -309,6 +309,8 @@ components:
       - stat_path
       - tree
       - read_file
+      - read_file_chunk
+      - read_file_lines
       - read_binary_file
       - search_files
       - git_status

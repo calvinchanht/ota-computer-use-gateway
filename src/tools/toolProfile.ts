@@ -26,7 +26,7 @@ function canonicalTools(): string[] {
     'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
     'windows_type_text', 'windows_key', 'windows_hotkey',
     'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch',
-    'workspace_inventory', 'read_file', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
+    'workspace_inventory', 'read_file', 'read_file_chunk', 'read_file_lines', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
     'run_command', 'run_configured_command', 'list_dir', 'stat_path', 'tree', 'search_files',
     'git_status', 'git_diff', 'git_push_current_branch', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',
     'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'memory_search', 'memory_write',
@@ -42,7 +42,7 @@ function apiCapabilitySets() {
     sets: {
       workspace: {
         purpose: 'Normal agent workspace operations.',
-        tools: ['workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'write_file', 'edit_file', 'apply_patch', 'run_command', 'start_process', 'get_agent_bootstrap', 'get_project_context', 'list_skills', 'record_progress', 'checkpoint_thread']
+        tools: ['workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'read_file_chunk', 'read_file_lines', 'write_file', 'edit_file', 'apply_patch', 'run_command', 'start_process', 'get_agent_bootstrap', 'get_project_context', 'list_skills', 'record_progress', 'checkpoint_thread']
       },
       browser: {
         purpose: 'Web/browser automation using preassigned profiles and CDP ports.',
