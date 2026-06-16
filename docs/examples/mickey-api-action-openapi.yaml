@@ -10,7 +10,7 @@ paths:
     post:
       operationId: gateway_request
       summary: Run one scoped Mickey gateway tool call.
-      description: Runs one scoped tool call in workspace_id mickey. Use unique idempotency_key values for writes and checkpoints.
+      description: Runs one scoped OTA capability tool call in workspace_id mickey. Do not use this operation for Threaddex job retrieval or delivery; use the native /threaddex operations getJob, deliverJobProgress, deliverJob, and requestJobContinuation instead.
       security:
         - bearerAuth: []
       requestBody:
@@ -30,7 +30,7 @@ paths:
     post:
       operationId: gateway_batch
       summary: Run multiple scoped Mickey gateway tool calls.
-      description: Runs up to 20 scoped Mickey tool calls in order. Prefer this for multi-step read/write/read-back or checkpoint flows.
+      description: Runs up to 20 scoped Mickey OTA capability tool calls in order. Prefer this for multi-step read/write/read-back or checkpoint flows. Do not use batch for Threaddex job retrieval or delivery; use /threaddex operations directly.
       security:
         - bearerAuth: []
       requestBody:
@@ -85,7 +85,7 @@ paths:
     get:
       operationId: getJob
       summary: Read a Mickey Threaddex job by id.
-      description: Use the job_id from a Telegram job prompt. Pass job_token when supplied by the job prompt.
+      description: Use the job_id from a Telegram job prompt. This is the correct operation for job retrieval. Do not call gateway_request with tool=getJob. Pass job_token when supplied by the job prompt.
       security:
         - bearerAuth: []
       parameters:
@@ -112,7 +112,7 @@ paths:
     post:
       operationId: deliverJobProgress
       summary: Deliver non-final progress for a Mickey Threaddex job.
-      description: Use for Telegram job progress. Pass job_token when supplied by the job prompt.
+      description: Use for Telegram job progress. This is the correct operation for progress delivery. Do not call gateway_request with tool=deliverJobProgress. Pass job_token when supplied by the job prompt.
       security:
         - bearerAuth: []
       parameters:
