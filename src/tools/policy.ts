@@ -75,7 +75,8 @@ function windowsComputerTools(workspace: Workspace) {
   if (config?.allow_uia_tree) tools.push('windows_uia_tree');
   if (config?.allow_window_management) tools.push('windows_list_windows', 'windows_focus_window');
   if (config?.allow_app_launch) tools.push('windows_launch_app');
-  if (config?.allow_mouse) tools.push('windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll');
+  if (config?.allow_mouse) tools.push('windows_mouse_move', 'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll');
+  if (config?.allow_mouse && config?.allow_window_management) tools.push('windows_window_mouse_move', 'windows_window_click', 'windows_window_double_click', 'windows_window_drag', 'windows_window_scroll');
   if (config?.allow_keyboard) tools.push('windows_type_text', 'windows_key', 'windows_hotkey');
   if (config?.allow_clipboard) tools.push('windows_clipboard_get', 'windows_clipboard_set');
   if (config?.allow_mouse || config?.allow_keyboard) tools.push('windows_batch');
