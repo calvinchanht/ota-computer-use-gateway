@@ -87,6 +87,10 @@ describe('HTTP API request normalizer', () => {
     expect(event?.sample.value_hashes).toHaveProperty('operation');
     expect(JSON.stringify(event)).not.toContain('secret.csv');
     expect(JSON.stringify(event)).not.toContain('secret-column');
+
+    const serverEvent = otaMisuseEventForToolError('browser_cdp_call', { workspace_id: 'genesis', params: { raw: 'secret-server' } }, 'tool is not exposed by this server: browser_cdp_call');
+    expect(serverEvent?.misuse).toMatchObject({ error_code: 'tool_not_exposed_by_server', bad_field: 'operation', expected_shape_id: 'server.exposed_tools.tool_exposure.v1', hint_id: 'add_tool_to_server_exposed_tools_or_remove_tool' });
+    expect(JSON.stringify(serverEvent)).not.toContain('secret-server');
   });
 
   it('builds redacted OTA misuse events for browser and CUA argument shapes', () => {

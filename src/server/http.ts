@@ -997,11 +997,12 @@ function toolMisuseDetails(tool: string, args: Record<string, unknown>, summary:
 }
 
 function toolExposureMisuse(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
-  if (!summary.startsWith('tool is not exposed by this workspace api_sets profile:')) return null;
+  if (!summary.startsWith('tool is not exposed by this workspace api_sets profile:') && !summary.startsWith('tool is not exposed by this server:')) return null;
+  const serverScoped = summary.startsWith('tool is not exposed by this server:');
   return {
-    workspace_id: stringField(args.workspace_id), operation: tool, error_code: 'tool_not_exposed_by_profile',
+    workspace_id: stringField(args.workspace_id), operation: tool, error_code: serverScoped ? 'tool_not_exposed_by_server' : 'tool_not_exposed_by_profile',
     received_argument_keys: Object.keys(args).sort(), bad_field: 'operation', bad_field_type: 'string',
-    expected_shape_id: 'workspace.api_sets.tool_exposure.v1', hint_id: 'enable_matching_api_set_or_remove_tool',
+    expected_shape_id: serverScoped ? 'server.exposed_tools.tool_exposure.v1' : 'workspace.api_sets.tool_exposure.v1', hint_id: serverScoped ? 'add_tool_to_server_exposed_tools_or_remove_tool' : 'enable_matching_api_set_or_remove_tool',
     value_hashes: hashField('operation', tool), value_types: { operation: 'string' }
   };
 }
