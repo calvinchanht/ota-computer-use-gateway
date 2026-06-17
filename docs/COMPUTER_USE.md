@@ -73,14 +73,17 @@ Tools:
 - `windows_list_windows` — list visible top-level windows with hwnd, title, pid, and bounds.
 - `windows_focus_window` — focus a top-level window by hwnd.
 - `windows_launch_app` — launch a local executable or application path with optional args/cwd.
-- `windows_click`, `windows_double_click`, `windows_drag`, `windows_scroll` — mouse control.
+- `windows_mouse_move`, `windows_click`, `windows_double_click`, `windows_drag`, `windows_scroll` — screen-coordinate mouse control.
+- `windows_window_mouse_move`, `windows_window_click`, `windows_window_double_click`, `windows_window_drag`, `windows_window_scroll` — window-local mouse control for a known top-level hwnd.
 - `windows_type_text`, `windows_key`, `windows_hotkey` — keyboard control.
 - `windows_clipboard_get`, `windows_clipboard_set` — clipboard text.
 - `windows_batch` — sequence common Windows input actions plus delay steps.
 
 Authority is adjustable, but capability is not intentionally weakened. A trusted local webchat agent can be granted full screen, mouse, keyboard, clipboard, multi-monitor, window-management, and app-launch rights. Less trusted agents can receive a smaller subset from the same contract.
 
-Coordinates are Windows virtual-screen coordinates. For multi-monitor work, call `windows_list_monitors` first and choose either an explicit monitor for screenshots or absolute screen coordinates for input; secondary monitors may have negative `x`/`y` origins. Windows currently exposes screen-coordinate mouse APIs plus window discovery/focus, not separate window-local mouse APIs.
+Screen mouse coordinates are Windows virtual-screen coordinates. For multi-monitor work, call `windows_list_monitors` first and choose either an explicit monitor for screenshots or absolute screen coordinates for input; secondary monitors may have negative `x`/`y` origins.
+
+Window mouse coordinates require a current `hwnd` from `windows_list_windows`. Use `coordinate_space: "client"` for app-content coordinates, or `coordinate_space: "window"` for full window-frame coordinates. Window mouse tools convert those coordinates with native Win32 APIs and then send the same underlying screen mouse input. They default to focusing the target window except `windows_window_mouse_move`, whose default is hover-only `focus: false`.
 
 Screenshot results are artifact-first. They include a full PNG artifact and a WebP preview artifact under `.agent/artifacts/windows-screenshots/`. Each artifact includes `url_path`, and includes `url`/`readable_url` when `OTA_GATEWAY_PUBLIC_BASE_URL` is configured, matching the web-readable image URL pattern used by webchat visual follow-up flows.
 

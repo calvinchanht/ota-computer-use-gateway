@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { windowsBatch, windowsClick, windowsClipboardGet, windowsFocusWindow, windowsLaunchApp, windowsScreenshot, windowsTypeText, windowsUiaTree } from '../src/tools/windowsComputer.js';
+import { windowsBatch, windowsClick, windowsClipboardGet, windowsFocusWindow, windowsLaunchApp, windowsScreenshot, windowsTypeText, windowsUiaTree, windowsWindowClick } from '../src/tools/windowsComputer.js';
 
 describe('windows computer-use capability gates', () => {
   it('rejects screenshots when screenshot authority is disabled', async () => {
@@ -9,6 +9,11 @@ describe('windows computer-use capability gates', () => {
 
   it('rejects mouse actions when mouse authority is disabled', async () => {
     await expect(windowsClick(fixtureWorkspace({ allow_mouse: false }), 10, 10)).rejects.toThrow('allow_mouse');
+    await expect(windowsWindowClick(fixtureWorkspace({ allow_mouse: false }), 1, 10, 10)).rejects.toThrow('allow_mouse');
+  });
+
+  it('rejects window mouse actions when window authority is disabled', async () => {
+    await expect(windowsWindowClick(fixtureWorkspace({ allow_window_management: false }), 1, 10, 10)).rejects.toThrow('allow_window_management');
   });
 
   it('rejects keyboard actions when keyboard authority is disabled', async () => {
@@ -22,6 +27,7 @@ describe('windows computer-use capability gates', () => {
   it('rejects malformed mouse arguments before host execution', async () => {
     await expect(windowsClick(fixtureWorkspace(), Number.NaN, 10)).rejects.toThrow('x must be a finite number');
     await expect(windowsClick(fixtureWorkspace(), 10, 10, 'middle')).rejects.toThrow('button must be left or right');
+    await expect(windowsWindowClick(fixtureWorkspace(), 1, 10, 10, 'left', 'screen')).rejects.toThrow('coordinate_space must be client or window');
   });
 
   it('rejects malformed window and UIA arguments before host execution', async () => {

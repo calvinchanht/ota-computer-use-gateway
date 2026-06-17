@@ -61,6 +61,7 @@ async function exerciseLaunch(port, sessionId) {
 async function exerciseDeniedCapabilities(port, sessionId) {
   await expectToolError(port, sessionId, 'windows_screenshot', { workspace_id: 'windows-smoke' }, 'allow_screenshot');
   await expectToolError(port, sessionId, 'windows_click', { workspace_id: 'windows-smoke', x: 1, y: 1 }, 'allow_mouse');
+  await expectToolError(port, sessionId, 'windows_window_click', { workspace_id: 'windows-smoke', hwnd: 1, x: 1, y: 1 }, 'allow_mouse');
   await expectToolError(port, sessionId, 'windows_type_text', { workspace_id: 'windows-smoke', text: 'blocked' }, 'allow_keyboard');
   await expectToolError(port, sessionId, 'windows_clipboard_get', { workspace_id: 'windows-smoke' }, 'allow_clipboard');
   await expectBatchStopped(port, sessionId);
