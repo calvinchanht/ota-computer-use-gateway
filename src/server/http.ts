@@ -595,9 +595,9 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'tree') return treeTool(config, workspace, optionalString(args.path) ?? '.', optionalNumber(args.max_entries));
   if (tool === 'read_file') return readFileTool(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.start_line), optionalNumber(args.max_lines));
   if (tool === 'read_binary_file') return readBinaryFileTool(config, workspace, requiredString(args.path, 'path'));
-  if (tool === 'write_file') return writeFileTool(config, workspace, requiredString(args.path, 'path'), requiredString(args.content, 'content'), Boolean(args.overwrite));
+  if (tool === 'write_file') return writeFileTool(config, workspace, requiredString(args.path, 'path'), requiredTextArg(args.content, 'content', true), Boolean(args.overwrite));
   if (tool === 'write_binary_file') return writeBinaryFileTool(config, workspace, requiredString(args.path, 'path'), requiredString(args.base64, 'base64'), Boolean(args.overwrite));
-  if (tool === 'edit_file') return editFileTool(config, workspace, requiredString(args.path, 'path'), requiredString(args.old_text, 'old_text'), requiredString(args.new_text, 'new_text'));
+  if (tool === 'edit_file') return editFileTool(config, workspace, requiredString(args.path, 'path'), requiredTextArg(args.old_text, 'old_text'), requiredTextArg(args.new_text, 'new_text', true));
   if (tool === 'delete_file') return deleteFileTool(config, workspace, requiredString(args.path, 'path'));
   if (tool === 'delete_path') return deletePathTool(config, workspace, requiredString(args.path, 'path'), Boolean(args.recursive));
   if (tool === 'git_status') return gitStatus(workspace);
@@ -673,7 +673,9 @@ function toolExposureError(tool: string): string {
   return `tool is not exposed by this workspace api_sets profile: ${tool}`;
 }
 
-function parseApiToolRequestSafe(body: unknown): { ok: true; value: { tool: string; arguments?: Record<string, unknown> } } | { ok: false; status: number; error: string } {
+type ApiToolRequest = { tool: string; arguments?: Record<string, unknown> };
+
+function parseApiToolRequestSafe(body: unknown): { ok: true; value: ApiToolRequest } | { ok: false; status: number; error: string } {
   try {
     return { ok: true, value: parseApiToolRequest(body) };
   } catch (error) {
@@ -681,7 +683,7 @@ function parseApiToolRequestSafe(body: unknown): { ok: true; value: { tool: stri
   }
 }
 
-function parseApiBatchRequestSafe(body: unknown): { ok: true; value: { steps: Array<{ tool: string; arguments?: Record<string, unknown> }> } } | { ok: false; status: number; error: string } {
+function parseApiBatchRequestSafe(body: unknown): { ok: true; value: { steps: ApiToolRequest[] } } | { ok: false; status: number; error: string } {
   try {
     return { ok: true, value: parseApiBatchRequest(body) };
   } catch (error) {
@@ -689,17 +691,58 @@ function parseApiBatchRequestSafe(body: unknown): { ok: true; value: { steps: Ar
   }
 }
 
-function parseApiToolRequest(body: unknown): { tool: string; arguments?: Record<string, unknown> } {
-  if (!body || typeof body !== 'object') throw new Error('JSON object body is required');
+export function parseApiToolRequest(body: unknown): ApiToolRequest {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('JSON object body is required');
   const source = body as Record<string, unknown>;
-  return { tool: requiredString(source.tool, 'tool'), arguments: recordArg(source.arguments, 'arguments') };
+  const topOperation = requestOperation(source.operation, source.tool);
+  const args = requestArguments(source);
+  const nestedOperation = !topOperation && args ? requestOperation(args.operation, args.tool) : undefined;
+  const operation = topOperation ?? nestedOperation;
+  if (!operation) throw new Error(expectedRequestError(source, args));
+  const normalizedArgs = nestedOperation && args ? omitOperationKeys(args) : args;
+  return { tool: operation, arguments: normalizedArgs };
 }
 
-function parseApiBatchRequest(body: unknown): { steps: Array<{ tool: string; arguments?: Record<string, unknown> }> } {
-  if (!body || typeof body !== 'object') throw new Error('JSON object body is required');
+function parseApiBatchRequest(body: unknown): { steps: ApiToolRequest[] } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('JSON object body is required');
   const steps = (body as Record<string, unknown>).steps;
   if (!Array.isArray(steps)) throw new Error('steps array is required');
   return { steps: steps.map((step) => parseApiToolRequest(step)) };
+}
+
+function requestOperation(operation: unknown, tool: unknown): string | undefined {
+  const op = optionalOperationString(operation, 'operation');
+  const legacy = optionalOperationString(tool, 'tool');
+  if (op && legacy && op !== legacy) throw new Error(`operation/tool conflict: operation=${op}, tool=${legacy}`);
+  return op ?? legacy;
+}
+
+function optionalOperationString(value: unknown, name: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !value) throw new Error(`${name} must be a non-empty string`);
+  return value;
+}
+
+function requestArguments(source: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (source.arguments !== undefined) return recordArg(source.arguments, 'arguments');
+  const args = omitEnvelopeKeys(source);
+  return Object.keys(args).length > 0 ? args : undefined;
+}
+
+function omitEnvelopeKeys(source: Record<string, unknown>): Record<string, unknown> {
+  const { operation: _operation, tool: _tool, idempotency_key: _idempotency, thread: _thread, ...args } = source;
+  return args;
+}
+
+function omitOperationKeys(source: Record<string, unknown>): Record<string, unknown> {
+  const { operation: _operation, tool: _tool, ...args } = source;
+  return args;
+}
+
+function expectedRequestError(source: Record<string, unknown>, args?: Record<string, unknown>): string {
+  const topKeys = Object.keys(source).join(', ') || '(none)';
+  const argKeys = args ? Object.keys(args).join(', ') || '(none)' : '(missing)';
+  return `Missing required operation. Expected { "operation": "genesis_bootstrap", "arguments": { "workspace_id": "genesis" } }. Received top-level keys: [${topKeys}], argument keys: [${argKeys}]. Legacy alias "tool" is still accepted.`;
 }
 
 function recordArg(value: unknown, name: string): Record<string, unknown> | undefined {
@@ -711,6 +754,18 @@ function recordArg(value: unknown, name: string): Record<string, unknown> | unde
 function requiredString(value: unknown, name: string): string {
   if (typeof value !== 'string' || !value) throw new Error(`${name} is required`);
   return value;
+}
+
+export function requiredTextArg(value: unknown, name: string, allowEmpty = false): string {
+  if (typeof value === 'string' && (allowEmpty || value.length > 0)) return value;
+  throw new Error(textArgError(value, name, allowEmpty));
+}
+
+function textArgError(value: unknown, name: string, allowEmpty: boolean): string {
+  const type = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value;
+  const empty = value === '' && !allowEmpty ? ' Empty string is not allowed for this field.' : '';
+  const hint = ' If this is structured JSON, serialize it once into a string before sending. Use write_binary_file with base64 for escaping-sensitive exact bytes.';
+  return `${name} must be ${allowEmpty ? 'a string' : 'a non-empty string'}; received ${type}.${empty}${hint}`;
 }
 
 function requiredNumber(value: unknown, name: string): number {
