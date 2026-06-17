@@ -96,6 +96,29 @@ describe('HTTP API request normalizer', () => {
     expect(JSON.stringify(event)).not.toContain('private');
   });
 
+
+  it('builds redacted OTA misuse events for run_command argv variants', () => {
+    const missingEvent = otaMisuseEventForToolError('run_command', { workspace_id: 'genesis' }, 'cmd_array must be an array');
+    expect(missingEvent?.misuse).toMatchObject({ error_code: 'run_command_cmd_array_shape', bad_field: 'cmd_array', bad_field_type: 'undefined', expected_shape_id: 'run_command.argv.v1', hint_id: 'use_cmd_array' });
+
+    const itemEvent = otaMisuseEventForToolError('run_command', { workspace_id: 'genesis', cmd_array: ['echo', { raw: 'secret-cmd' }] }, 'array item is required');
+    expect(itemEvent?.misuse).toMatchObject({ error_code: 'run_command_cmd_array_shape', bad_field: 'cmd_array', bad_field_type: 'array', expected_shape_id: 'run_command.argv_items_string.v1', hint_id: 'use_cmd_array_of_strings' });
+    expect(JSON.stringify(itemEvent)).not.toContain('secret-cmd');
+
+    const conflictEvent = otaMisuseEventForToolError('run_command', { workspace_id: 'genesis', cmd_array: ['echo', 'safe'], cmd: ['echo', 'different'] }, 'cmd_array/cmd conflict: prefer cmd_array and remove legacy cmd, or send identical arrays for compatibility.');
+    expect(conflictEvent?.misuse).toMatchObject({ error_code: 'run_command_cmd_array_shape', bad_field: 'cmd_array', expected_shape_id: 'run_command.single_argv_field.v1', hint_id: 'remove_legacy_cmd_or_match_cmd_array' });
+  });
+
+  it('builds redacted OTA misuse events for process operation argument shapes', () => {
+    const startEvent = otaMisuseEventForToolError('start_process', { workspace_id: 'genesis', command: { raw: 'secret-command' } }, 'command is required');
+    expect(startEvent?.misuse).toMatchObject({ error_code: 'start_process_command_shape', bad_field: 'command', bad_field_type: 'object', expected_shape_id: 'start_process.command_string.v1', hint_id: 'use_command_string' });
+    expect(JSON.stringify(startEvent)).not.toContain('secret-command');
+
+    const writeEvent = otaMisuseEventForToolError('write_process', { workspace_id: 'genesis', process_id: 123, input: { raw: 'secret-input' } }, 'process_id is required');
+    expect(writeEvent?.misuse).toMatchObject({ error_code: 'write_process_process_id_shape', bad_field: 'process_id', bad_field_type: 'number', expected_shape_id: 'process.process_id_string.v1', hint_id: 'use_process_id_string' });
+    expect(JSON.stringify(writeEvent)).not.toContain('secret-input');
+  });
+
   it('builds redacted OTA misuse events for run_command string cmd errors', () => {
     const event = otaMisuseEventForToolError('run_command', { workspace_id: 'genesis', cmd: 'git status' }, 'cmd must be an array. Use cmd_array.');
     expect(event?.misuse).toMatchObject({ error_code: 'invalid_run_command_shape', bad_field: 'cmd', bad_field_type: 'string', expected_shape_id: 'run_command.argv.v1', hint_id: 'use_cmd_array' });

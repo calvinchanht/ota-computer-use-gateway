@@ -982,11 +982,8 @@ export function otaMisuseEventForToolError(tool: string, args: Record<string, un
 }
 
 function toolMisuseDetails(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
-  if (tool === 'run_command' && summary.includes('cmd must be an array')) return {
-    workspace_id: stringField(args.workspace_id), operation: tool, error_code: 'invalid_run_command_shape',
-    received_argument_keys: Object.keys(args).sort(), bad_field: 'cmd', bad_field_type: valueType(args.cmd),
-    expected_shape_id: 'run_command.argv.v1', hint_id: 'use_cmd_array', value_hashes: hashField('arguments.cmd', args.cmd), value_types: { 'arguments.cmd': valueType(args.cmd) }
-  };
+  const runCommand = runCommandShapeMisuse(tool, args, summary);
+  if (runCommand) return runCommand;
   const common = commonToolShapeMisuse(tool, args, summary);
   if (common) return common;
   if (isJobLifecycleMisuse(tool, summary)) return {
@@ -994,6 +991,18 @@ function toolMisuseDetails(tool: string, args: Record<string, unknown>, summary:
     received_argument_keys: Object.keys(args).sort(), bad_field: 'operation', bad_field_type: 'string',
     expected_shape_id: 'threaddex.native_job_lifecycle.v1', hint_id: 'use_native_threaddex_job_api_actions'
   };
+  return null;
+}
+
+function runCommandShapeMisuse(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
+  if (tool !== 'run_command') return null;
+  if (summary.includes('cmd must be an array')) return {
+    ...fieldMisuse(tool, args, 'cmd', 'run_command.argv.v1', 'use_cmd_array'),
+    error_code: 'invalid_run_command_shape'
+  };
+  if (summary === 'cmd_array must be an array') return fieldMisuse(tool, args, 'cmd_array', 'run_command.argv.v1', 'use_cmd_array');
+  if (summary === 'array item is required') return fieldMisuse(tool, args, 'cmd_array', 'run_command.argv_items_string.v1', 'use_cmd_array_of_strings');
+  if (summary.startsWith('cmd_array/cmd conflict')) return fieldMisuse(tool, args, 'cmd_array', 'run_command.single_argv_field.v1', 'remove_legacy_cmd_or_match_cmd_array');
   return null;
 }
 
@@ -1016,6 +1025,9 @@ function commonToolShapeSpecs(tool: string): CommonToolShapeSpec[] {
   if (targetIdTools().has(tool)) specs.push({ field: 'target_id', expected_shape_id: 'browser.target_id_string.v1', hint_id: 'use_target_id_string' });
   if (methodStringTools().has(tool)) specs.push({ field: 'method', expected_shape_id: `${tool}.method_string.v1`, hint_id: 'use_method_string' });
   if (paramsObjectTools().has(tool)) specs.push({ field: 'params', expected_shape_id: `${tool}.params_object.v1`, hint_id: 'use_params_object' });
+  if (commandStringTools().has(tool)) specs.push({ field: 'command', expected_shape_id: `${tool}.command_string.v1`, hint_id: 'use_command_string' });
+  if (processIdStringTools().has(tool)) specs.push({ field: 'process_id', expected_shape_id: 'process.process_id_string.v1', hint_id: 'use_process_id_string' });
+  if (tool === 'write_process') specs.push({ field: 'input', expected_shape_id: 'write_process.input_string.v1', hint_id: 'use_input_string' });
   if (tool === 'write_file') specs.push({ field: 'content', expected_shape_id: 'write_file.content_string.v1', hint_id: 'use_content_string' });
   if (tool === 'write_binary_file') specs.push({ field: 'base64', expected_shape_id: 'write_binary_file.base64_string.v1', hint_id: 'use_base64_string' });
   if (tool === 'edit_file') specs.push({ field: 'old_text', expected_shape_id: 'edit_file.old_text_string.v1', hint_id: 'use_old_text_string' }, { field: 'new_text', expected_shape_id: 'edit_file.new_text_string.v1', hint_id: 'use_new_text_string' });
@@ -1040,6 +1052,14 @@ function methodStringTools(): Set<string> {
 
 function paramsObjectTools(): Set<string> {
   return new Set(['browser_cdp_browser_call', 'browser_cdp_call', 'cua_driver_call']);
+}
+
+function commandStringTools(): Set<string> {
+  return new Set(['start_process']);
+}
+
+function processIdStringTools(): Set<string> {
+  return new Set(['read_process', 'write_process', 'stop_process']);
 }
 
 function batchToolShapeMisuse(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
