@@ -982,6 +982,8 @@ export function otaMisuseEventForToolError(tool: string, args: Record<string, un
 }
 
 function toolMisuseDetails(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
+  const exposure = toolExposureMisuse(tool, args, summary);
+  if (exposure) return exposure;
   const runCommand = runCommandShapeMisuse(tool, args, summary);
   if (runCommand) return runCommand;
   const common = commonToolShapeMisuse(tool, args, summary);
@@ -992,6 +994,16 @@ function toolMisuseDetails(tool: string, args: Record<string, unknown>, summary:
     expected_shape_id: 'threaddex.native_job_lifecycle.v1', hint_id: 'use_native_threaddex_job_api_actions'
   };
   return null;
+}
+
+function toolExposureMisuse(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
+  if (!summary.startsWith('tool is not exposed by this workspace api_sets profile:')) return null;
+  return {
+    workspace_id: stringField(args.workspace_id), operation: tool, error_code: 'tool_not_exposed_by_profile',
+    received_argument_keys: Object.keys(args).sort(), bad_field: 'operation', bad_field_type: 'string',
+    expected_shape_id: 'workspace.api_sets.tool_exposure.v1', hint_id: 'enable_matching_api_set_or_remove_tool',
+    value_hashes: hashField('operation', tool), value_types: { operation: 'string' }
+  };
 }
 
 function runCommandShapeMisuse(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {

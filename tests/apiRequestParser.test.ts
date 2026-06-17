@@ -80,6 +80,15 @@ describe('HTTP API request normalizer', () => {
   });
 
 
+
+  it('builds redacted OTA misuse events for tools blocked by workspace exposure profile', () => {
+    const event = otaMisuseEventForToolError('query_table', { workspace_id: 'genesis', path: 'secret.csv', select: ['secret-column'] }, 'tool is not exposed by this workspace api_sets profile: query_table');
+    expect(event?.misuse).toMatchObject({ error_code: 'tool_not_exposed_by_profile', bad_field: 'operation', bad_field_type: 'string', expected_shape_id: 'workspace.api_sets.tool_exposure.v1', hint_id: 'enable_matching_api_set_or_remove_tool' });
+    expect(event?.sample.value_hashes).toHaveProperty('operation');
+    expect(JSON.stringify(event)).not.toContain('secret.csv');
+    expect(JSON.stringify(event)).not.toContain('secret-column');
+  });
+
   it('builds redacted OTA misuse events for browser and CUA argument shapes', () => {
     const cdpParamsEvent = otaMisuseEventForToolError('browser_cdp_call', { workspace_id: 'genesis', target_id: 'tab-1', method: 'Runtime.evaluate', params: 'alert-secret' }, 'params must be an object');
     expect(cdpParamsEvent?.misuse).toMatchObject({ error_code: 'browser_cdp_call_params_shape', bad_field: 'params', bad_field_type: 'string', expected_shape_id: 'browser_cdp_call.params_object.v1', hint_id: 'use_params_object' });
