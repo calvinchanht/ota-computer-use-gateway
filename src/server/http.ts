@@ -1,7 +1,7 @@
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
-import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { appendFile, mkdir, readFile, stat } from 'node:fs/promises';
+import path, { dirname } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { AppConfig } from '../config/schema.js';
 import { buildWorkspaces, getWorkspace, type Workspace } from '../core/workspaces.js';
@@ -293,7 +293,7 @@ async function handleApiTool(config: AppConfig, req: IncomingMessage, res: Serve
   const existing = existingRun(idempotencyKey);
   if (existing) return sendJson(res, 200, existing.response);
   const request = parseApiToolRequestSafe(parsedBody);
-  if (!request.ok) return sendJson(res, request.status, request.body);
+  if (!request.ok) { reportApiShapeMisuse(config, req, parsedBody, request.body, 'ota.api_tool_request.v1', 'use_operation_arguments_shape'); return sendJson(res, request.status, request.body); }
   const args = request.value.arguments ?? {};
   if (shouldUseQuotaSaver(request.value.tool, args)) return handleQuotaSaverApiTool(config, res, request.value.tool, args, idempotencyKey, safeBodyThread(parsedBody));
   const result = await runApiTool(config, request.value.tool, args);
@@ -311,7 +311,7 @@ async function handleApiBatch(config: AppConfig, req: IncomingMessage, res: Serv
   const existing = existingRun(idempotencyKey);
   if (existing) return sendJson(res, 200, existing.response);
   const parsedBatch = parseApiBatchRequestSafe(parsedBody);
-  if (!parsedBatch.ok) return sendJson(res, parsedBatch.status, parsedBatch.body);
+  if (!parsedBatch.ok) { reportApiShapeMisuse(config, req, parsedBody, parsedBatch.body, 'ota.api_batch_request.v1', 'use_steps_array'); return sendJson(res, parsedBatch.status, parsedBatch.body); }
   const steps = parsedBatch.value.steps.slice(0, 20);
   const thread = safeBodyThread(parsedBody);
   if (shouldUseQuotaSaverBatch(steps)) return handleQuotaSaverApiBatch(config, res, steps, idempotencyKey, thread, parsedBody);
@@ -577,6 +577,7 @@ async function runApiTool(config: AppConfig, tool: string, args: Record<string, 
     return result;
   } catch (error) {
     const summary = error instanceof Error ? error.message : String(error);
+    await reportToolMisuse(config, tool, args, summary);
     await audit(workspace, { timestamp: new Date().toISOString(), tool: `api:${tool}`, ok: false, summary, duration_ms: Date.now() - started });
     return fail(summary);
   }
@@ -743,12 +744,18 @@ function requestArguments(source: Record<string, unknown>): Record<string, unkno
 }
 
 function omitEnvelopeKeys(source: Record<string, unknown>): Record<string, unknown> {
-  const { operation: _operation, tool: _tool, idempotency_key: _idempotency, thread: _thread, ...args } = source;
+  const args = { ...source };
+  delete args.operation;
+  delete args.tool;
+  delete args.idempotency_key;
+  delete args.thread;
   return args;
 }
 
 function omitOperationKeys(source: Record<string, unknown>): Record<string, unknown> {
-  const { operation: _operation, tool: _tool, ...args } = source;
+  const args = { ...source };
+  delete args.operation;
+  delete args.tool;
   return args;
 }
 
@@ -809,10 +816,6 @@ function requiredNumber(value: unknown, name: string): number {
   const number = optionalNumber(value);
   if (number === undefined) throw new Error(`${name} is required`);
   return number;
-}
-
-function optionalStringOrNumber(value: unknown): string | number | undefined {
-  return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value)) ? value : undefined;
 }
 
 function optionalNumber(value: unknown): number | undefined {
@@ -940,6 +943,132 @@ function safeBodyThread(body: unknown): unknown {
 
 function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+
+type OtaMisuseEvent = {
+  event_type: 'api_shape_misuse';
+  schema_version: 1;
+  timestamp: string;
+  source: Record<string, unknown>;
+  request_context: Record<string, unknown>;
+  misuse: Record<string, unknown>;
+  sample: { redacted_shape_only: true; value_hashes?: Record<string, string>; value_types?: Record<string, string>; sizes?: Record<string, number> };
+  fingerprint: string;
+};
+
+function reportApiShapeMisuse(config: AppConfig, req: IncomingMessage, body: unknown, error: ApiShapeErrorBody, expectedShapeId: string, hintId: string): void {
+  void sendMisuseReport(config, otaMisuseEventForApiShapeError(req.url?.split('?')[0], body, error, expectedShapeId, hintId)).catch(() => undefined);
+}
+
+export function otaMisuseEventForApiShapeError(httpPath: string | undefined, body: unknown, error: ApiShapeErrorBody, expectedShapeId: string, hintId: string): OtaMisuseEvent {
+  const source = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+  return buildMisuseEvent({
+    workspace_id: workspaceIdFromBody(body), http_path: httpPath, operation: stringField(source.operation) ?? stringField(source.tool),
+    error_code: error.error_code, received_top_level_keys: error.received_top_level_keys, received_argument_keys: error.received_argument_keys,
+    expected_shape_id: expectedShapeId, hint_id: hintId
+  });
+}
+
+async function reportToolMisuse(config: AppConfig, tool: string, args: Record<string, unknown>, summary: string): Promise<void> {
+  const event = otaMisuseEventForToolError(tool, args, summary);
+  if (!event) return;
+  await sendMisuseReport(config, event).catch(() => undefined);
+}
+
+export function otaMisuseEventForToolError(tool: string, args: Record<string, unknown>, summary: string): OtaMisuseEvent | null {
+  const details = toolMisuseDetails(tool, args, summary);
+  return details ? buildMisuseEvent(details) : null;
+}
+
+function toolMisuseDetails(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
+  if (tool === 'run_command' && summary.includes('cmd must be an array')) return {
+    workspace_id: stringField(args.workspace_id), operation: tool, error_code: 'invalid_run_command_shape',
+    received_argument_keys: Object.keys(args).sort(), bad_field: 'cmd', bad_field_type: valueType(args.cmd),
+    expected_shape_id: 'run_command.argv.v1', hint_id: 'use_cmd_array', value_hashes: hashField('arguments.cmd', args.cmd), value_types: { 'arguments.cmd': valueType(args.cmd) }
+  };
+  if (isJobLifecycleMisuse(tool, summary)) return {
+    workspace_id: stringField(args.workspace_id), operation: tool, error_code: 'blocked_job_lifecycle_via_ota',
+    received_argument_keys: Object.keys(args).sort(), bad_field: 'operation', bad_field_type: 'string',
+    expected_shape_id: 'threaddex.native_job_lifecycle.v1', hint_id: 'use_native_threaddex_job_api_actions'
+  };
+  return null;
+}
+
+function isJobLifecycleMisuse(tool: string, summary: string): boolean {
+  return ['getJob', 'deliverJob', 'deliverJobProgress', 'requestJobContinuation'].includes(tool) && summary.includes('Threaddex Job API');
+}
+
+function buildMisuseEvent(input: Record<string, unknown>): OtaMisuseEvent {
+  const event: OtaMisuseEvent = {
+    event_type: 'api_shape_misuse', schema_version: 1, timestamp: new Date().toISOString(),
+    source: compact({ service: 'ota-computer-use-gateway', workspace_id: input.workspace_id }),
+    request_context: compact({ http_path: input.http_path ?? API_TOOL_PATH, operation: input.operation, transport: 'custom_gpt_action', provider_hint: 'chatgpt_custom_gpt' }),
+    misuse: compact({ error_code: input.error_code, received_top_level_keys: input.received_top_level_keys, received_argument_keys: input.received_argument_keys, bad_field: input.bad_field, bad_field_type: input.bad_field_type, expected_shape_id: input.expected_shape_id, hint_id: input.hint_id }),
+    sample: compact({ redacted_shape_only: true, value_hashes: input.value_hashes, value_types: input.value_types, sizes: input.sizes }) as OtaMisuseEvent['sample'],
+    fingerprint: ''
+  };
+  event.fingerprint = misuseFingerprint(event);
+  return event;
+}
+
+async function sendMisuseReport(config: AppConfig, event: OtaMisuseEvent): Promise<void> {
+  const cfg = config.misuse_reporting;
+  if (!cfg || cfg.enabled === false) return;
+  if (cfg.local_jsonl_path) await writeLocalMisuseEvent(cfg.local_jsonl_path, event);
+  if (cfg.central_url) await forwardMisuseEvent(cfg, event);
+}
+
+async function writeLocalMisuseEvent(file: string, event: OtaMisuseEvent): Promise<void> {
+  await mkdir(dirname(file), { recursive: true });
+  await appendFile(file, `${JSON.stringify(event)}
+`, 'utf8');
+}
+
+async function forwardMisuseEvent(config: NonNullable<AppConfig['misuse_reporting']>, event: OtaMisuseEvent): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.timeout_ms ?? 1500);
+  try {
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    const token = await misuseBearerToken(config);
+    if (token) headers.authorization = `Bearer ${token}`;
+    await fetch(config.central_url!, { method: 'POST', headers, body: JSON.stringify({ event }), signal: controller.signal });
+  } finally { clearTimeout(timer); }
+}
+
+async function misuseBearerToken(config: NonNullable<AppConfig['misuse_reporting']>): Promise<string | undefined> {
+  if (config.bearer_token_env) return process.env[config.bearer_token_env]?.trim();
+  if (config.bearer_token_file) return (await readFile(config.bearer_token_file, 'utf8')).trim();
+  return undefined;
+}
+
+function misuseFingerprint(event: OtaMisuseEvent): string {
+  return `sha256:${createHash('sha256').update(JSON.stringify({ service: event.source.service, operation: event.request_context.operation, error_code: event.misuse.error_code, bad_field: event.misuse.bad_field, bad_field_type: event.misuse.bad_field_type, expected_shape_id: event.misuse.expected_shape_id, hint_id: event.misuse.hint_id })).digest('hex')}`;
+}
+
+function workspaceIdFromBody(body: unknown): string | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const source = body as Record<string, unknown>;
+  const args = source.arguments && typeof source.arguments === 'object' && !Array.isArray(source.arguments) ? source.arguments as Record<string, unknown> : source;
+  return stringField(args.workspace_id);
+}
+
+function hashField(name: string, value: unknown): Record<string, string> | undefined {
+  return value === undefined ? undefined : { [name]: `sha256:${createHash('sha256').update(JSON.stringify(value)).digest('hex')}` };
+}
+
+function valueType(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined;
+}
+
+function compact<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 }
 
 function sendAuthError(config: AppConfig, res: ServerResponse): void {

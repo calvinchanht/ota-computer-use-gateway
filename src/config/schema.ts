@@ -92,6 +92,15 @@ export const workspaceSchema = workspaceBaseSchema.transform((workspace) => {
   return next;
 });
 
+const misuseReportingSchema = z.object({
+  enabled: z.boolean().default(true),
+  central_url: z.string().url().optional(),
+  local_jsonl_path: z.string().min(1).optional(),
+  bearer_token_env: z.string().min(1).optional(),
+  bearer_token_file: z.string().min(1).optional(),
+  timeout_ms: z.number().int().positive().default(1500)
+}).optional();
+
 export const authSchema = z.object({
   enabled: z.boolean().default(false),
   bearer_token_env: z.string().min(1).default('OTA_GATEWAY_BEARER_TOKEN'),
@@ -117,6 +126,7 @@ export const configSchema = z.object({
     exposed_tools: z.array(z.string().min(1)).default([])
   }).prefault({}),
   workspaces: z.array(workspaceSchema).min(1),
+  misuse_reporting: misuseReportingSchema,
   security: z.object({
     max_file_bytes: z.number().int().positive().default(200000),
     max_response_bytes: z.number().int().positive().default(50000),
