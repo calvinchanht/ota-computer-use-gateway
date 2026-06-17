@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { ok } from '../core/result.js';
 import { platformInfo } from '../core/platform.js';
 import type { Workspace } from '../core/workspaces.js';
+import { signedArtifactUrl } from '../server/artifactSignatures.js';
 
 const execFileAsync = promisify(execFile);
 const MAX_POWERSHELL_BUFFER = 8 * 1024 * 1024;
@@ -47,8 +48,9 @@ export async function windowsScreenshot(workspace: Workspace, monitor = 'primary
 export async function windowsUiaTree(workspace: Workspace, maxNodes = 120) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_uia_tree');
+  const limit = boundedInteger(maxNodes, 'max_nodes', 1, 1000);
   ensureWindows();
-  return ok('windows uia tree', await psJson(uiaTreeScript(maxNodes)));
+  return ok('windows uia tree', await psJson(uiaTreeScript(limit)));
 }
 
 export async function windowsListWindows(workspace: Workspace) {
@@ -61,13 +63,15 @@ export async function windowsListWindows(workspace: Workspace) {
 export async function windowsFocusWindow(workspace: Workspace, hwnd: number) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_window_management');
+  const target = integer(hwnd, 'hwnd');
   ensureWindows();
-  return ok('windows focus window', await psJson(focusWindowScript(hwnd)));
+  return ok('windows focus window', await psJson(focusWindowScript(target)));
 }
 
 export async function windowsLaunchApp(workspace: Workspace, filePath: string, args: string[] = [], cwd?: string) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_app_launch');
+  if (!filePath.trim()) throw new Error('file_path must be a non-empty string');
   ensureWindows();
   return ok('windows app launched', await psJson(launchScript(filePath, args, cwd)));
 }
@@ -75,30 +79,38 @@ export async function windowsLaunchApp(workspace: Workspace, filePath: string, a
 export async function windowsClick(workspace: Workspace, x: number, y: number, button = 'left') {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_mouse');
+  const point = screenPoint(x, y);
+  const mouseButton = buttonName(button);
   ensureWindows();
-  return ok('windows click', await psJson(mouseClickScript(x, y, button)));
+  return ok('windows click', await psJson(mouseClickScript(point.x, point.y, mouseButton)));
 }
 
 export async function windowsDoubleClick(workspace: Workspace, x: number, y: number, button = 'left') {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_mouse');
+  const point = screenPoint(x, y);
+  const mouseButton = buttonName(button);
   ensureWindows();
-  await psJson(mouseClickScript(x, y, button));
-  return ok('windows double click', await psJson(mouseClickScript(x, y, button)));
+  await psJson(mouseClickScript(point.x, point.y, mouseButton));
+  return ok('windows double click', await psJson(mouseClickScript(point.x, point.y, mouseButton)));
 }
 
 export async function windowsDrag(workspace: Workspace, fromX: number, fromY: number, toX: number, toY: number) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_mouse');
+  const from = screenPoint(fromX, fromY, 'from');
+  const to = screenPoint(toX, toY, 'to');
   ensureWindows();
-  return ok('windows drag', await psJson(mouseDragScript(fromX, fromY, toX, toY)));
+  return ok('windows drag', await psJson(mouseDragScript(from.x, from.y, to.x, to.y)));
 }
 
 export async function windowsScroll(workspace: Workspace, x: number, y: number, delta: number) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_mouse');
+  const point = screenPoint(x, y);
+  const scrollDelta = finiteNumber(delta, 'delta');
   ensureWindows();
-  return ok('windows scroll', await psJson(mouseScrollScript(x, y, delta)));
+  return ok('windows scroll', await psJson(mouseScrollScript(point.x, point.y, scrollDelta)));
 }
 
 export async function windowsTypeText(workspace: Workspace, text: string) {
@@ -137,10 +149,16 @@ export async function windowsClipboardSet(workspace: Workspace, text: string) {
 }
 
 export async function windowsBatch(workspace: Workspace, calls: WindowsBatchStep[]) {
+  if (!Array.isArray(calls) || calls.length === 0) throw new Error('windows batch requires at least one step');
   if (calls.length > MAX_BATCH_STEPS) throw new Error(`windows batch supports at most ${MAX_BATCH_STEPS} steps`);
   const results: unknown[] = [];
-  for (const [index, call] of calls.entries()) results.push(await runBatchStep(workspace, call, index));
-  return ok('windows batch completed', { results });
+  for (const [index, call] of calls.entries()) {
+    const result = await runBatchStep(workspace, call, index);
+    results.push(result);
+    if ('error' in result) break;
+  }
+  const failed = results.find((row) => typeof row === 'object' && row && 'error' in row) ?? null;
+  return ok(failed ? 'windows batch stopped on error' : 'windows batch completed', { results, stopped_on_error: failed });
 }
 
 async function runBatchStep(workspace: Workspace, step: WindowsBatchStep, index: number) {
@@ -282,7 +300,17 @@ function artifactPair(workspace: Workspace, full: string, preview: string) {
 
 function artifact(workspace: Workspace, absolute: string, format: string) {
   const agentPath = `.agent/${path.relative(workspace.realAgentDir, absolute).replaceAll(path.sep, '/')}`;
-  return { kind: 'image', format, agent_artifact_path: agentPath, path: agentPath };
+  const url = artifactUrl(workspace, agentPath);
+  return { kind: 'image', format, agent_artifact_path: agentPath, path: agentPath, url_path: artifactUrlPath(workspace, agentPath), url, readable_url: url };
+}
+
+function artifactUrlPath(workspace: Workspace, agentPath: string) {
+  return `/api/v1/artifacts/${encodeURIComponent(workspace.id)}/${encodeURIComponent(agentPath)}`;
+}
+
+function artifactUrl(workspace: Workspace, agentPath: string) {
+  const base = (process.env.OTA_GATEWAY_PUBLIC_BASE_URL ?? '').replace(/\/$/, '');
+  return base ? signedArtifactUrl(base, artifactUrlPath(workspace, agentPath)) : undefined;
 }
 
 async function delayStep(ms: number, index: number, started: number) {
@@ -362,6 +390,35 @@ function num(value: unknown) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error('numeric argument required');
   return number;
+}
+
+function finiteNumber(value: unknown, name: string) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new Error(`${name} must be a finite number`);
+  return number;
+}
+
+function integer(value: unknown, name: string) {
+  const number = finiteNumber(value, name);
+  if (!Number.isInteger(number)) throw new Error(`${name} must be an integer`);
+  return number;
+}
+
+function boundedInteger(value: unknown, name: string, min: number, max: number) {
+  const number = integer(value, name);
+  if (number < min || number > max) throw new Error(`${name} must be between ${min} and ${max}`);
+  return number;
+}
+
+function screenPoint(x: unknown, y: unknown, prefix = '') {
+  const label = prefix ? `${prefix}_` : '';
+  return { x: finiteNumber(x, `${label}x`), y: finiteNumber(y, `${label}y`) };
+}
+
+function buttonName(value: unknown) {
+  const button = String(value ?? 'left').toLowerCase();
+  if (!['left', 'right'].includes(button)) throw new Error('button must be left or right');
+  return button;
 }
 
 function str(value: unknown, fallback = '') {
