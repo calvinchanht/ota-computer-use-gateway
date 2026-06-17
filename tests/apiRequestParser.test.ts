@@ -97,6 +97,31 @@ describe('HTTP API request normalizer', () => {
   });
 
 
+
+  it('builds redacted OTA misuse events for table and aggregate structured argument shapes', () => {
+    const selectEvent = otaMisuseEventForToolError('query_table', { workspace_id: 'genesis', path: 'data.csv', select: { raw: 'secret-select' } }, 'string array must be an array');
+    expect(selectEvent?.misuse).toMatchObject({ error_code: 'query_table_select_shape', bad_field: 'select', bad_field_type: 'object', expected_shape_id: 'query_table.select_array.v1', hint_id: 'use_select_array' });
+    expect(JSON.stringify(selectEvent)).not.toContain('secret-select');
+
+    const whereEvent = otaMisuseEventForToolError('query_table', { workspace_id: 'genesis', path: 'data.csv', where: ['secret-where'] }, 'where must be an object');
+    expect(whereEvent?.misuse).toMatchObject({ error_code: 'query_table_where_shape', bad_field: 'where', bad_field_type: 'array', expected_shape_id: 'query_table.where_object.v1', hint_id: 'use_where_object' });
+    expect(JSON.stringify(whereEvent)).not.toContain('secret-where');
+
+    const metricsEvent = otaMisuseEventForToolError('query_table_aggregate', { workspace_id: 'genesis', path: 'data.csv', metrics: { raw: 'secret-metrics' } }, 'metrics must be an array');
+    expect(metricsEvent?.misuse).toMatchObject({ error_code: 'query_table_aggregate_metrics_shape', bad_field: 'metrics', bad_field_type: 'object', expected_shape_id: 'query_table_aggregate.metrics_array.v1', hint_id: 'use_metrics_array' });
+    expect(JSON.stringify(metricsEvent)).not.toContain('secret-metrics');
+  });
+
+  it('builds redacted OTA misuse events for patch and table update shapes', () => {
+    const patchEvent = otaMisuseEventForToolError('patch_file_lines', { workspace_id: 'genesis', path: 'notes.txt', replacement: { raw: 'secret-patch' } }, 'replacement is required');
+    expect(patchEvent?.misuse).toMatchObject({ error_code: 'patch_file_lines_replacement_shape', bad_field: 'replacement', bad_field_type: 'object', expected_shape_id: 'patch_file_lines.replacement_string.v1', hint_id: 'use_replacement_string' });
+    expect(JSON.stringify(patchEvent)).not.toContain('secret-patch');
+
+    const updateEvent = otaMisuseEventForToolError('update_table_rows', { workspace_id: 'genesis', path: 'data.csv', where: ['secret-update'], set: { status: 'ok' } }, 'where must be an object');
+    expect(updateEvent?.misuse).toMatchObject({ error_code: 'update_table_rows_where_shape', bad_field: 'where', bad_field_type: 'array', expected_shape_id: 'update_table_rows.where_object.v1', hint_id: 'use_where_object' });
+    expect(JSON.stringify(updateEvent)).not.toContain('secret-update');
+  });
+
   it('builds redacted OTA misuse events for run_command argv variants', () => {
     const missingEvent = otaMisuseEventForToolError('run_command', { workspace_id: 'genesis' }, 'cmd_array must be an array');
     expect(missingEvent?.misuse).toMatchObject({ error_code: 'run_command_cmd_array_shape', bad_field: 'cmd_array', bad_field_type: 'undefined', expected_shape_id: 'run_command.argv.v1', hint_id: 'use_cmd_array' });

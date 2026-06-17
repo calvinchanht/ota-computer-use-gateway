@@ -1027,11 +1027,40 @@ function commonToolShapeSpecs(tool: string): CommonToolShapeSpec[] {
   if (paramsObjectTools().has(tool)) specs.push({ field: 'params', expected_shape_id: `${tool}.params_object.v1`, hint_id: 'use_params_object' });
   if (commandStringTools().has(tool)) specs.push({ field: 'command', expected_shape_id: `${tool}.command_string.v1`, hint_id: 'use_command_string' });
   if (processIdStringTools().has(tool)) specs.push({ field: 'process_id', expected_shape_id: 'process.process_id_string.v1', hint_id: 'use_process_id_string' });
+  if (arrayFieldSpec(tool, 'columns')) specs.push(arrayFieldSpec(tool, 'columns')!);
+  if (arrayFieldSpec(tool, 'select')) specs.push(arrayFieldSpec(tool, 'select')!);
+  if (arrayFieldSpec(tool, 'group_by')) specs.push(arrayFieldSpec(tool, 'group_by')!);
+  if (arrayFieldSpec(tool, 'sort')) specs.push(arrayFieldSpec(tool, 'sort')!);
+  if (arrayFieldSpec(tool, 'metrics')) specs.push(arrayFieldSpec(tool, 'metrics')!);
+  if (objectFieldSpec(tool, 'where')) specs.push(objectFieldSpec(tool, 'where')!);
+  if (objectFieldSpec(tool, 'set')) specs.push(objectFieldSpec(tool, 'set')!);
   if (tool === 'write_process') specs.push({ field: 'input', expected_shape_id: 'write_process.input_string.v1', hint_id: 'use_input_string' });
+  if (tool === 'patch_file_lines') specs.push({ field: 'replacement', expected_shape_id: 'patch_file_lines.replacement_string.v1', hint_id: 'use_replacement_string' });
   if (tool === 'write_file') specs.push({ field: 'content', expected_shape_id: 'write_file.content_string.v1', hint_id: 'use_content_string' });
   if (tool === 'write_binary_file') specs.push({ field: 'base64', expected_shape_id: 'write_binary_file.base64_string.v1', hint_id: 'use_base64_string' });
   if (tool === 'edit_file') specs.push({ field: 'old_text', expected_shape_id: 'edit_file.old_text_string.v1', hint_id: 'use_old_text_string' }, { field: 'new_text', expected_shape_id: 'edit_file.new_text_string.v1', hint_id: 'use_new_text_string' });
   return specs;
+}
+
+function arrayFieldSpec(tool: string, field: string): CommonToolShapeSpec | null {
+  const arrayFields: Record<string, Set<string>> = {
+    columns: new Set(['table_profile']),
+    select: new Set(['query_table']),
+    group_by: new Set(['query_table_aggregate']),
+    sort: new Set(['query_table']),
+    metrics: new Set(['query_table_aggregate'])
+  };
+  if (!arrayFields[field]?.has(tool)) return null;
+  return { field, expected_shape_id: `${tool}.${field}_array.v1`, hint_id: `use_${field}_array` };
+}
+
+function objectFieldSpec(tool: string, field: string): CommonToolShapeSpec | null {
+  const objectFields: Record<string, Set<string>> = {
+    where: new Set(['query_table', 'query_table_aggregate', 'update_table_rows']),
+    set: new Set(['update_table_rows'])
+  };
+  if (!objectFields[field]?.has(tool)) return null;
+  return { field, expected_shape_id: `${tool}.${field}_object.v1`, hint_id: `use_${field}_object` };
 }
 
 function pathStringTools(): Set<string> {
@@ -1076,7 +1105,12 @@ function batchCallTools(): Set<string> {
 }
 
 function matchesFieldError(summary: string, field: string): boolean {
-  return summary === `${field} is required` || summary.startsWith(`${field} must be `);
+  return summary === `${field} is required` || summary.startsWith(`${field} must be `) || matchesGenericArrayError(summary, field);
+}
+
+function matchesGenericArrayError(summary: string, field: string): boolean {
+  if (!['columns', 'select', 'group_by'].includes(field)) return false;
+  return summary === 'string array must be an array' || summary === 'array item is required';
 }
 
 function fieldMisuse(tool: string, args: Record<string, unknown>, field: string, expectedShapeId: string, hintId: string): Record<string, unknown> {
