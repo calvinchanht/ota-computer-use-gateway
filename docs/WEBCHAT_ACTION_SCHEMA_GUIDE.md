@@ -10,7 +10,7 @@ Expose one Action with three operations:
 - `gateway_batch` -> `POST /api/v1/batch`
 - `get_gateway_run` -> `GET /api/v1/runs/{run_id}`
 
-Keep tool arguments generic:
+Keep operation arguments generic:
 
 ```yaml
 arguments:
@@ -23,11 +23,13 @@ arguments:
       enum: [<workspace_id>]
 ```
 
-This is more reliable in the GPT editor than exhaustive per-tool argument schemas.
+This is more reliable in the GPT editor than exhaustive per-operation argument schemas.
 
-## Tool enum
+## Operation enum
 
-Include only the tools exposed by that lane. The enum helps the GPT pick the right tool name while the generic `arguments` object keeps the schema small.
+Use `operation` as the canonical public field inside `gateway_request` and each `gateway_batch` step. Legacy `tool` is still accepted by the gateway for compatibility, but new Custom GPT schemas should prefer `operation`.
+
+Include only the operations exposed by that lane. The enum helps the GPT pick the right operation name while the generic `arguments` object keeps the schema small.
 
 Examples:
 

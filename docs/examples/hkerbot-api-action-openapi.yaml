@@ -262,16 +262,19 @@ components:
     GatewayStep:
       type: object
       additionalProperties: false
-      required: [tool, arguments]
+      required: [operation, arguments]
       properties:
+        operation:
+          $ref: '#/components/schemas/GatewayOperationName'
         tool:
-          $ref: '#/components/schemas/GatewayToolName'
+          $ref: '#/components/schemas/GatewayOperationName'
+          description: Backward-compatible alias for operation. Prefer operation.
         arguments:
           $ref: '#/components/schemas/GatewayArguments'
     GatewayRequest:
       type: object
       additionalProperties: false
-      required: [tool, arguments]
+      required: [operation, arguments]
       properties:
         idempotency_key:
           type: string
@@ -280,11 +283,15 @@ components:
           type: object
           additionalProperties: true
           description: Explicit thread identity metadata.
+        operation:
+          $ref: '#/components/schemas/GatewayOperationName'
+          description: OTA Gateway operation to run. Use this instead of the legacy tool alias.
         tool:
-          $ref: '#/components/schemas/GatewayToolName'
+          $ref: '#/components/schemas/GatewayOperationName'
+          description: Backward-compatible alias for operation. Prefer operation and do not send both unless they match.
         arguments:
           $ref: '#/components/schemas/GatewayArguments'
-    GatewayToolName:
+    GatewayOperationName:
       type: string
       enum:
         - heartbeat

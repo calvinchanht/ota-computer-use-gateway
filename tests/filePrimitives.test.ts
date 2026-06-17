@@ -2,7 +2,8 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { readBinaryFileTool, statPath, treeTool, writeBinaryFileTool } from '../src/tools/files.js';
+import { requiredTextArg } from '../src/server/http.js';
+import { editFileTool, readBinaryFileTool, statPath, treeTool, writeBinaryFileTool, writeFileTool } from '../src/tools/files.js';
 import type { AppConfig } from '../src/config/schema.js';
 import type { Workspace } from '../src/core/workspaces.js';
 
@@ -32,6 +33,27 @@ describe('file primitive tools', () => {
     const result = await writeBinaryFileTool(config, workspace, 'out/file.zip', 'UEsDBA==');
     await expect(readFile(path.join(workspace.realRoot, 'out/file.zip'))).resolves.toEqual(Buffer.from('UEsDBA==', 'base64'));
     expect(result.data).toMatchObject({ path: 'out/file.zip', bytes: 4, media_type: 'application/zip' });
+  });
+
+  it('writes JSON-looking UTF-8 content without extra serialization', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const content = JSON.stringify({ message: 'hello "quoted" value', slash: 'a\\b', lines: ['one', 'two'] }, null, 2);
+    await writeFileTool(config, workspace, 'data.json', content, true);
+    await expect(readFile(path.join(workspace.realRoot, 'data.json'), 'utf8')).resolves.toBe(content);
+  });
+
+  it('allows empty text writes and empty edit replacements', async () => {
+    const workspace = await fixtureWorkspace(true);
+    await writeFileTool(config, workspace, 'empty.txt', '', true);
+    await writeFile(path.join(workspace.realRoot, 'delete-me.txt'), 'keep\nremove\n');
+    await editFileTool(config, workspace, 'delete-me.txt', 'remove\n', '');
+    await expect(readFile(path.join(workspace.realRoot, 'empty.txt'), 'utf8')).resolves.toBe('');
+    await expect(readFile(path.join(workspace.realRoot, 'delete-me.txt'), 'utf8')).resolves.toBe('keep\n');
+  });
+
+  it('returns corrective diagnostics for object content fields', () => {
+    expect(() => requiredTextArg({ nested: true }, 'content', true))
+      .toThrow(/serialize it once into a string/);
   });
 
   it('returns a bounded recursive tree', async () => {
