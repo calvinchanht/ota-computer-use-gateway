@@ -32,6 +32,16 @@ describe('policy and tool profile consistency', () => {
     expect(policy?.allowed_tools).toContain('run_configured_command');
   });
 
+
+  it('exposes implemented data and patch helpers through the workspace policy', () => {
+    const policy = workspacePolicy(fixtureWorkspace()).data;
+    expect(policy?.allowed_tools).toEqual(expect.arrayContaining([
+      'infer_file_structure', 'sample_file', 'read_around', 'search_file',
+      'table_profile', 'query_table', 'query_table_aggregate', 'json_profile', 'query_json',
+      'patch_file_lines', 'update_table_rows'
+    ]));
+  });
+
   it('advertises only enabled Windows computer-use rights for partial Windows lanes', () => {
     const policy = workspacePolicy(fixtureWorkspace({
       api_sets: {},
