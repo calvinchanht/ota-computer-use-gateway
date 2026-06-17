@@ -44,6 +44,7 @@ Startup:
 - Start with get_tool_profile, get_workspace_policy, and get_agent_bootstrap when orienting.
 - Use list_browser_profiles before browser work when browser is enabled.
 - Use cua_driver_status before computer/Cua work when computer is enabled.
+- For write_file/edit_file text fields, send strings only. Serialize JSON exactly once into text; use write_binary_file with base64 for exact bytes.
 
 Async/recovery:
 - When a response includes api.status="running" or api.operation_status="running", wait at least api.poll_after_ms/api.next_poll_after_ms, then call get_gateway_run with api.run_id/api.operation_id.

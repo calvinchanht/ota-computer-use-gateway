@@ -36,6 +36,14 @@ Keep text and binary tools separate:
 - use `read_file` / `write_file` for UTF-8 text;
 - use `read_binary_file` / `write_binary_file` for images, PDFs, zips, screenshots, and other binary artifacts.
 
+Text payload contract:
+
+- `write_file.content`, `edit_file.old_text`, and `edit_file.new_text` are strings.
+- Empty `write_file.content` and empty `edit_file.new_text` are valid; `edit_file.old_text` must be non-empty.
+- For JSON files, serialize the JSON exactly once and send that serialized text as `content`.
+- Do not send raw objects or arrays in text fields. The gateway rejects them with a corrective diagnostic instead of guessing.
+- For exact bytes or escaping-sensitive payloads, use `write_binary_file` with base64 rather than inventing a text encoding wrapper.
+
 ## Patch primitives
 
 - `propose_patch` — store an exact-text patch proposal without modifying files.

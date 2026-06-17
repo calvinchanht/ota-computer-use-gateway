@@ -56,6 +56,11 @@ describe('file primitive tools', () => {
       .toThrow(/serialize it once into a string/);
   });
 
+  it('returns corrective diagnostics for array content fields', () => {
+    expect(() => requiredTextArg(['one', 'two'], 'content', true))
+      .toThrow(/received array/);
+  });
+
   it('returns a bounded recursive tree', async () => {
     const workspace = await fixtureWorkspace();
     await mkdir(path.join(workspace.realRoot, 'src'), { recursive: true });
