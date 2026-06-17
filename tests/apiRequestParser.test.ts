@@ -68,6 +68,17 @@ describe('HTTP API request normalizer', () => {
     expect(JSON.stringify(event)).not.toMatch(/Bearer|secret|token/i);
   });
 
+
+  it('builds redacted OTA misuse events for common filesystem/text argument shapes', () => {
+    const pathEvent = otaMisuseEventForToolError('read_file', { workspace_id: 'genesis', path: 123 }, 'path is required');
+    expect(pathEvent?.misuse).toMatchObject({ error_code: 'read_file_path_shape', bad_field: 'path', bad_field_type: 'number', expected_shape_id: 'filesystem.path_string.v1', hint_id: 'use_path_string' });
+    expect(pathEvent?.sample.value_hashes).toHaveProperty('arguments.path');
+
+    const writeEvent = otaMisuseEventForToolError('write_file', { workspace_id: 'genesis', path: 'notes.txt', content: { raw: 'secret-ish' } }, 'content must be a string; received object.');
+    expect(writeEvent?.misuse).toMatchObject({ error_code: 'write_file_content_shape', bad_field: 'content', bad_field_type: 'object', expected_shape_id: 'write_file.content_string.v1', hint_id: 'use_content_string' });
+    expect(JSON.stringify(writeEvent)).not.toContain('secret-ish');
+  });
+
   it('builds redacted OTA misuse events for run_command string cmd errors', () => {
     const event = otaMisuseEventForToolError('run_command', { workspace_id: 'genesis', cmd: 'git status' }, 'cmd must be an array. Use cmd_array.');
     expect(event?.misuse).toMatchObject({ error_code: 'invalid_run_command_shape', bad_field: 'cmd', bad_field_type: 'string', expected_shape_id: 'run_command.argv.v1', hint_id: 'use_cmd_array' });

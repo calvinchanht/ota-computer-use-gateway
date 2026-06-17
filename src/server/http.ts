@@ -987,12 +987,50 @@ function toolMisuseDetails(tool: string, args: Record<string, unknown>, summary:
     received_argument_keys: Object.keys(args).sort(), bad_field: 'cmd', bad_field_type: valueType(args.cmd),
     expected_shape_id: 'run_command.argv.v1', hint_id: 'use_cmd_array', value_hashes: hashField('arguments.cmd', args.cmd), value_types: { 'arguments.cmd': valueType(args.cmd) }
   };
+  const common = commonToolShapeMisuse(tool, args, summary);
+  if (common) return common;
   if (isJobLifecycleMisuse(tool, summary)) return {
     workspace_id: stringField(args.workspace_id), operation: tool, error_code: 'blocked_job_lifecycle_via_ota',
     received_argument_keys: Object.keys(args).sort(), bad_field: 'operation', bad_field_type: 'string',
     expected_shape_id: 'threaddex.native_job_lifecycle.v1', hint_id: 'use_native_threaddex_job_api_actions'
   };
   return null;
+}
+
+function commonToolShapeMisuse(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
+  for (const spec of commonToolShapeSpecs(tool)) {
+    if (!matchesFieldError(summary, spec.field)) continue;
+    return fieldMisuse(tool, args, spec.field, spec.expected_shape_id, spec.hint_id);
+  }
+  return null;
+}
+
+type CommonToolShapeSpec = { field: string; expected_shape_id: string; hint_id: string };
+
+function commonToolShapeSpecs(tool: string): CommonToolShapeSpec[] {
+  const specs: CommonToolShapeSpec[] = [];
+  if (pathStringTools().has(tool)) specs.push({ field: 'path', expected_shape_id: 'filesystem.path_string.v1', hint_id: 'use_path_string' });
+  if (tool === 'write_file') specs.push({ field: 'content', expected_shape_id: 'write_file.content_string.v1', hint_id: 'use_content_string' });
+  if (tool === 'write_binary_file') specs.push({ field: 'base64', expected_shape_id: 'write_binary_file.base64_string.v1', hint_id: 'use_base64_string' });
+  if (tool === 'edit_file') specs.push({ field: 'old_text', expected_shape_id: 'edit_file.old_text_string.v1', hint_id: 'use_old_text_string' }, { field: 'new_text', expected_shape_id: 'edit_file.new_text_string.v1', hint_id: 'use_new_text_string' });
+  return specs;
+}
+
+function pathStringTools(): Set<string> {
+  return new Set(['stat_path', 'read_file', 'read_binary_file', 'write_file', 'write_binary_file', 'edit_file', 'delete_file', 'delete_path', 'infer_file_structure', 'sample_file', 'read_file_chunk', 'read_file_lines', 'read_around', 'search_file', 'table_profile', 'query_table', 'query_table_aggregate', 'json_profile', 'patch_file_lines', 'record_artifact']);
+}
+
+function matchesFieldError(summary: string, field: string): boolean {
+  return summary === `${field} is required` || summary.startsWith(`${field} must be `);
+}
+
+function fieldMisuse(tool: string, args: Record<string, unknown>, field: string, expectedShapeId: string, hintId: string): Record<string, unknown> {
+  const value = args[field];
+  return {
+    workspace_id: stringField(args.workspace_id), operation: tool, error_code: `${tool}_${field}_shape`,
+    received_argument_keys: Object.keys(args).sort(), bad_field: field, bad_field_type: valueType(value),
+    expected_shape_id: expectedShapeId, hint_id: hintId, value_hashes: hashField(`arguments.${field}`, value), value_types: { [`arguments.${field}`]: valueType(value) }
+  };
 }
 
 function isJobLifecycleMisuse(tool: string, summary: string): boolean {
