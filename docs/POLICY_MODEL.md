@@ -30,14 +30,23 @@ Local GUI/computer-use through Cua Driver: screenshots, windows, accessibility t
 
 ### `machine_admin`
 
-Host/lane administration. This gates configured/admin operations such as:
+Host/lane administration and full assigned-machine management. A webchat agent with `machine_admin: true` is intended to be at least as capable as the corresponding OpenClaw lane, not a toy sandbox. For that agent's own machine this means:
 
-- `run_configured_command`;
-- service restarts and systemd/launchd workflows;
-- tunnel/config/deployment management;
-- host/lane maintenance.
+- the workspace root SHOULD be `/` unless there is a deliberate narrower-lane reason;
+- the agent SHOULD have access to its own machine sudo/admin credential, usually the local `molt` account password, installed in a protected local credential path;
+- the agent SHOULD have a non-printing sudo/admin helper so most privileged tasks do not require pasting raw passwords;
+- ordinary local inspection, service management, package diagnostics, filesystem edits, tunnel repair, and root-owned path inspection are routine machine-admin work when requested or needed;
+- raw credential values still must not be pasted into chat/logs/issues unless Calvin explicitly asks for exact disclosure/use.
 
-`machine_admin` is intentionally separate from bounded workspace `run_command`. Confusing these makes webchat agents weaker than OpenClaw agents.
+Typical operations include:
+
+- `run_configured_command` when exposed;
+- bounded `run_command` with explicit argv;
+- service lifecycle commands;
+- sudo/admin helper invocations;
+- tunnel/config/runbook operations.
+
+`machine_admin` is intentionally separate from narrow workspace `run_command`, but a machine-admin lane may intentionally expose `/` as its workspace root plus a sudo helper. Confusing machine-admin with a read-only or project-only workspace makes webchat agents weaker than OpenClaw agents.
 
 ### `estate_admin`
 

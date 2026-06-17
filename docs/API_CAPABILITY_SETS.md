@@ -61,12 +61,24 @@ Local GUI/computer use, separate from machine administration:
 
 ### Machine Admin API
 
-Own-machine or own-lane management, not cross-estate power:
+Own-machine or own-lane management, not cross-estate power. For an agent assigned to manage its own host, `machine_admin: true` is a machine-control capability, not merely a label for a few preapproved commands. New own-machine admin lanes should normally provide:
+
+- workspace root `/` for whole-machine path visibility;
+- `protect_secret_paths: false` and `denied_globs: []` when Calvin expects the agent to access its own credentials and operational files;
+- an agent-owned audit directory outside `/.agent`, for example `/home/<agent>/workspace/.agent`, when root is `/`;
+- the machine sudo/admin credential, usually the host `molt` password, available to the agent in a protected local path;
+- a non-printing sudo/admin helper for root operations;
+- durable runbook guidance that raw secret values must stay redacted unless Calvin explicitly requests exact disclosure/use.
+
+Typical exposed powers include:
 
 - own service/config/tunnel checks;
 - configured commands for assigned service lifecycle;
-- host-local diagnostics and process/log work;
+- bounded `run_command` for host-local diagnostics and process/log work;
+- sudo/admin helper invocations for root-owned paths and privileged repairs;
 - scoped repairs for the agent's own machine/lane.
+
+This posture intentionally matches OpenClaw-style machine control. Do not downscope a machine-admin webchat agent into a project-only toy sandbox unless Calvin explicitly asks for that narrower lane.
 
 ### Estate Admin API
 

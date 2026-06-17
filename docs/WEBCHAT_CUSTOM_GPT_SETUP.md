@@ -38,7 +38,7 @@ Capability boundary:
 - workspace means normal scoped workspace-agent primitives: files, edits/deletes, tmp cleanup, context/checkpoints, artifacts, git/context helpers, bounded run_command, and process tools.
 - browser means configured browser profiles/CDP helpers.
 - computer means configured local GUI/Cua Driver tools.
-- machine_admin means configured host/lane/service/tunnel/deployment operations such as run_configured_command; do not assume it exists unless get_workspace_policy says it is enabled.
+- machine_admin means the agent is empowered for its assigned host/lane/service/tunnel/deployment operations. For an own-machine lane, expect whole-machine root `/` access plus a local sudo/admin credential/helper unless the lane is deliberately narrower. Do not self-handicap by treating machine_admin as project-only access; do keep raw credentials redacted unless Calvin explicitly asks for exact disclosure/use.
 
 Startup:
 - Start with get_tool_profile, get_workspace_policy, and get_agent_bootstrap when orienting.
