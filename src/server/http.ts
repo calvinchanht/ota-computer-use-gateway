@@ -293,7 +293,7 @@ async function handleApiTool(config: AppConfig, req: IncomingMessage, res: Serve
   const existing = existingRun(idempotencyKey);
   if (existing) return sendJson(res, 200, existing.response);
   const request = parseApiToolRequestSafe(parsedBody);
-  if (!request.ok) return sendJson(res, request.status, { ok: false, error: request.error });
+  if (!request.ok) return sendJson(res, request.status, request.body);
   const args = request.value.arguments ?? {};
   if (shouldUseQuotaSaver(request.value.tool, args)) return handleQuotaSaverApiTool(config, res, request.value.tool, args, idempotencyKey, safeBodyThread(parsedBody));
   const result = await runApiTool(config, request.value.tool, args);
@@ -311,7 +311,7 @@ async function handleApiBatch(config: AppConfig, req: IncomingMessage, res: Serv
   const existing = existingRun(idempotencyKey);
   if (existing) return sendJson(res, 200, existing.response);
   const parsedBatch = parseApiBatchRequestSafe(parsedBody);
-  if (!parsedBatch.ok) return sendJson(res, parsedBatch.status, { ok: false, error: parsedBatch.error });
+  if (!parsedBatch.ok) return sendJson(res, parsedBatch.status, parsedBatch.body);
   const steps = parsedBatch.value.steps.slice(0, 20);
   const thread = safeBodyThread(parsedBody);
   if (shouldUseQuotaSaverBatch(steps)) return handleQuotaSaverApiBatch(config, res, steps, idempotencyKey, thread, parsedBody);
@@ -660,8 +660,8 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'read_process') return processLog(requiredString(args.process_id, 'process_id'), optionalNumber(args.max_bytes) ?? 50000, optionalNumber(args.cursor));
   if (tool === 'write_process') return processWrite(requiredString(args.process_id, 'process_id'), requiredString(args.input, 'input'), Boolean(args.close_stdin));
   if (tool === 'stop_process') return processKill(requiredString(args.process_id, 'process_id'));
-  if (tool === 'run_command' && Boolean(args.tail)) return runArgvTailTool(config, workspace, requiredStringArray(args.cmd, 'cmd'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000);
-  if (tool === 'run_command') return runArgvTool(config, workspace, requiredStringArray(args.cmd, 'cmd'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000, optionalNumber(args.max_stdout_bytes) ?? 20000, optionalNumber(args.max_stderr_bytes) ?? 8000);
+  if (tool === 'run_command' && Boolean(args.tail)) return runArgvTailTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000);
+  if (tool === 'run_command') return runArgvTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000, optionalNumber(args.max_stdout_bytes) ?? 20000, optionalNumber(args.max_stderr_bytes) ?? 8000);
   throw new Error(`unsupported API tool: ${tool}`);
 }
 
@@ -674,21 +674,34 @@ function toolExposureError(tool: string): string {
 }
 
 type ApiToolRequest = { tool: string; arguments?: Record<string, unknown> };
+type ApiShapeErrorBody = { ok: false; error: string; error_code: string; message: string; expected?: unknown; accepted_aliases?: Record<string, string>; received_top_level_keys?: string[]; received_argument_keys?: string[]; hint?: string };
 
-function parseApiToolRequestSafe(body: unknown): { ok: true; value: ApiToolRequest } | { ok: false; status: number; error: string } {
-  try {
-    return { ok: true, value: parseApiToolRequest(body) };
-  } catch (error) {
-    return { ok: false, status: 400, error: error instanceof Error ? error.message : String(error) };
+class ApiShapeError extends Error {
+  constructor(readonly body: ApiShapeErrorBody) {
+    super(body.message);
   }
 }
 
-function parseApiBatchRequestSafe(body: unknown): { ok: true; value: { steps: ApiToolRequest[] } } | { ok: false; status: number; error: string } {
+export function parseApiToolRequestSafe(body: unknown): { ok: true; value: ApiToolRequest } | { ok: false; status: number; body: ApiShapeErrorBody } {
+  try {
+    return { ok: true, value: parseApiToolRequest(body) };
+  } catch (error) {
+    return { ok: false, status: 400, body: apiShapeErrorBody(error) };
+  }
+}
+
+function parseApiBatchRequestSafe(body: unknown): { ok: true; value: { steps: ApiToolRequest[] } } | { ok: false; status: number; body: ApiShapeErrorBody } {
   try {
     return { ok: true, value: parseApiBatchRequest(body) };
   } catch (error) {
-    return { ok: false, status: 400, error: error instanceof Error ? error.message : String(error) };
+    return { ok: false, status: 400, body: apiShapeErrorBody(error) };
   }
+}
+
+function apiShapeErrorBody(error: unknown): ApiShapeErrorBody {
+  if (error instanceof ApiShapeError) return error.body;
+  const message = error instanceof Error ? error.message : String(error);
+  return { ok: false, error: 'invalid_gateway_request_shape', error_code: 'invalid_gateway_request_shape', message };
 }
 
 export function parseApiToolRequest(body: unknown): ApiToolRequest {
@@ -698,7 +711,7 @@ export function parseApiToolRequest(body: unknown): ApiToolRequest {
   const args = requestArguments(source);
   const nestedOperation = !topOperation && args ? requestOperation(args.operation, args.tool) : undefined;
   const operation = topOperation ?? nestedOperation;
-  if (!operation) throw new Error(expectedRequestError(source, args));
+  if (!operation) throw expectedRequestError(source, args);
   const normalizedArgs = nestedOperation && args ? omitOperationKeys(args) : args;
   return { tool: operation, arguments: normalizedArgs };
 }
@@ -706,7 +719,7 @@ export function parseApiToolRequest(body: unknown): ApiToolRequest {
 function parseApiBatchRequest(body: unknown): { steps: ApiToolRequest[] } {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('JSON object body is required');
   const steps = (body as Record<string, unknown>).steps;
-  if (!Array.isArray(steps)) throw new Error('steps array is required');
+  if (!Array.isArray(steps)) throw expectedBatchRequestError(body as Record<string, unknown>);
   return { steps: steps.map((step) => parseApiToolRequest(step)) };
 }
 
@@ -739,10 +752,34 @@ function omitOperationKeys(source: Record<string, unknown>): Record<string, unkn
   return args;
 }
 
-function expectedRequestError(source: Record<string, unknown>, args?: Record<string, unknown>): string {
-  const topKeys = Object.keys(source).join(', ') || '(none)';
-  const argKeys = args ? Object.keys(args).join(', ') || '(none)' : '(missing)';
-  return `Missing required operation. Expected { "operation": "genesis_bootstrap", "arguments": { "workspace_id": "genesis" } }. Received top-level keys: [${topKeys}], argument keys: [${argKeys}]. Legacy alias "tool" is still accepted.`;
+function expectedRequestError(source: Record<string, unknown>, args?: Record<string, unknown>): ApiShapeError {
+  const topKeys = Object.keys(source);
+  const argKeys = args ? Object.keys(args) : [];
+  const message = `Missing required operation. Expected { "operation": "genesis_bootstrap", "arguments": { "workspace_id": "genesis" } }. Received top-level keys: [${topKeys.join(', ') || '(none)'}], argument keys: [${args ? argKeys.join(', ') || '(none)' : '(missing)'}]. Legacy alias "tool" is still accepted.`;
+  return new ApiShapeError({
+    ok: false,
+    error: 'invalid_gateway_request_shape',
+    error_code: 'invalid_gateway_request_shape',
+    message,
+    expected: { operation: 'genesis_bootstrap', arguments: { workspace_id: 'genesis' } },
+    accepted_aliases: { tool: 'legacy alias for operation' },
+    received_top_level_keys: topKeys,
+    received_argument_keys: argKeys,
+    hint: 'Put the operation name at top level and workspace_id inside arguments.'
+  });
+}
+
+function expectedBatchRequestError(source: Record<string, unknown>): ApiShapeError {
+  return new ApiShapeError({
+    ok: false,
+    error: 'invalid_gateway_request_shape',
+    error_code: 'invalid_gateway_request_shape',
+    message: 'steps must be an array',
+    expected: { steps: [{ operation: 'heartbeat', arguments: { workspace_id: 'genesis' } }] },
+    accepted_aliases: { tool: 'legacy alias for operation inside each step' },
+    received_top_level_keys: Object.keys(source),
+    hint: 'Send steps as an array of { operation, arguments } objects.'
+  });
 }
 
 function recordArg(value: unknown, name: string): Record<string, unknown> | undefined {
@@ -822,6 +859,20 @@ function optionalStringArray(value: unknown): string[] {
 function requiredStringArray(value: unknown, name: string): string[] {
   if (!Array.isArray(value)) throw new Error(`${name} must be an array`);
   return value.map((item) => requiredString(item, 'array item'));
+}
+
+export function runCommandCmdArray(args: Record<string, unknown>): string[] {
+  const preferred = args.cmd_array;
+  const legacy = args.cmd;
+  if (typeof legacy === 'string') throw new Error('cmd must be an array. Use cmd_array: ["git", "status", "--short"]. If shell behavior is intentional, use cmd_array: ["bash", "-lc", "..."] on POSIX lanes or an explicit platform equivalent.');
+  if (preferred !== undefined && legacy !== undefined) {
+    const preferredArray = requiredStringArray(preferred, 'cmd_array');
+    const legacyArray = requiredStringArray(legacy, 'cmd');
+    if (JSON.stringify(preferredArray) !== JSON.stringify(legacyArray)) throw new Error('cmd_array/cmd conflict: prefer cmd_array and remove legacy cmd, or send identical arrays for compatibility.');
+    return preferredArray;
+  }
+  if (preferred !== undefined) return requiredStringArray(preferred, 'cmd_array');
+  return requiredStringArray(legacy, 'cmd_array');
 }
 
 function arrayRecordArg(value: unknown, name: string): Array<Record<string, string>> | undefined {

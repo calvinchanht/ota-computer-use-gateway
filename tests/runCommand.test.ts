@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runArgvTool, runConfiguredCommand, runShellTool } from '../src/tools/runCommand.js';
+import { runCommandCmdArray } from '../src/server/http.js';
 import type { AppConfig } from '../src/config/schema.js';
 import type { Workspace } from '../src/core/workspaces.js';
 
@@ -61,6 +62,26 @@ describe('runConfiguredCommand', () => {
     expect(result.data).toMatchObject({ timed_out: true });
   });
 
+});
+
+
+
+describe('HTTP run_command argv shape', () => {
+  it('accepts preferred cmd_array', () => {
+    expect(runCommandCmdArray({ cmd_array: ['git', 'status', '--short'] })).toEqual(['git', 'status', '--short']);
+  });
+
+  it('keeps legacy cmd array compatibility', () => {
+    expect(runCommandCmdArray({ cmd: ['git', 'status', '--short'] })).toEqual(['git', 'status', '--short']);
+  });
+
+  it('rejects string cmd with a shell-string hint', () => {
+    expect(() => runCommandCmdArray({ cmd: 'git status --short' })).toThrow(/Use cmd_array/);
+  });
+
+  it('rejects conflicting cmd_array and cmd values', () => {
+    expect(() => runCommandCmdArray({ cmd_array: ['git', 'status'], cmd: ['git', 'diff'] })).toThrow(/cmd_array\/cmd conflict/);
+  });
 });
 
 async function fixtureWorkspace(allowTests: boolean): Promise<Workspace> {

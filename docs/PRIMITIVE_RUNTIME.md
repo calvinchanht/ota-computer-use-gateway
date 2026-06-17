@@ -73,7 +73,7 @@ Patch payload contract:
 - `run_command` — run a bounded argv command in the workspace root or a workspace-relative `cwd`.
 - `run_configured_command` — run a configured command id after approval.
 
-`run_command` uses `cmd: string[]` at the HTTP JSON boundary. Put the executable in `cmd[0]` and each argument in its own array entry. Do not send one shell-quoted command string unless you are using an explicitly documented compatibility path.
+`run_command` prefers `cmd_array: string[]` at the HTTP JSON boundary. Legacy `cmd: string[]` is still accepted. Put the executable in `cmd_array[0]` and each argument in its own array entry. Do not send one shell-quoted command string; when shell behavior is intentional, use an explicit argv wrapper such as `cmd_array: ["bash", "-lc", "..."]` on POSIX lanes.
 
 Command result contract:
 

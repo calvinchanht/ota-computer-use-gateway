@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseApiToolRequest } from '../src/server/http.js';
+import { parseApiToolRequest, parseApiToolRequestSafe } from '../src/server/http.js';
 
 describe('HTTP API request normalizer', () => {
   it('accepts operation as the canonical public field', () => {
@@ -41,4 +41,20 @@ describe('HTTP API request normalizer', () => {
     expect(() => parseApiToolRequest({ arguments: { workspace_id: 'genesis' } }))
       .toThrow(/Expected \{ "operation": "genesis_bootstrap"/);
   });
+
+  it('returns compact structured correction fields for missing operation', () => {
+    expect(parseApiToolRequestSafe({ arguments: { workspace_id: 'genesis' } })).toMatchObject({
+      ok: false,
+      status: 400,
+      body: {
+        ok: false,
+        error_code: 'invalid_gateway_request_shape',
+        expected: { operation: 'genesis_bootstrap', arguments: { workspace_id: 'genesis' } },
+        accepted_aliases: { tool: 'legacy alias for operation' },
+        received_argument_keys: ['workspace_id'],
+        hint: 'Put the operation name at top level and workspace_id inside arguments.'
+      }
+    });
+  });
+
 });

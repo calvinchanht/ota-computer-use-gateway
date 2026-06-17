@@ -670,9 +670,16 @@ components:
         allow_multiple:
           type: boolean
           default: false
+        cmd_array:
+          type: array
+          description: Preferred argv-style command, for example ["node", "-e", "console.log(1)"]. Use ["bash", "-lc", "..."] only when shell behavior is intentional.
+          minItems: 1
+          items:
+            type: string
         cmd:
           type: array
-          description: Argv-style command, for example ["node", "-e", "console.log(1)"].
+          deprecated: true
+          description: Legacy alias for cmd_array; prefer cmd_array in new webchat calls.
           minItems: 1
           items:
             type: string
