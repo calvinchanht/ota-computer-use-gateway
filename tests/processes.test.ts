@@ -46,6 +46,17 @@ describe('process tools', () => {
     expect(second.output).not.toContain('first');
   });
 
+  it('reports clamped stale cursors instead of failing silently', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const started = await processStart(config, workspace, 'node background.cjs');
+    const processId = String(started.data?.process_id);
+    await expect(waitForOutput(processId, 'background-ok')).resolves.toContain('background-ok');
+    const data = processLog(processId, 50000, 9999).data as { cursor: number; next_cursor: number; cursor_clamped: boolean; output: string };
+    expect(data.cursor).toBe(data.next_cursor);
+    expect(data.cursor_clamped).toBe(true);
+    expect(data.output).toBe('');
+  });
+
   it('starts argv run_command work in tail mode', async () => {
     const workspace = await fixtureWorkspace(true);
     const started = await runArgvTailTool(config, workspace, [process.execPath, '-e', "process.stdout.write('tail-mode-ok')"]);

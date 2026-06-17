@@ -104,11 +104,12 @@ export function describeManagedProcess(item: ManagedProcess) {
   };
 }
 
-export function managedProcessOutput(item: ManagedProcess, cursor?: number, maxBytes = MAX_BUFFER_BYTES): { output: string; next_cursor: number; cursor: number; truncated: boolean } {
+export function managedProcessOutput(item: ManagedProcess, cursor?: number, maxBytes = MAX_BUFFER_BYTES): { output: string; next_cursor: number; cursor: number; truncated: boolean; cursor_clamped: boolean } {
   const combined = item.stdout + item.stderr;
-  const boundedCursor = cursor === undefined ? 0 : Math.min(Math.max(Math.trunc(cursor), 0), combined.length);
+  const requestedCursor = cursor === undefined ? 0 : Math.trunc(cursor);
+  const boundedCursor = Math.min(Math.max(requestedCursor, 0), combined.length);
   const output = truncateText(combined.slice(boundedCursor), Math.min(Math.max(Math.trunc(maxBytes), 1), MAX_BUFFER_BYTES));
-  return { output: output.text, next_cursor: combined.length, cursor: boundedCursor, truncated: output.truncated };
+  return { output: output.text, next_cursor: combined.length, cursor: boundedCursor, truncated: output.truncated, cursor_clamped: requestedCursor !== boundedCursor };
 }
 
 

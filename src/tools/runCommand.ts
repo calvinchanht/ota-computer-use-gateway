@@ -17,7 +17,7 @@ export async function runConfiguredCommand(workspace: Workspace, commandId: stri
   assertNoJobLifecycleCommand(command);
   const result = await runShellCommand(command, workspace.realRoot);
   const output = truncateText(result.stdout + result.stderr, MAX_OUTPUT_BYTES);
-  return ok('configured command finished', { command_id: commandId, exit_code: result.code, output: output.text, truncated: output.truncated });
+  return ok('configured command finished', { command_id: commandId, exit_code: result.code, timed_out: result.timed_out, output: output.text, truncated: output.truncated });
 }
 
 export async function runShellTool(config: AppConfig, workspace: Workspace, command: string) {
@@ -25,7 +25,7 @@ export async function runShellTool(config: AppConfig, workspace: Workspace, comm
   assertNoJobLifecycleCommand(command);
   const result = await runShellCommand(command, workspace.realRoot, config.security.max_exec_ms);
   const output = truncateText(result.stdout + result.stderr, MAX_OUTPUT_BYTES);
-  return ok('command finished', { exit_code: result.code, output: output.text, truncated: output.truncated });
+  return ok('command finished', { exit_code: result.code, timed_out: result.timed_out, output: output.text, truncated: output.truncated });
 }
 
 export async function runArgvTool(config: AppConfig, workspace: Workspace, cmd: string[], cwdPath = '.', timeoutMs = 30000, maxStdoutBytes = 20000, maxStderrBytes = 8000) {
@@ -38,7 +38,7 @@ export async function runArgvTool(config: AppConfig, workspace: Workspace, cmd: 
   const result = await runCommand(command, args, cwd.absolute, timeout);
   const stdout = truncateText(result.stdout, Math.min(Math.max(1, maxStdoutBytes), MAX_OUTPUT_BYTES));
   const stderr = truncateText(result.stderr, Math.min(Math.max(1, maxStderrBytes), MAX_OUTPUT_BYTES));
-  return ok('command finished', { command: cmd, cwd: cwd.relative, timeout_ms: timeout, exit_code: result.code, stdout: stdout.text, stderr: stderr.text, stdout_truncated: stdout.truncated, stderr_truncated: stderr.truncated });
+  return ok('command finished', { command: cmd, cwd: cwd.relative, timeout_ms: timeout, timed_out: result.timed_out, exit_code: result.code, stdout: stdout.text, stderr: stderr.text, stdout_truncated: stdout.truncated, stderr_truncated: stderr.truncated });
 }
 
 export async function runArgvTailTool(config: AppConfig, workspace: Workspace, cmd: string[], cwdPath = '.', timeoutMs = 30000) {

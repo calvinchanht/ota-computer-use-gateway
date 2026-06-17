@@ -48,6 +48,19 @@ describe('runConfiguredCommand', () => {
     expect(JSON.stringify(result.data)).toContain('probe-ok');
   });
 
+  it('preserves JSON-looking argv values without shell re-encoding', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const payload = '{"quoted":"a b","slash":"c\\\\d"}';
+    const result = await runArgvTool(config, workspace, [process.execPath, '-e', 'process.stdout.write(process.argv[1])', payload]);
+    expect((result.data as { stdout: string }).stdout).toBe(payload);
+  });
+
+  it('reports command timeouts explicitly', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const result = await runArgvTool(config, workspace, [process.execPath, '-e', 'setTimeout(() => {}, 1000)'], '.', 1);
+    expect(result.data).toMatchObject({ timed_out: true });
+  });
+
 });
 
 async function fixtureWorkspace(allowTests: boolean): Promise<Workspace> {

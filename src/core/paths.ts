@@ -8,8 +8,9 @@ export type ResolvedPath = { absolute: string; relative: string };
 
 export async function resolveInside(workspace: Workspace, requested: string, config: AppConfig): Promise<ResolvedPath> {
   const joined = resolveRequestedPath(workspace, requested);
+  assertInside(workspace.realRoot, joined, requested);
   const real = await realpath(joined);
-  assertInside(workspace.realRoot, real);
+  assertInside(workspace.realRoot, real, requested);
   const relative = displayRelative(workspace.realRoot, real);
   const denied = deniedPath(relative, config.security.denied_globs, config.security.protect_secret_paths);
   if (denied) throw new Error(denied);
@@ -18,7 +19,7 @@ export async function resolveInside(workspace: Workspace, requested: string, con
 
 export async function resolveWritableInside(workspace: Workspace, requested: string, config: AppConfig): Promise<ResolvedPath> {
   const absolute = resolveRequestedPath(workspace, requested);
-  assertInside(workspace.realRoot, absolute);
+  assertInside(workspace.realRoot, absolute, requested);
   const relative = displayRelative(workspace.realRoot, absolute);
   const denied = deniedPath(relative, config.security.denied_globs, config.security.protect_secret_paths);
   if (denied) throw new Error(denied);
@@ -30,12 +31,17 @@ function resolveRequestedPath(workspace: Workspace, requested: string): string {
   return path.isAbsolute(requested) ? path.resolve(requested) : path.resolve(workspace.realRoot, requested);
 }
 
-export function assertInside(root: string, candidate: string): void {
+export function assertInside(root: string, candidate: string, requested = candidate): void {
   const rel = path.relative(root, candidate);
   if (rel === '') return;
-  if (rel.startsWith('..') || path.isAbsolute(rel)) throw new Error('path resolves outside workspace');
+  if (rel.startsWith('..') || path.isAbsolute(rel)) throw new Error(pathBoundaryError(requested));
 }
 
 function displayRelative(root: string, candidate: string): string {
   return (path.relative(root, candidate) || '.').replaceAll('\\', '/');
+}
+
+function pathBoundaryError(requested: string): string {
+  const kind = path.isAbsolute(requested) ? 'absolute' : 'relative';
+  return `path resolves outside workspace (${kind} input); use a workspace-relative path inside the configured workspace root`;
 }

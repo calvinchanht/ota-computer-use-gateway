@@ -20,7 +20,7 @@ Mutation tools are deferred until policy, audit, and approval are proven.
 ## Implemented behavior notes
 
 - `apply_patch` performs exact-text replacement only after local approval.
-- `run_command` only runs configured command IDs, never arbitrary shell text from the client.
+- `run_command` runs bounded argv commands when workspace exec is enabled. `run_configured_command` runs configured command IDs.
 - Command execution is routed through a platform adapter so Linux/macOS and future Windows support stay isolated.
 - Workspace tools write audit records under `.agent/audit/tool_calls.jsonl`.
 - `.agent/PANIC_STOP` blocks non-low-risk workspace tools.

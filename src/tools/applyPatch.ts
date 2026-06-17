@@ -21,7 +21,7 @@ type LoadedChange = PatchChange & { absolute: string; before_hash: string; after
 async function loadChange(config: AppConfig, workspace: Workspace, change: PatchChange): Promise<LoadedChange> {
   const resolved = await resolveInside(workspace, change.path, config);
   const current = await readFile(resolved.absolute, 'utf8');
-  if (!current.includes(change.old_text)) throw new Error(`old_text not found in ${change.path}`);
+  assertExactSingleMatch(current, change.old_text, resolved.relative);
   const next = current.replace(change.old_text, change.new_text);
   return { ...change, path: resolved.relative, absolute: resolved.absolute, before_hash: sha256(current), after_hash: sha256(next), before_state: await fileState(resolved.absolute) };
 }
@@ -31,6 +31,13 @@ async function writeChange(change: LoadedChange): Promise<void> {
   if (!sameFileState(await fileState(change.absolute), change.before_state)) throw new Error(`file changed before apply: ${change.path}`);
   if (sha256(current) !== change.before_hash) throw new Error(`file changed before apply: ${change.path}`);
   await writeFile(change.absolute, current.replace(change.old_text, change.new_text));
+}
+
+function assertExactSingleMatch(current: string, oldText: string, filePath: string): void {
+  if (!oldText) throw new Error(`old_text must not be empty for ${filePath}`);
+  const first = current.indexOf(oldText);
+  if (first === -1) throw new Error(`old_text not found in ${filePath}; use exact current file text including whitespace and line endings`);
+  if (current.indexOf(oldText, first + oldText.length) !== -1) throw new Error(`old_text is not unique in ${filePath}; use a larger exact-text block`);
 }
 
 function hashSummary(change: LoadedChange) {

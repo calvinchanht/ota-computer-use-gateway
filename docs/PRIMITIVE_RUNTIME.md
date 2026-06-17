@@ -31,6 +31,13 @@ Use `get_tool_profile` at runtime to discover canonical tools, compatibility ali
 
 All filesystem tools resolve paths inside the configured workspace root. Symlink escapes and denied globs are rejected.
 
+Path contract:
+
+- Prefer workspace-relative paths.
+- Absolute paths are accepted only when they resolve under the configured workspace root.
+- `..` escapes and symlink escapes are rejected with workspace-relative guidance.
+- If an agent is unsure where it is operating, call `workspace_status` or `workspace_inventory` before touching paths.
+
 Keep text and binary tools separate:
 
 - use `read_file` / `write_file` for UTF-8 text;
@@ -54,12 +61,27 @@ Keep `edit_file` and `apply_patch` separate:
 - `edit_file` is for one surgical replacement in one file.
 - `apply_patch` is for structured multi-change edits.
 
+Patch payload contract:
+
+- `old_text` must be non-empty and must match exactly once.
+- Non-unique matches are rejected; use a larger exact-text block instead of relying on first-match behavior.
+- Not-found matches include a reminder to verify whitespace and line endings.
+- Patches are intentionally strict. Do not fuzzy-apply or silently rewrite whole files to recover from stale context.
+
 ## Command primitives
 
-- `run_command` — run an approved shell command in the workspace root.
+- `run_command` — run a bounded argv command in the workspace root or a workspace-relative `cwd`.
 - `run_configured_command` — run a configured command id after approval.
 
-`run_command` is the canonical raw shell primitive. `exec` exists only as a deprecated OpenClaw-compatible alias.
+`run_command` uses `cmd: string[]` at the HTTP JSON boundary. Put the executable in `cmd[0]` and each argument in its own array entry. Do not send one shell-quoted command string unless you are using an explicitly documented compatibility path.
+
+Command result contract:
+
+- Responses include `command`, `cwd`, `timeout_ms`, `timed_out`, `exit_code`, `stdout`, `stderr`, and truncation flags where applicable.
+- JSON-looking arguments are passed as normal argv strings, not re-serialized by the gateway.
+- For long-running work, prefer tail mode or `start_process` plus `read_process(cursor)` instead of retrying the original command.
+
+`exec` exists only as a deprecated OpenClaw-compatible alias.
 
 ## Managed process primitives
 
@@ -75,7 +97,22 @@ For long-running commands where incremental output matters, prefer:
 start_process -> read_process(cursor=previous next_cursor) -> stop_process if needed
 ```
 
-This gives cursor-based tail behavior without retrying the original command. `read_process` returns `output`, `cursor`, `next_cursor`, `running`, `exit_code`, and `tail_supported`.
+This gives cursor-based tail behavior without retrying the original command. `read_process` returns `output`, `cursor`, `next_cursor`, `cursor_clamped`, `running`, `exit_code`, and `tail_supported`.
+
+If a stale or out-of-range cursor is provided, the gateway clamps it to the current buffer and sets `cursor_clamped=true`. Treat this as a recoverable tail-position correction, not a reason to rerun the original command.
+
+## Git primitives
+
+- `git_status` — return concise git status.
+- `git_diff` — return bounded git diff output.
+- `git_push_current_branch` — push the current branch using configured server-side credentials.
+
+Git output contract:
+
+- Tokenized remotes are sanitized before display.
+- GitHub token-looking strings are redacted from command output.
+- Token files and token values must never be returned to the caller.
+- Wrong repo/ref/auth failures should be treated as Git lane diagnostics, not as generic schema failures.
 
 Deprecated compatibility aliases remain during migration:
 

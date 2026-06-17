@@ -42,11 +42,11 @@ export async function gitPushCurrentBranch(config: AppConfig, workspace: Workspa
       GIT_ASKPASS: askpass,
       GIT_TERMINAL_PROMPT: '0'
     });
-    const output = truncateText(redact(result.stdout + result.stderr), 50000);
+    const output = truncateText(redactGitOutputForDisplay(result.stdout + result.stderr), 50000);
     return ok('git push finished', {
       repo_path: path.relative(workspace.realRoot, cwd) || '.',
       remote,
-      remote_url: sanitizeRemote(remoteUrlRaw),
+      remote_url: sanitizeGitRemoteForDisplay(remoteUrlRaw),
       branch: currentBranch,
       sha,
       exit_code: result.code,
@@ -78,11 +78,11 @@ function askpassScript(tokenFile: string): string {
   return `#!/usr/bin/env bash\ncase "$1" in\n  *Username*) printf '%s\\n' 'x-access-token' ;;\n  *Password*) cat '${safePath}' ;;\n  *) printf '\\n' ;;\nesac\n`;
 }
 
-function sanitizeRemote(url: string): string {
+export function sanitizeGitRemoteForDisplay(url: string): string {
   return url.replace(/(https?:\/\/)([^/@:]+)(:[^/@]+)?@/g, '$1');
 }
 
-function redact(text: string): string {
+export function redactGitOutputForDisplay(text: string): string {
   return text.replace(/gh[pousr]_[A-Za-z0-9_]+/g, '[GITHUB_TOKEN_REDACTED]')
     .replace(/(https?:\/\/)([^\s/@:]+)(:[^\s/@]+)?@/g, '$1');
 }
