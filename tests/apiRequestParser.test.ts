@@ -79,6 +79,23 @@ describe('HTTP API request normalizer', () => {
     expect(JSON.stringify(writeEvent)).not.toContain('secret-ish');
   });
 
+
+  it('builds redacted OTA misuse events for browser and CUA argument shapes', () => {
+    const cdpParamsEvent = otaMisuseEventForToolError('browser_cdp_call', { workspace_id: 'genesis', target_id: 'tab-1', method: 'Runtime.evaluate', params: 'alert-secret' }, 'params must be an object');
+    expect(cdpParamsEvent?.misuse).toMatchObject({ error_code: 'browser_cdp_call_params_shape', bad_field: 'params', bad_field_type: 'string', expected_shape_id: 'browser_cdp_call.params_object.v1', hint_id: 'use_params_object' });
+    expect(JSON.stringify(cdpParamsEvent)).not.toContain('alert-secret');
+
+    const batchEvent = otaMisuseEventForToolError('cua_driver_batch', { workspace_id: 'genesis', calls: [{ params: { raw: 'hidden' } }] }, 'calls[0].method is required');
+    expect(batchEvent?.misuse).toMatchObject({ error_code: 'cua_driver_batch_calls_shape', bad_field: 'calls', bad_field_type: 'array', expected_shape_id: 'cua_driver_batch.calls_method_string.v1', hint_id: 'use_call_method_string' });
+    expect(JSON.stringify(batchEvent)).not.toContain('hidden');
+  });
+
+  it('builds redacted OTA misuse events for search/query argument shapes', () => {
+    const event = otaMisuseEventForToolError('search_files', { workspace_id: 'genesis', root: '.', query: { contains: 'private' } }, 'query is required');
+    expect(event?.misuse).toMatchObject({ error_code: 'search_files_query_shape', bad_field: 'query', bad_field_type: 'object', expected_shape_id: 'search_files.query_string.v1', hint_id: 'use_query_string' });
+    expect(JSON.stringify(event)).not.toContain('private');
+  });
+
   it('builds redacted OTA misuse events for run_command string cmd errors', () => {
     const event = otaMisuseEventForToolError('run_command', { workspace_id: 'genesis', cmd: 'git status' }, 'cmd must be an array. Use cmd_array.');
     expect(event?.misuse).toMatchObject({ error_code: 'invalid_run_command_shape', bad_field: 'cmd', bad_field_type: 'string', expected_shape_id: 'run_command.argv.v1', hint_id: 'use_cmd_array' });

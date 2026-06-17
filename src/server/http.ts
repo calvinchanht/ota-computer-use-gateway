@@ -998,6 +998,8 @@ function toolMisuseDetails(tool: string, args: Record<string, unknown>, summary:
 }
 
 function commonToolShapeMisuse(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
+  const batch = batchToolShapeMisuse(tool, args, summary);
+  if (batch) return batch;
   for (const spec of commonToolShapeSpecs(tool)) {
     if (!matchesFieldError(summary, spec.field)) continue;
     return fieldMisuse(tool, args, spec.field, spec.expected_shape_id, spec.hint_id);
@@ -1010,6 +1012,10 @@ type CommonToolShapeSpec = { field: string; expected_shape_id: string; hint_id: 
 function commonToolShapeSpecs(tool: string): CommonToolShapeSpec[] {
   const specs: CommonToolShapeSpec[] = [];
   if (pathStringTools().has(tool)) specs.push({ field: 'path', expected_shape_id: 'filesystem.path_string.v1', hint_id: 'use_path_string' });
+  if (queryStringTools().has(tool)) specs.push({ field: 'query', expected_shape_id: `${tool}.query_string.v1`, hint_id: 'use_query_string' });
+  if (targetIdTools().has(tool)) specs.push({ field: 'target_id', expected_shape_id: 'browser.target_id_string.v1', hint_id: 'use_target_id_string' });
+  if (methodStringTools().has(tool)) specs.push({ field: 'method', expected_shape_id: `${tool}.method_string.v1`, hint_id: 'use_method_string' });
+  if (paramsObjectTools().has(tool)) specs.push({ field: 'params', expected_shape_id: `${tool}.params_object.v1`, hint_id: 'use_params_object' });
   if (tool === 'write_file') specs.push({ field: 'content', expected_shape_id: 'write_file.content_string.v1', hint_id: 'use_content_string' });
   if (tool === 'write_binary_file') specs.push({ field: 'base64', expected_shape_id: 'write_binary_file.base64_string.v1', hint_id: 'use_base64_string' });
   if (tool === 'edit_file') specs.push({ field: 'old_text', expected_shape_id: 'edit_file.old_text_string.v1', hint_id: 'use_old_text_string' }, { field: 'new_text', expected_shape_id: 'edit_file.new_text_string.v1', hint_id: 'use_new_text_string' });
@@ -1018,6 +1024,35 @@ function commonToolShapeSpecs(tool: string): CommonToolShapeSpec[] {
 
 function pathStringTools(): Set<string> {
   return new Set(['stat_path', 'read_file', 'read_binary_file', 'write_file', 'write_binary_file', 'edit_file', 'delete_file', 'delete_path', 'infer_file_structure', 'sample_file', 'read_file_chunk', 'read_file_lines', 'read_around', 'search_file', 'table_profile', 'query_table', 'query_table_aggregate', 'json_profile', 'patch_file_lines', 'record_artifact']);
+}
+
+function queryStringTools(): Set<string> {
+  return new Set(['search_file', 'search_files', 'query_json']);
+}
+
+function targetIdTools(): Set<string> {
+  return new Set(['browser_visible_state', 'browser_tail', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_call', 'browser_cdp_batch']);
+}
+
+function methodStringTools(): Set<string> {
+  return new Set(['browser_cdp_browser_call', 'browser_cdp_call', 'cua_driver_call']);
+}
+
+function paramsObjectTools(): Set<string> {
+  return new Set(['browser_cdp_browser_call', 'browser_cdp_call', 'cua_driver_call']);
+}
+
+function batchToolShapeMisuse(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
+  if (!batchCallTools().has(tool)) return null;
+  if (summary === 'calls array is required') return fieldMisuse(tool, args, 'calls', `${tool}.calls_array.v1`, 'use_calls_array');
+  if (summary === 'calls item must be an object') return fieldMisuse(tool, args, 'calls', `${tool}.calls_item_object.v1`, 'use_call_items_as_objects');
+  if (/^calls\[\d+\]\.method is required$/.test(summary)) return fieldMisuse(tool, args, 'calls', `${tool}.calls_method_string.v1`, 'use_call_method_string');
+  if (/^calls\[\d+\]\.params must be an object$/.test(summary)) return fieldMisuse(tool, args, 'calls', `${tool}.calls_params_object.v1`, 'use_call_params_object');
+  return null;
+}
+
+function batchCallTools(): Set<string> {
+  return new Set(['browser_cdp_browser_batch', 'browser_cdp_batch', 'cua_driver_batch']);
 }
 
 function matchesFieldError(summary: string, field: string): boolean {
