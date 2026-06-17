@@ -23,14 +23,14 @@ export async function gitPushCurrentBranch(config: AppConfig, workspace: Workspa
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   const repo = await resolveInside(workspace, repoPath, config);
   const isRepo = await runCommand('git', ['rev-parse', '--is-inside-work-tree'], repo.absolute, config.security.max_exec_ms);
-  if (isRepo.code !== 0 || !isRepo.stdout.includes('true')) throw new Error('path is not inside a git work tree');
+  if (isRepo.code !== 0 || !isRepo.stdout.includes('true')) throw new Error('git repo diagnostic: repo_path is not inside a git work tree');
   const top = await runCommand('git', ['rev-parse', '--show-toplevel'], repo.absolute, config.security.max_exec_ms);
-  if (top.code !== 0) throw new Error(limit(top.stderr || 'failed to resolve git root'));
+  if (top.code !== 0) throw new Error(`git repo diagnostic: failed to resolve git root: ${safeGitMessage(top.stderr || top.stdout)}`);
   const cwd = top.stdout.trim();
-  const currentBranch = branch || (await gitOutput(['rev-parse', '--abbrev-ref', 'HEAD'], cwd, config));
+  const currentBranch = branch || (await gitOutput(['rev-parse', '--abbrev-ref', 'HEAD'], cwd, config, 'git ref diagnostic: failed to resolve current branch'));
   if (!currentBranch || currentBranch === 'HEAD') throw new Error('cannot push detached HEAD without an explicit branch');
-  const sha = await gitOutput(['rev-parse', '--short', 'HEAD'], cwd, config);
-  const remoteUrlRaw = await gitOutput(['remote', 'get-url', remote], cwd, config);
+  const sha = await gitOutput(['rev-parse', '--short', 'HEAD'], cwd, config, 'git ref diagnostic: failed to resolve HEAD');
+  const remoteUrlRaw = await gitOutput(['remote', 'get-url', remote], cwd, config, `git remote diagnostic: remote not found or unreadable: ${remote}`);
   const tokenFile = workspace.git?.github_token_file || defaultTokenPath(workspace);
   const askpassDir = await mkdtemp(path.join(os.tmpdir(), 'ota-git-askpass-'));
   const askpass = path.join(askpassDir, 'askpass.sh');
@@ -43,13 +43,17 @@ export async function gitPushCurrentBranch(config: AppConfig, workspace: Workspa
       GIT_TERMINAL_PROMPT: '0'
     });
     const output = truncateText(redactGitOutputForDisplay(result.stdout + result.stderr), 50000);
+    const failed = result.code !== 0 || result.timed_out;
     return ok('git push finished', {
+      status: failed ? 'failed' : 'pushed',
+      failure_class: failed ? classifyGitPushFailure(output.text, result.timed_out) : null,
       repo_path: path.relative(workspace.realRoot, cwd) || '.',
       remote,
       remote_url: sanitizeGitRemoteForDisplay(remoteUrlRaw),
       branch: currentBranch,
       sha,
       exit_code: result.code,
+      timed_out: result.timed_out,
       output: output.text,
       truncated: output.truncated
     });
@@ -58,15 +62,20 @@ export async function gitPushCurrentBranch(config: AppConfig, workspace: Workspa
   }
 }
 
-async function gitOutput(args: string[], cwd: string, config: AppConfig): Promise<string> {
+async function gitOutput(args: string[], cwd: string, config: AppConfig, context: string): Promise<string> {
   const result = await runCommand('git', args, cwd, config.security.max_exec_ms);
-  if (result.code !== 0) throw new Error(limit(result.stderr || result.stdout || `git ${args.join(' ')} failed`));
+  if (result.code !== 0) throw new Error(`${context}: ${safeGitMessage(result.stderr || result.stdout || `git ${args.join(' ')} failed`)}`);
   return result.stdout.trim();
 }
 
 async function assertReadableToken(tokenFile: string) {
-  const token = (await readFile(tokenFile, 'utf8')).trim();
-  if (!token) throw new Error('configured git token file is empty');
+  let token = '';
+  try {
+    token = (await readFile(tokenFile, 'utf8')).trim();
+  } catch {
+    throw new Error('git auth diagnostic: configured github token file is not readable');
+  }
+  if (!token) throw new Error('git auth diagnostic: configured github token file is empty');
 }
 
 function defaultTokenPath(workspace: Workspace): string {
@@ -85,6 +94,18 @@ export function sanitizeGitRemoteForDisplay(url: string): string {
 export function redactGitOutputForDisplay(text: string): string {
   return text.replace(/gh[pousr]_[A-Za-z0-9_]+/g, '[GITHUB_TOKEN_REDACTED]')
     .replace(/(https?:\/\/)([^\s/@:]+)(:[^\s/@]+)?@/g, '$1');
+}
+
+function classifyGitPushFailure(output: string, timedOut: boolean): string {
+  if (timedOut) return 'timeout';
+  if (/src refspec|does not match any/i.test(output)) return 'ref_mismatch';
+  if (/Authentication failed|could not read Username|Permission denied|Repository not found/i.test(output)) return 'auth_or_repo';
+  if (/not appear to be a git repository|Could not read from remote repository|unable to access/i.test(output)) return 'remote_unreachable';
+  return 'git_push_failed';
+}
+
+function safeGitMessage(text: string): string {
+  return limit(redactGitOutputForDisplay(text || 'unknown git failure'));
 }
 
 function limit(text: string, max = 20000): string {

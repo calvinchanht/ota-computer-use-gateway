@@ -112,7 +112,9 @@ Git output contract:
 - Tokenized remotes are sanitized before display.
 - GitHub token-looking strings are redacted from command output.
 - Token files and token values must never be returned to the caller.
-- Wrong repo/ref/auth failures should be treated as Git lane diagnostics, not as generic schema failures.
+- Wrong repo/ref/auth failures are Git lane diagnostics, not generic schema failures.
+- Pre-push repo, remote, and auth setup failures throw classed diagnostics such as `git repo diagnostic`, `git remote diagnostic`, or `git auth diagnostic`.
+- Push attempts return `status`, `failure_class`, `exit_code`, `timed_out`, and sanitized `output`. Known failure classes include `ref_mismatch`, `auth_or_repo`, `remote_unreachable`, `timeout`, and `git_push_failed`.
 
 Deprecated compatibility aliases remain during migration:
 
