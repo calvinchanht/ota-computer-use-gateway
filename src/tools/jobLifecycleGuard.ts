@@ -1,16 +1,18 @@
-const JOB_LIFECYCLE_ENDPOINT = /\/(?:threaddex\/)?v1\/(?:agents\/[^\s'";|&<>]+\/)?job\/?(?:\?|\/[^\s'";|&<>]*(?:\/(?:progress|deliver|continuation)|[?&]job_id=)|[?][^\s'";|&<>]*\bjob_id=)/i;
+const JOB_LIFECYCLE_ENDPOINT = /\/(?:threaddex\/)?v1\/(?:agents\/[^\s'";|&<>]+\/)?job(?:\/[^\s'";|&<>?]*)*(?:(?:\/(?:progress|deliver|continuation))|(?:[?&][^\s'";|&<>]*\bjob_id=)|(?:\/job_[^\s'";|&<>?]+(?:\/(?:progress|deliver|continuation))?))/i;
 const NETWORK_LIFECYCLE_CLIENT = /(?:^|[\s;&|])(?:curl|wget|http|https|httpie)(?:\s|$)/i;
 const CODE_LIFECYCLE_CLIENT = /(?:fetch\s*\(|requests\s*\.|urllib\.|Net::HTTP|axios\s*\.|http\.request\s*\(|https\.request\s*\()/i;
-const CODE_RUNNER = /(?:^|[\s;&|])(?:node|python3?|ruby|perl|php)(?:\s|$)/i;
+const CODE_RUNNER = /(?:^|[\s;&|/])(?:node|python3?|ruby|perl|php)(?:\s|$)/i;
 const INERT_SEARCH_COMMAND = /(?:^|[\s;&|])(?:grep|rg|ag)(?:\s|$)/i;
 const GITHUB_BODY_FILE_FLOW = /(?:^|\s)gh\s+issue\s+(?:create|comment|edit)\b[\s\S]*\s--body-file(?:\s|=)/i;
 const HEREDOC_START = /<<-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?/;
 const CAT_WRITE_HEREDOC = /(?:^|[\s;&|])cat\s*>/i;
 
-export function assertNoJobLifecycleCommand(commandText: string): void {
-  if (!JOB_LIFECYCLE_ENDPOINT.test(commandText)) return;
-  if (!isExecutableLifecycleCommand(commandText)) return;
-  throw new Error('blocked_job_lifecycle_via_run_command: executable Threaddex job lifecycle call detected; use native Threaddex Job API Action operations getJob, deliverJobProgress, deliverJob, or requestJobContinuation, and keep lifecycle endpoint mentions in inert docs/search/body-file flows only');
+export const JOB_LIFECYCLE_COMMAND_TIP = 'Tip: this command appears to mention or call Threaddex job lifecycle endpoints. If it is performing job retrieval, progress, final delivery, or continuation, use the native /threaddex Action operations getJob, deliverJobProgress, deliverJob, or requestJobContinuation instead of tunneling lifecycle through /ota run_command.';
+
+export function jobLifecycleCommandWarnings(commandText: string): string[] {
+  if (!JOB_LIFECYCLE_ENDPOINT.test(commandText)) return [];
+  if (!isExecutableLifecycleCommand(commandText)) return [];
+  return [JOB_LIFECYCLE_COMMAND_TIP];
 }
 
 export function commandTextFromArgv(cmd: string[]): string {

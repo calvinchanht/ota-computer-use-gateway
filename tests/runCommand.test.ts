@@ -31,19 +31,21 @@ describe('runConfiguredCommand', () => {
     expect(JSON.stringify(result.data)).toContain('shell-ok');
   });
 
-  it('blocks Threaddex job lifecycle calls through shell commands', async () => {
+  it('runs Threaddex job lifecycle shell commands with a native-API warning tip', async () => {
     const workspace = await fixtureWorkspace(true);
-    await expect(runShellTool(config, workspace, 'curl https://mickey-api.unrealize.com/threaddex/v1/job/job_1/deliver')).rejects.toThrow('blocked_job_lifecycle_via_run_command');
-    await expect(runShellTool(config, workspace, 'curl https://mickey-api.unrealize.com/threaddex/v1/job/job_1/progress')).rejects.toThrow('blocked_job_lifecycle_via_run_command');
-    await expect(runShellTool(config, workspace, 'curl https://mickey-api.unrealize.com/threaddex/v1/job/job_1/continuation')).rejects.toThrow('blocked_job_lifecycle_via_run_command');
+    const result = await runShellTool(config, workspace, "node -e \"process.stdout.write('ok')\" # curl https://mickey-api.unrealize.com/threaddex/v1/job/job_1/deliver");
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(result.data)).toContain('ok');
+    expect(JSON.stringify(result.warnings)).toContain('native /threaddex Action operations');
   });
 
-  it('blocks legacy query-style Job API lifecycle calls through argv commands', async () => {
+  it('runs legacy query-style Job API lifecycle argv commands with a native-API warning tip', async () => {
     const workspace = await fixtureWorkspace(true);
-    await expect(runArgvTool(config, workspace, ['curl', 'https://threaddex.example/v1/job/deliver?job_id=job_1'])).rejects.toThrow('blocked_job_lifecycle_via_run_command');
+    const result = await runArgvTool(config, workspace, [process.execPath, '-e', "process.stdout.write(process.argv[1])", 'https://threaddex.example/v1/job/deliver?job_id=job_1']);
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(result.data)).toContain('threaddex.example');
+    expect(JSON.stringify(result.warnings)).toContain('native /threaddex Action operations');
   });
-
-
 
   it('allows inert lifecycle mentions in issue-body and search workflows', async () => {
     const workspace = await fixtureWorkspace(true);
@@ -52,10 +54,12 @@ describe('runConfiguredCommand', () => {
     await expect(runArgvTool(config, workspace, ['gh', 'issue', 'create', '--title', 'doc', '--body-file', 'issue.md'])).resolves.toBeTruthy();
   });
 
-  it('blocks executable lifecycle calls while allowing inert text false-positive cases', async () => {
+  it('runs executable lifecycle-looking calls while returning a native-API warning tip', async () => {
     const workspace = await fixtureWorkspace(true);
-    await expect(runShellTool(config, workspace, "node -e \"fetch('https://example.unrealize.com/threaddex/v1/job/job_1/deliver', {method:'POST'})\"")).rejects.toThrow('executable Threaddex job lifecycle call detected');
-    await expect(runShellTool(config, workspace, "python3 - <<'PY'\nimport requests\nrequests.post('https://example.unrealize.com/threaddex/v1/job/job_1/progress')\nPY")).rejects.toThrow('executable Threaddex job lifecycle call detected');
+    const result = await runShellTool(config, workspace, "node -e \"process.stdout.write('ok'); /* fetch('https://example.unrealize.com/threaddex/v1/job/job_1/deliver', {method:'POST'}) */\"");
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(result.data)).toContain('ok');
+    expect(JSON.stringify(result.warnings)).toContain('native /threaddex Action operations');
   });
 
   it('still allows ordinary non-lifecycle HTTP probes through run_command', async () => {
