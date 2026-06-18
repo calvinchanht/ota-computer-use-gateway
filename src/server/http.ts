@@ -20,7 +20,7 @@ import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browser
 import { computerScreenClick, computerScreenDrag, computerScreenMouseMove, computerScreenScroll, computerWindowClick, computerWindowDrag, computerWindowMouseMove, computerWindowScroll, cuaDriverBatch, cuaDriverCall, cuaDriverStatus, type CuaDriverBatchStep } from '../tools/computer.js';
 import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable, queryTableAggregate, readAround, readFileChunk, readFileLinesLarge, sampleFile, searchFile, searchFiles, tableProfile, updateTableRows } from '../tools/largeFiles.js';
 import { runArgvTailTool, runArgvTool } from '../tools/runCommand.js';
-import { processKill, processList, processLog, processStart, processWrite } from '../tools/processes.js';
+import { processKill, processList, processLog, processStart, processStartArgv, processWrite } from '../tools/processes.js';
 import { listArtifacts, recordArtifact } from '../tools/artifacts.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
@@ -572,7 +572,7 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'query_json') return queryJson(config, workspace, requiredString(args.path, 'path'), requiredString(args.query, 'query'), optionalNumber(args.max_bytes) ?? 50000);
   if (tool === 'patch_file_lines') return patchFileLines(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.start_line) ?? 1, optionalNumber(args.end_line) ?? optionalNumber(args.start_line) ?? 1, requiredString(args.replacement, 'replacement'), optionalString(args.expected_sha256), args.dry_run !== false);
   if (tool === 'update_table_rows') return updateTableRows(config, workspace, requiredString(args.path, 'path'), recordArg(args.where, 'where') ?? {}, stringRecordArg(args.set, 'set'), args.dry_run !== false, Boolean(args.allow_multiple));
-  if (tool === 'start_process') return processStart(config, workspace, requiredString(args.command, 'command'));
+  if (tool === 'start_process') return startProcessFromArgs(config, workspace, args);
   if (tool === 'list_processes') return processList();
   if (tool === 'read_process') return processLog(requiredString(args.process_id, 'process_id'), optionalNumber(args.max_bytes) ?? 50000, optionalNumber(args.cursor));
   if (tool === 'write_process') return processWrite(requiredString(args.process_id, 'process_id'), requiredString(args.input, 'input'), Boolean(args.close_stdin));
@@ -780,6 +780,15 @@ function requiredStringArray(value: unknown, name: string): string[] {
   return value.map((item) => requiredString(item, 'array item'));
 }
 
+async function startProcessFromArgs(config: AppConfig, workspace: Workspace, args: Record<string, unknown>): Promise<ToolResult> {
+  const preferred = args.cmd_array;
+  const legacyCommand = args.command;
+  if (preferred !== undefined && legacyCommand !== undefined) throw new Error('start_process cmd_array/command conflict: prefer cmd_array and remove legacy command.');
+  if (preferred !== undefined) return processStartArgv(config, workspace, requiredStringArray(preferred, 'cmd_array'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000);
+  if (legacyCommand !== undefined) return processStart(config, workspace, requiredString(legacyCommand, 'command'));
+  throw new Error('cmd_array must be an array');
+}
+
 export function runCommandCmdArray(args: Record<string, unknown>): string[] {
   const preferred = args.cmd_array;
   const legacy = args.cmd;
@@ -902,6 +911,8 @@ function toolMisuseDetails(tool: string, args: Record<string, unknown>, summary:
   if (exposure) return exposure;
   const runCommand = runCommandShapeMisuse(tool, args, summary);
   if (runCommand) return runCommand;
+  const startProcess = startProcessShapeMisuse(tool, args, summary);
+  if (startProcess) return startProcess;
   const common = commonToolShapeMisuse(tool, args, summary);
   if (common) return common;
   if (isJobLifecycleMisuse(tool, summary)) return {
@@ -932,6 +943,15 @@ function runCommandShapeMisuse(tool: string, args: Record<string, unknown>, summ
   if (summary === 'cmd_array must be an array') return fieldMisuse(tool, args, 'cmd_array', 'run_command.argv.v1', 'use_cmd_array');
   if (summary === 'array item is required') return fieldMisuse(tool, args, 'cmd_array', 'run_command.argv_items_string.v1', 'use_cmd_array_of_strings');
   if (summary.startsWith('cmd_array/cmd conflict')) return fieldMisuse(tool, args, 'cmd_array', 'run_command.single_argv_field.v1', 'remove_legacy_cmd_or_match_cmd_array');
+  return null;
+}
+
+function startProcessShapeMisuse(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
+  if (tool !== 'start_process') return null;
+  if (summary === 'cmd_array must be an array') return fieldMisuse(tool, args, 'cmd_array', 'start_process.argv.v1', 'use_cmd_array');
+  if (summary === 'array item is required') return fieldMisuse(tool, args, 'cmd_array', 'start_process.argv_items_string.v1', 'use_cmd_array_of_strings');
+  if (summary === 'command is required') return fieldMisuse(tool, args, 'command', 'start_process.command_string_legacy.v1', 'prefer_cmd_array_or_use_command_string');
+  if (summary.startsWith('start_process cmd_array/command conflict')) return fieldMisuse(tool, args, 'cmd_array', 'start_process.single_command_field.v1', 'remove_legacy_command_or_use_cmd_array_only');
   return null;
 }
 
@@ -1013,7 +1033,7 @@ function paramsObjectTools(): Set<string> {
 }
 
 function commandStringTools(): Set<string> {
-  return new Set(['start_process']);
+  return new Set([]);
 }
 
 function processIdStringTools(): Set<string> {

@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { processKill, processList, processLog, processStart, processWrite } from '../src/tools/processes.js';
+import { processKill, processList, processLog, processStart, processStartArgv, processWrite } from '../src/tools/processes.js';
 import { shutdownManagedProcesses } from '../src/core/processManager.js';
 import { runArgvTailTool } from '../src/tools/runCommand.js';
 import type { AppConfig } from '../src/config/schema.js';
@@ -20,6 +20,14 @@ describe('process tools', () => {
     const started = await processStart(config, workspace, 'node background.cjs');
     const processId = String(started.data?.process_id);
     expect(JSON.stringify(processList().data)).toContain(processId);
+    await expect(waitForOutput(processId, 'background-ok')).resolves.toContain('background-ok');
+  });
+
+  it('starts background processes from canonical argv arrays', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const started = await processStartArgv(config, workspace, [process.execPath, 'background.cjs']);
+    const processId = String(started.data?.process_id);
+    expect(started.data).toMatchObject({ command_argv: [process.execPath, 'background.cjs'], tail_supported: true, read_with: 'read_process' });
     await expect(waitForOutput(processId, 'background-ok')).resolves.toContain('background-ok');
   });
 

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { asText } from '../../core/result.js';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
 import { READ_ONLY, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
-import { processKill, processList, processLog, processStart, processWrite } from '../../tools/processes.js';
+import { processKill, processList, processLog, processStart, processStartArgv, processWrite } from '../../tools/processes.js';
 import { runConfiguredCommand, runShellTool } from '../../tools/runCommand.js';
 import type { RegisterContext } from './types.js';
 
@@ -32,7 +32,7 @@ function registerCanonicalProcessTools(context: RegisterContext): void {
   const { server, config, workspaces } = context;
   server.registerTool('start_process', startProcessTool(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'start_process',
-    (workspace) => processStart(config, workspace, args.command)
+    (workspace) => startProcessFromArgs(config, workspace, args)
   ));
   server.registerTool('list_processes', listProcessTool(false), async () => asText(processList()));
   server.registerTool('read_process', readProcessTool(false), async (args) => asText(processLog(args.process_id, args.max_bytes, args.cursor)));
@@ -42,7 +42,7 @@ function registerCanonicalProcessTools(context: RegisterContext): void {
 
 function registerDeprecatedProcessTools(context: RegisterContext): void {
   const { server, config, workspaces } = context;
-  server.registerTool('process_start', startProcessTool(true), async (args) => runWorkspaceTool(
+  server.registerTool('process_start', deprecatedStartProcessTool(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'process_start',
     (workspace) => processStart(config, workspace, args.command)
   ));
@@ -78,13 +78,35 @@ function execTool() {
   };
 }
 
-function startProcessTool(deprecated = false) {
+function startProcessTool() {
   return {
-    title: deprecated ? 'Process start (deprecated)' : 'Start process',
-    description: deprecated ? 'Deprecated alias for start_process.' : 'Start a scoped local background shell command.',
+    title: 'Start process',
+    description: 'Start a scoped local background command. Prefer cmd_array; command remains legacy shell-string compatibility.',
+    inputSchema: {
+      workspace_id: z.string(),
+      cmd_array: z.array(z.string()).min(1).optional(),
+      command: z.string().optional(),
+      cwd: z.string().optional(),
+      timeout_ms: z.number().optional()
+    },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
+  };
+}
+
+function deprecatedStartProcessTool() {
+  return {
+    title: 'Process start (deprecated)',
+    description: 'Deprecated alias for start_process.',
     inputSchema: { workspace_id: z.string(), command: z.string() },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
   };
+}
+
+function startProcessFromArgs(config: RegisterContext['config'], workspace: Parameters<typeof processStart>[1], args: { cmd_array?: string[]; command?: string; cwd?: string; timeout_ms?: number }) {
+  if (args.cmd_array !== undefined && args.command !== undefined) throw new Error('start_process cmd_array/command conflict: prefer cmd_array and remove legacy command.');
+  if (args.cmd_array !== undefined) return processStartArgv(config, workspace, args.cmd_array, args.cwd ?? '.', args.timeout_ms ?? 30000);
+  if (args.command !== undefined) return processStart(config, workspace, args.command);
+  throw new Error('cmd_array must be an array');
 }
 
 function listProcessTool(deprecated: boolean) {

@@ -85,7 +85,7 @@ Command result contract:
 
 ## Managed process primitives
 
-- `start_process` — start an approved background shell command.
+- `start_process` — start an approved background command. Prefer `cmd_array: string[]`, matching `run_command`; legacy `command: string` shell mode remains supported for compatibility.
 - `list_processes` — list managed background processes.
 - `read_process` — read buffered stdout/stderr for a process. Pass `cursor` from the previous `next_cursor` to receive only new output.
 - `write_process` — write UTF-8 input to process stdin, optionally closing stdin.
@@ -94,7 +94,7 @@ Command result contract:
 For long-running commands where incremental output matters, prefer:
 
 ```text
-start_process -> read_process(cursor=previous next_cursor) -> stop_process if needed
+start_process(cmd_array=[...]) -> read_process(cursor=previous next_cursor) -> stop_process if needed
 ```
 
 This gives cursor-based tail behavior without retrying the original command. `read_process` returns `output`, `cursor`, `next_cursor`, `cursor_clamped`, `running`, `exit_code`, and `tail_supported`.
