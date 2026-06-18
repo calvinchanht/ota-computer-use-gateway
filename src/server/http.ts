@@ -37,7 +37,6 @@ const API_DEBUG_REQUEST_CONTEXT_PATH = '/api/v1/debug/request_context';
 const API_RUNS_PREFIX = '/api/v1/runs/';
 const API_ARTIFACTS_PREFIX = '/api/v1/artifacts/';
 const OTA_PATH_PREFIX = '/ota';
-const THREADEX_PATH_PREFIX = '/threaddex';
 const MAX_RUN_RECORDS = 200;
 
 type ApiRunRecord = {
@@ -80,14 +79,13 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
   stripOtaPathPrefix(req);
   if (isHealth(req)) return sendJson(res, 200, healthPayload(config, startedAt));
   if (req.method === 'OPTIONS') return sendCors(res);
-  if (!isMcp(req) && !isApi(req) && !isThreaddexApi(req)) return sendJson(res, 404, { error: 'not_found' });
+  if (!isMcp(req) && !isApi(req)) return sendJson(res, 404, { error: 'not_found' });
   if (!allowedMethod(req.method)) return sendJson(res, 405, { error: 'method_not_allowed' });
   if (!rateLimiter.check(config, req)) return sendJson(res, 429, { error: 'rate_limited' });
   if (requestTooLarge(config, req)) return sendJson(res, 413, { error: 'payload_too_large' });
   const signedArtifact = isApiArtifactPath(req) && hasValidArtifactSignature(req);
   if (!signedArtifact && !isAuthorized(config, req)) return sendAuthError(config, res);
   if (isApiDebugRequestContext(req)) return handleApiDebugRequestContext(req, res);
-  if (isThreaddexApi(req)) return handleThreaddexApi(req, res);
   if (isApiArtifactPath(req)) return handleApiArtifact(config, req, res);
   if (isApiRunPath(req)) return handleApiRun(req, res);
   if (isApiTool(req)) return handleApiTool(config, req, res);
@@ -130,10 +128,6 @@ function isMcp(req: IncomingMessage): boolean {
 function isApi(req: IncomingMessage): boolean {
   const path = req.url?.split('?')[0];
   return path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || path === API_BATCH_PATH || isApiRunPath(req) || isApiArtifactPath(req);
-}
-
-function isThreaddexApi(req: IncomingMessage): boolean {
-  return req.url?.split('?')[0]?.startsWith(`${THREADEX_PATH_PREFIX}/`) ?? false;
 }
 
 function isApiArtifactPath(req: IncomingMessage): boolean {
@@ -205,84 +199,6 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
 }
 
-
-async function handleThreaddexApi(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const rawUrl = new URL(req.url ?? '/', 'http://localhost');
-  const path = rawUrl.pathname;
-  if (path === `${THREADEX_PATH_PREFIX}/v1/schema` && req.method === 'GET') {
-    return sendJson(res, 200, { ok: true, service: 'threaddex-job-api-proxy', protocol_version: 'job-api/1.0.1', schema_version: '1.0.3' });
-  }
-  const match = path.match(/^\/threaddex\/v1\/job\/([^/]+)(?:\/(progress|deliver|continuation))?$/);
-  if (!match) return sendJson(res, 404, { ok: false, error: 'not_found' });
-  const [, encodedJobId, action] = match;
-  if (!encodedJobId) return sendJson(res, 400, { ok: false, error: 'job_id_required' });
-  if (!action && req.method !== 'GET') return sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
-  if (action && req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
-  const body = req.method === 'POST' ? await readJsonBody(req).catch(() => undefined) : undefined;
-  const localPath = `/v1/job/${encodedJobId}${action ? `/${action}` : ''}`;
-  const base = threaddexJobApiBaseUrl();
-  const headers = await threaddexProxyHeaders(req.method === 'POST');
-  const upstream = await fetch(`${base}${localPath}`, { method: req.method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-  const contentType = upstream.headers.get('content-type') ?? 'application/json';
-  const text = await upstream.text();
-  if (!upstream.ok) return sendJson(res, upstream.status, threaddexProxyErrorBody(upstream.status, localPath, text));
-  applyCors(res);
-  res.writeHead(upstream.status, { 'content-type': contentType }).end(text);
-}
-
-export function threaddexProxyErrorBody(status: number, localPath: string, text: string): Record<string, unknown> {
-  const upstream = parseUpstreamError(text);
-  const error = stringValue(upstream.error) ?? `threaddex_upstream_${status}`;
-  return {
-    ...upstream,
-    ok: false,
-    error,
-    proxy: 'threaddex',
-    upstream_status: status,
-    upstream_path: localPath,
-    hint: threaddexProxyHint(status, error, localPath)
-  };
-}
-
-function parseUpstreamError(text: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(text) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : { upstream_body_preview: text.slice(0, 500) };
-  } catch {
-    return { upstream_body_preview: text.slice(0, 500) };
-  }
-}
-
-function threaddexProxyHint(status: number, error: string, localPath: string): string {
-  if (status === 404 && error === 'job_not_found') return `The job id was not found in this agent host. Verify the job belongs to this CustomGPT/action host before retrying: ${localPath}`;
-  if (status === 401) return 'The Threaddex proxy could not authorize to the local Job API. Check hidden Action auth and server-side bearer configuration; do not print tokens.';
-  if (status === 409) return 'The local Job API rejected the current job state or schema. Report this response visibly with secrets redacted.';
-  return 'The Threaddex proxy received a non-2xx local Job API response. Report this response visibly with secrets redacted.';
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value : undefined;
-}
-
-async function threaddexProxyHeaders(hasBody: boolean): Promise<Record<string, string>> {
-  const headers: Record<string, string> = {};
-  if (hasBody) headers['content-type'] = 'application/json';
-  const token = await threaddexProxyBearerToken();
-  if (token) headers.authorization = `Bearer ${token}`;
-  return headers;
-}
-
-async function threaddexProxyBearerToken(): Promise<string | undefined> {
-  const direct = process.env.THREADEX_JOB_API_BEARER_TOKEN ?? process.env.THREADEX_VISUAL_FOLLOWUP_BEARER_TOKEN;
-  if (direct) return direct;
-  const file = process.env.THREADEX_JOB_API_BEARER_TOKEN_FILE ?? process.env.THREADEX_VISUAL_FOLLOWUP_BEARER_TOKEN_FILE;
-  if (!file) return undefined;
-  return (await readFile(file, 'utf8')).trim();
-}
-
-function threaddexJobApiBaseUrl(): string {
-  return (process.env.THREADEX_JOB_API_BASE_URL ?? process.env.THREADEX_VISUAL_FOLLOWUP_BASE_URL ?? 'http://127.0.0.1:33986').replace(/\/$/, '');
-}
 
 async function handleApiTool(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
