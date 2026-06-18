@@ -31,7 +31,12 @@ export async function resolveWritableInside(workspace: Workspace, requested: str
 }
 
 function resolveRequestedPath(workspace: Workspace, requested: string): string {
+  if (!path.isAbsolute(requested) && hasParentDirectorySegment(requested)) throw new Error(pathBoundaryError(requested, 'workspace'));
   return path.isAbsolute(requested) ? path.resolve(requested) : path.resolve(workspace.realRoot, requested);
+}
+
+function hasParentDirectorySegment(requested: string): boolean {
+  return requested.split(/[\\/]+/u).some((segment) => segment === '..');
 }
 
 function pathBoundaryFor(workspace: Workspace, requested: string): { root: string; scope: PathScope } {

@@ -44,6 +44,13 @@ describe('resolveInside', () => {
     await expect(resolveInside(workspace, '../outside.txt', config)).rejects.toThrow('workspace-relative');
   });
 
+
+  it('rejects relative parent segments even when the workspace root is filesystem root', async () => {
+    const workspace = await fixtureRootWorkspace(true);
+    await expect(resolveInside(workspace, '../etc/hostname', config)).rejects.toThrow('workspace-relative');
+    await expect(resolveInside(workspace, 'tmp/../etc/hostname', config)).rejects.toThrow('workspace-relative');
+  });
+
   it('rejects relative path escapes with corrective guidance', async () => {
     const workspace = await fixtureWorkspace();
     await expect(resolveInside(workspace, '../outside.txt', config)).rejects.toThrow('workspace-relative');
@@ -78,6 +85,11 @@ async function fixtureWorkspace(allowWrite = false, machineAdmin = false): Promi
   const realRoot = await realpath(root);
   await mkdir(path.join(realRoot, 'src'), { recursive: true });
   return { id: 'test', name: 'Test', root, realRoot, allow_read: true, allow_write: allowWrite, allow_patch: true, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, api_sets: machineAdmin ? { machine_admin: true } : {}, filesystem: { machine_admin_host_scope: machineAdmin, host_root: '/' }, browser: { profiles: [] }, commands: {} };
+}
+
+
+async function fixtureRootWorkspace(machineAdmin = false): Promise<Workspace> {
+  return { id: 'root-test', name: 'Root Test', root: '/', realRoot: '/', allow_read: true, allow_write: false, allow_patch: true, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, api_sets: machineAdmin ? { machine_admin: true } : {}, filesystem: { machine_admin_host_scope: machineAdmin, host_root: '/' }, browser: { profiles: [] }, commands: {} };
 }
 
 async function outsideFile(name = 'outside.txt'): Promise<string> {
