@@ -16,6 +16,10 @@ describe('HTTP API request normalizer', () => {
     })).toEqual({ tool: 'heartbeat', arguments: {} });
   });
 
+  it('accepts omitted arguments for no-arg gateway requests', () => {
+    expect(parseApiToolRequest({ operation: 'heartbeat' })).toEqual({ tool: 'heartbeat', arguments: undefined });
+  });
+
   it('hoists top-level business arguments when intent is clear', () => {
     expect(parseApiToolRequest({
       tool: 'genesis_bootstrap',

@@ -124,7 +124,7 @@ components:
         arguments:
           type: object
           additionalProperties: true
-          description: Tool arguments. For workspace tools, use workspace_id=mickey until API-key scoping removes this.
+          description: Optional tool arguments. Omit for no-argument tools; omission is treated as {}. For workspace tools, use workspace_id=mickey until API-key scoping removes this. gateway_request is equivalent to one gateway_batch step plus optional thread/idempotency metadata.
         idempotency_key:
           type: string
     BatchStep:
@@ -138,6 +138,7 @@ components:
         arguments:
           type: object
           additionalProperties: true
+          description: Optional tool arguments. Omit for no-argument tools; omission is treated as {}.
     BatchRequest:
       type: object
       additionalProperties: false

@@ -10,7 +10,7 @@ paths:
     post:
       operationId: gateway_request
       summary: Run one scoped Mickey gateway tool call.
-      description: Runs one scoped OTA capability tool call in workspace_id mickey. Do not use this operation for Threaddex job retrieval or delivery; use the native /threaddex operations getJob, deliverJobProgress, deliverJob, and requestJobContinuation instead.
+      description: Runs one scoped OTA capability tool call in workspace_id mickey. Equivalent to gateway_batch with exactly one step plus optional thread/idempotency metadata. Omit arguments for no-argument operations; omitted arguments are treated as {}. Do not use this operation for Threaddex job retrieval or delivery; use the native /threaddex operations getJob, deliverJobProgress, deliverJob, and requestJobContinuation instead.
       security:
         - bearerAuth: []
       requestBody:
@@ -262,7 +262,7 @@ components:
     GatewayStep:
       type: object
       additionalProperties: false
-      required: [operation, arguments]
+      required: [operation]
       properties:
         operation:
           $ref: '#/components/schemas/GatewayOperationName'
@@ -271,10 +271,11 @@ components:
           description: Backward-compatible alias for operation. Prefer operation.
         arguments:
           $ref: '#/components/schemas/GatewayArguments'
+          description: Optional tool-specific arguments. Omit for no-argument operations; the gateway treats omission as {}.
     GatewayRequest:
       type: object
       additionalProperties: false
-      required: [operation, arguments]
+      required: [operation]
       properties:
         idempotency_key:
           type: string
@@ -291,6 +292,7 @@ components:
           description: Backward-compatible alias for operation. Prefer operation and do not send both unless they match.
         arguments:
           $ref: '#/components/schemas/GatewayArguments'
+          description: Optional tool-specific arguments. Omit for no-argument operations; the gateway treats omission as {}.
     GatewayOperationName:
       type: string
       enum:
