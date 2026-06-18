@@ -43,6 +43,21 @@ describe('runConfiguredCommand', () => {
     await expect(runArgvTool(config, workspace, ['curl', 'https://threaddex.example/v1/job/deliver?job_id=job_1'])).rejects.toThrow('blocked_job_lifecycle_via_run_command');
   });
 
+
+
+  it('allows inert lifecycle mentions in issue-body and search workflows', async () => {
+    const workspace = await fixtureWorkspace(true);
+    await expect(runShellTool(config, workspace, "grep -RIn '/v1/job/job_1/continuation' docs tests || true")).resolves.toBeTruthy();
+    await expect(runShellTool(config, workspace, "cat > issue.md <<'EOF'\n/v1/job/job_1/continuation returned checkpoint_required\nEOF\ncat issue.md")).resolves.toBeTruthy();
+    await expect(runArgvTool(config, workspace, ['gh', 'issue', 'create', '--title', 'doc', '--body-file', 'issue.md'])).resolves.toBeTruthy();
+  });
+
+  it('blocks executable lifecycle calls while allowing inert text false-positive cases', async () => {
+    const workspace = await fixtureWorkspace(true);
+    await expect(runShellTool(config, workspace, "node -e \"fetch('https://example.unrealize.com/threaddex/v1/job/job_1/deliver', {method:'POST'})\"")).rejects.toThrow('executable Threaddex job lifecycle call detected');
+    await expect(runShellTool(config, workspace, "python3 - <<'PY'\nimport requests\nrequests.post('https://example.unrealize.com/threaddex/v1/job/job_1/progress')\nPY")).rejects.toThrow('executable Threaddex job lifecycle call detected');
+  });
+
   it('still allows ordinary non-lifecycle HTTP probes through run_command', async () => {
     const workspace = await fixtureWorkspace(true);
     const result = await runArgvTool(config, workspace, [process.execPath, '-e', "process.stdout.write('probe-ok')"]);
