@@ -19,6 +19,11 @@ function describeWorkspace(workspace: Workspace) {
       screen: workspace.allow_screen,
       mouse_keyboard: workspace.allow_mouse_keyboard
     },
+    filesystem_scope: {
+      absolute_path_scope: workspace.api_sets?.machine_admin && workspace.filesystem?.machine_admin_host_scope ? 'host' : 'workspace',
+      machine_admin_host_scope: Boolean(workspace.api_sets?.machine_admin && workspace.filesystem?.machine_admin_host_scope),
+      host_root: workspace.api_sets?.machine_admin && workspace.filesystem?.machine_admin_host_scope ? (workspace.filesystem?.host_root ?? '/') : undefined
+    },
     commands: Object.keys(workspace.commands).sort()
   };
 }

@@ -19,10 +19,29 @@ describe('resolveInside', () => {
     await expect(resolveInside(workspace, path.join(workspace.realRoot, 'abs.txt'), config)).resolves.toMatchObject({ relative: 'abs.txt' });
   });
 
-  it('rejects absolute paths outside the workspace', async () => {
+  it('rejects absolute paths outside the workspace for workspace-only agents', async () => {
     const workspace = await fixtureWorkspace();
     const outside = await outsideFile();
     await expect(resolveInside(workspace, outside, config)).rejects.toThrow('workspace-relative');
+  });
+
+  it('allows machine_admin host-scope absolute paths outside the workspace', async () => {
+    const workspace = await fixtureWorkspace(false, true);
+    const outside = await outsideFile();
+    await expect(resolveInside(workspace, outside, config)).resolves.toMatchObject({ absolute: outside, displayPath: outside, scope: 'host' });
+  });
+
+
+  it('applies configured absolute denied globs to host-scope machine_admin reads', async () => {
+    const workspace = await fixtureWorkspace(false, true);
+    const outside = await outsideFile('blocked-token.txt');
+    const denyConfig = { ...config, security: { ...config.security, protect_secret_paths: false, denied_globs: [outside.replace(/blocked-token\.txt$/, '*-token.txt')] } };
+    await expect(resolveInside(workspace, outside, denyConfig)).rejects.toThrow('denied by configured glob');
+  });
+
+  it('keeps relative escapes blocked even when machine_admin host scope is enabled', async () => {
+    const workspace = await fixtureWorkspace(false, true);
+    await expect(resolveInside(workspace, '../outside.txt', config)).rejects.toThrow('workspace-relative');
   });
 
   it('rejects relative path escapes with corrective guidance', async () => {
@@ -54,16 +73,16 @@ describe('resolveInside', () => {
   });
 });
 
-async function fixtureWorkspace(): Promise<Workspace> {
+async function fixtureWorkspace(allowWrite = false, machineAdmin = false): Promise<Workspace> {
   const root = await mkdtemp(path.join(tmpdir(), 'gtp-mcp-'));
   const realRoot = await realpath(root);
   await mkdir(path.join(realRoot, 'src'), { recursive: true });
-  return { id: 'test', name: 'Test', root, realRoot, allow_read: true, allow_write: false, allow_patch: true, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, browser: { profiles: [] }, commands: {} };
+  return { id: 'test', name: 'Test', root, realRoot, allow_read: true, allow_write: allowWrite, allow_patch: true, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, api_sets: machineAdmin ? { machine_admin: true } : {}, filesystem: { machine_admin_host_scope: machineAdmin, host_root: '/' }, browser: { profiles: [] }, commands: {} };
 }
 
-async function outsideFile(): Promise<string> {
+async function outsideFile(name = 'outside.txt'): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), 'gtp-outside-'));
-  const file = path.join(root, 'outside.txt');
+  const file = path.join(root, name);
   await writeFile(file, 'outside');
   return file;
 }

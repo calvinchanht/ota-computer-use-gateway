@@ -48,6 +48,29 @@ Typical operations include:
 
 `machine_admin` is intentionally separate from narrow workspace `run_command`, but a machine-admin lane may intentionally expose `/` as its workspace root plus a sudo helper. Confusing machine-admin with a read-only or project-only workspace makes webchat agents weaker than OpenClaw agents.
 
+Machine-admin filesystem scope uses the same file tool vocabulary as workspace agents. Do not add duplicate `host_read_file` / `host_write_file` tools. Instead, policy decides scope:
+
+- workspace-only lanes: file tools are limited to the configured workspace root;
+- machine-admin lanes with `filesystem.machine_admin_host_scope: true`: file tools may resolve explicit absolute host paths inside `filesystem.host_root`;
+- relative paths, including `../` escapes, remain workspace-root scoped and cannot implicitly jump into host scope;
+- responses include `scope: workspace` or `scope: host` so audit/debugging can see which boundary was used;
+- denied globs and protected secret path rules still apply, including to host-scope absolute paths.
+
+Example:
+
+```yaml
+workspaces:
+  - id: genesis
+    root: /home/genesis/workspace
+    api_sets:
+      workspace: true
+      machine_admin: true
+    filesystem:
+      machine_admin_host_scope: true
+      host_root: /
+```
+
+
 ### `estate_admin`
 
 Cross-agent/cross-host control-plane reports, diagnostics, continuity, and approved estate runbook operations.

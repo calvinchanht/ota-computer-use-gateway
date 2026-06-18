@@ -33,6 +33,29 @@ describe('policy and tool profile consistency', () => {
   });
 
 
+
+  it('exposes filesystem scope for machine_admin and workspace-only lanes', () => {
+    const machinePolicy = workspacePolicy(fixtureWorkspace()).data;
+    expect(machinePolicy?.filesystem_scope).toMatchObject({
+      default_scope: 'workspace',
+      absolute_path_scope: 'host',
+      machine_admin_host_scope: true,
+      host_root: '/'
+    });
+    expect(machinePolicy?.policy_model?.machine_admin).toContain('Existing file tools remain one vocabulary');
+
+    const workspaceOnly = workspacePolicy(fixtureWorkspace({
+      api_sets: { workspace: true, browser: false, computer: false, computer_windows: false, machine_admin: false, estate_admin: false },
+      filesystem: { machine_admin_host_scope: false, host_root: '/' }
+    })).data;
+    expect(workspaceOnly?.filesystem_scope).toMatchObject({
+      default_scope: 'workspace',
+      absolute_path_scope: 'workspace',
+      machine_admin_host_scope: false
+    });
+    expect(workspaceOnly?.filesystem_scope?.host_root).toBeUndefined();
+  });
+
   it('exposes implemented data and patch helpers through the workspace policy', () => {
     const policy = workspacePolicy(fixtureWorkspace()).data;
     expect(policy?.allowed_tools).toEqual(expect.arrayContaining([
@@ -110,6 +133,7 @@ function fixtureWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     },
     browser: { profiles: [] },
     commands: { test: 'npm test' },
+    filesystem: { machine_admin_host_scope: true, host_root: '/' },
     ...overrides
   };
 }

@@ -6,20 +6,21 @@ export function workspacePolicy(workspace: Workspace) {
     id: workspace.id,
     name: workspace.name,
     root_label: 'configured workspace root',
+    filesystem_scope: filesystemScope(workspace),
     api_sets: resolvedApiSets(workspace),
     api_set_notes: {
       workspace: 'OpenClaw-like workspace agent primitives: scoped files, tmp cleanup/delete, artifacts, context, skills, bounded run_command/processes, git/context helpers, and async run recovery.',
       browser: 'Preassigned browser profiles/ports plus CDP-backed tabs, visible state, click/wait, and upload verification.',
       computer: 'Local GUI/computer-use via Cua Driver: screenshots, windows, accessibility tree, mouse, keyboard, and local app control.',
       computer_windows: 'Windows desktop computer-use via native APIs. The api_sets.computer_windows macro grants full Windows rights; partial lanes should set windows_computer.enabled plus individual rights.',
-      machine_admin: 'Host/lane administration and configured operations such as run_configured_command, services, config, tunnels, and deployment workflows. This is separate from normal workspace exec.',
+      machine_admin: 'Host/lane administration and configured operations such as run_configured_command, services, config, tunnels, and deployment workflows. When filesystem.machine_admin_host_scope is enabled, existing file tools may resolve explicit absolute host paths inside host_root; no host_* duplicate tools are used.',
       estate_admin: 'Cross-agent/cross-host Genesis control-plane reports/diagnostics and approved estate runbook operations.'
     },
     policy_model: {
       principle: 'Webchat agents should not be weaker than OpenClaw agents when a capability set is enabled; safety wraps powerful primitives instead of replacing them with toy actions.',
       workspace_exec: 'Bounded run_command/start_process/read_process/write_process/stop_process are normal workspace-agent primitives when workspace or allow_tests is enabled.',
       workspace_delete: 'delete_file/delete_path are normal scoped workspace editing tools, suitable for tmp cleanup and routine file management. Irreversible or out-of-scope destructive workflows remain stop-boundary events.',
-      machine_admin: 'run_configured_command and service/tunnel/host administration are machine_admin, not ordinary workspace execution.',
+      machine_admin: 'run_configured_command and service/tunnel/host administration are machine_admin. Existing file tools remain one vocabulary: workspace-only lanes stay root-scoped; machine_admin host-scope lanes may use explicit absolute host paths inside host_root with deny-glob/secret protections.',
       provider_prompts: 'Provider-side confirmation prompts are intentionally minimized for routine scoped workspace/browser/computer work; stop boundaries describe when the agent must pause for Calvin.'
     },
     allowed_tools: allowedTools(workspace),
@@ -31,6 +32,21 @@ export function workspacePolicy(workspace: Workspace) {
     requires_approval: [],
     stop_boundaries: ['captcha_or_human_verification', 'credential_or_secret_use_or_secret_exfiltration', 'external_messages_email_chat_or_public_posts', 'third_party_uploads_or_form_submissions', 'payments_purchases_or_terms_acceptance', 'account_security_settings_or_identity_verification', 'irreversible_or_out_of_scope_destructive_actions']
   });
+}
+
+
+function filesystemScope(workspace: Workspace) {
+  const sets = resolvedApiSets(workspace);
+  const hostScope = Boolean(sets.machine_admin && workspace.filesystem?.machine_admin_host_scope);
+  return {
+    default_scope: 'workspace',
+    absolute_path_scope: hostScope ? 'host' : 'workspace',
+    machine_admin_host_scope: hostScope,
+    host_root: hostScope ? (workspace.filesystem?.host_root ?? '/') : undefined,
+    note: hostScope
+      ? 'Existing file tools may access explicit absolute host paths inside host_root. Relative paths remain resolved from the configured workspace root.'
+      : 'Existing file tools are scoped to the configured workspace root; absolute paths outside that root are denied.'
+  };
 }
 
 export function resolvedApiSets(workspace: Workspace) {

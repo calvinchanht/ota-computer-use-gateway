@@ -23,7 +23,7 @@ export async function inferFileStructure(config: AppConfig, workspace: Workspace
   const text = sample.text;
   const lines = text.split(/\r?\n/);
   const detected = detectTextType(resolved.relative, text);
-  const data: Record<string, unknown> = { path: resolved.relative, ...meta, detected_type: detected, sample_line_count: lines.length };
+  const data: Record<string, unknown> = { path: resolved.displayPath, scope: resolved.scope, ...meta, detected_type: detected, sample_line_count: lines.length };
   if (detected === 'csv' || detected === 'tsv') Object.assign(data, tableStructure(text, detected === 'tsv' ? '\t' : ','));
   if (detected === 'json') Object.assign(data, safeJsonProfile(meta.size <= MAX_SCAN_BYTES ? await readBoundedText(resolved.absolute, MAX_SCAN_BYTES) : text, 2, 3));
   if (detected === 'jsonl') data.jsonl_samples = lines.filter(Boolean).slice(0, 5).map((line) => safeParseJson(line));
@@ -44,7 +44,7 @@ export async function sampleFile(config: AppConfig, workspace: Workspace, reques
     for (let lineNo = start + 1; lineNo <= end && picks.filter((p) => p.section === 'random').length < randomLines; lineNo += step) picks.push({ section: 'random', line: lineNo, text: lines[lineNo - 1] ?? '' });
   }
   const limited = limitArrayByJsonBytes(picks, maxBytes);
-  return ok(`sampled ${resolved.relative}`, { path: resolved.relative, total_lines: lines.length, file_hash: sha256(text), samples: limited.value, truncated: limited.truncated });
+  return ok(`sampled ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, total_lines: lines.length, file_hash: sha256(text), samples: limited.value, truncated: limited.truncated });
 }
 
 export async function readFileChunk(config: AppConfig, workspace: Workspace, requestedPath: string, offset = 0, maxBytes = DEFAULT_MAX_BYTES) {
@@ -58,7 +58,7 @@ export async function readFileChunk(config: AppConfig, workspace: Workspace, req
     const read = await fh.read(buffer, 0, size, Math.max(0, offset));
     const bytes = buffer.subarray(0, read.bytesRead);
     if (bytes.includes(0)) throw new Error('binary file refused');
-    return ok(`read chunk ${resolved.relative}`, { path: resolved.relative, offset: Math.max(0, offset), bytes: bytes.length, next_offset: Math.max(0, offset) + bytes.length, eof: Math.max(0, offset) + bytes.length >= info.size, total_bytes: info.size, file_hash: await fileSha256(resolved.absolute), text: TEXT_DECODER.decode(bytes) });
+    return ok(`read chunk ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, offset: Math.max(0, offset), bytes: bytes.length, next_offset: Math.max(0, offset) + bytes.length, eof: Math.max(0, offset) + bytes.length >= info.size, total_bytes: info.size, file_hash: await fileSha256(resolved.absolute), text: TEXT_DECODER.decode(bytes) });
   } finally { await fh.close(); }
 }
 
@@ -68,7 +68,7 @@ export async function readFileLinesLarge(config: AppConfig, workspace: Workspace
   const lines = text.split(/\r?\n/);
   const start = Math.max(1, startLine) - 1;
   const selected = lines.slice(start, start + Math.min(maxLines, 2000));
-  return ok(`read lines ${resolved.relative}`, { path: resolved.relative, start_line: start + 1, end_line: start + selected.length, total_lines: lines.length, truncated: start + selected.length < lines.length, next_line: start + selected.length + 1, file_hash: sha256(text), text: selected.join('\n') });
+  return ok(`read lines ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, start_line: start + 1, end_line: start + selected.length, total_lines: lines.length, truncated: start + selected.length < lines.length, next_line: start + selected.length + 1, file_hash: sha256(text), text: selected.join('\n') });
 }
 
 export async function readAround(config: AppConfig, workspace: Workspace, requestedPath: string, line: number, before = 10, after = 20) {
@@ -78,7 +78,7 @@ export async function readAround(config: AppConfig, workspace: Workspace, reques
 export async function searchFile(config: AppConfig, workspace: Workspace, requestedPath: string, query: string, maxMatches = 50, contextLines = 0) {
   const resolved = await resolveInside(workspace, requestedPath, config);
   const text = await readBoundedText(resolved.absolute, MAX_SCAN_BYTES);
-  return ok(`searched ${resolved.relative}`, { path: resolved.relative, query, file_hash: sha256(text), ...searchLines(text, query, maxMatches, contextLines) });
+  return ok(`searched ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, query, file_hash: sha256(text), ...searchLines(text, query, maxMatches, contextLines) });
 }
 
 export async function searchFiles(config: AppConfig, workspace: Workspace, rootPath: string, query: string, glob = '**/*', maxMatches = 50, contextLines = 0) {
@@ -92,14 +92,14 @@ export async function searchFiles(config: AppConfig, workspace: Workspace, rootP
     const result = searchLines(text, query, Math.min(maxMatches, MAX_MATCHES) - hits.length, contextLines);
     for (const match of result.matches) hits.push({ path: file.relative, ...match });
   }
-  return ok(`searched files under ${root.relative}`, { root: root.relative, query, glob, matches: hits, truncated: hits.length >= Math.min(maxMatches, MAX_MATCHES) });
+  return ok(`searched files under ${root.relative}`, { root: root.displayPath, scope: root.scope, query, glob, matches: hits, truncated: hits.length >= Math.min(maxMatches, MAX_MATCHES) });
 }
 
 export async function tableProfile(config: AppConfig, workspace: Workspace, requestedPath: string, columns?: string[]) {
   const { resolved, rows, headers } = await readTable(config, workspace, requestedPath);
   const selected = columns?.length ? headers.filter((h) => columns.includes(h)) : headers;
   const profiles = selected.map((column) => profileColumn(rows, column));
-  return ok(`profiled table ${resolved.relative}`, { path: resolved.relative, row_count: rows.length, columns: headers, profiles });
+  return ok(`profiled table ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, row_count: rows.length, columns: headers, profiles });
 }
 
 export async function queryTable(config: AppConfig, workspace: Workspace, requestedPath: string, select?: string[], where?: FilterSpec, sort?: Array<Record<string, string>>, limit = 100, offset = 0) {
@@ -109,7 +109,7 @@ export async function queryTable(config: AppConfig, workspace: Workspace, reques
   const total = out.length;
   const fields = select?.length ? select : headers;
   out = out.slice(Math.max(0, offset), Math.max(0, offset) + Math.min(limit, 1000)).map((row) => pick(row, fields));
-  return ok(`queried table ${resolved.relative}`, { path: resolved.relative, total, offset, limit: Math.min(limit, 1000), rows: out, truncated: Math.max(0, offset) + out.length < total, next_offset: Math.max(0, offset) + out.length });
+  return ok(`queried table ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, total, offset, limit: Math.min(limit, 1000), rows: out, truncated: Math.max(0, offset) + out.length < total, next_offset: Math.max(0, offset) + out.length });
 }
 
 export async function queryTableAggregate(config: AppConfig, workspace: Workspace, requestedPath: string, groupBy: string[] = [], metrics: Array<Record<string, string>> = [{ op: 'count' }], where?: FilterSpec) {
@@ -126,13 +126,13 @@ export async function queryTableAggregate(config: AppConfig, workspace: Workspac
     for (const metric of metrics) Object.assign(base, aggregate(items, metric));
     return base;
   });
-  return ok(`aggregated table ${resolved.relative}`, { path: resolved.relative, group_by: groupBy, groups: result, total_groups: result.length });
+  return ok(`aggregated table ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, group_by: groupBy, groups: result, total_groups: result.length });
 }
 
 export async function jsonProfile(config: AppConfig, workspace: Workspace, requestedPath: string, depth = 3, arraySamples = 3) {
   const resolved = await resolveInside(workspace, requestedPath, config);
   const json = JSON.parse(await readBoundedText(resolved.absolute, MAX_SCAN_BYTES));
-  return ok(`profiled json ${resolved.relative}`, { path: resolved.relative, file_hash: await fileSha256(resolved.absolute), ...profileJsonValue(json, Math.min(depth, 6), Math.min(arraySamples, 20), '$') });
+  return ok(`profiled json ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, file_hash: await fileSha256(resolved.absolute), ...profileJsonValue(json, Math.min(depth, 6), Math.min(arraySamples, 20), '$') });
 }
 
 export async function queryJson(config: AppConfig, workspace: Workspace, requestedPath: string, query: string, maxBytes = DEFAULT_MAX_BYTES) {
@@ -140,7 +140,7 @@ export async function queryJson(config: AppConfig, workspace: Workspace, request
   const json = JSON.parse(await readBoundedText(resolved.absolute, MAX_SCAN_BYTES));
   const value = evalJsonPath(json, query);
   const limited = limitJsonBytes(value, Math.min(maxBytes, 250_000));
-  return ok(`queried json ${resolved.relative}`, { path: resolved.relative, query, value: limited.value, truncated: limited.truncated });
+  return ok(`queried json ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, query, value: limited.value, truncated: limited.truncated });
 }
 
 export async function patchFileLines(config: AppConfig, workspace: Workspace, requestedPath: string, startLine: number, endLine: number, replacement: string, expectedSha256?: string, dryRun = true) {
@@ -154,7 +154,7 @@ export async function patchFileLines(config: AppConfig, workspace: Workspace, re
   const replacementLines = replacement.split(/\r?\n/);
   const next = [...lines.slice(0, start), ...replacementLines, ...lines.slice(end)].join('\n');
   if (!dryRun) await writeFile(resolved.absolute, next, 'utf8');
-  return ok(`${dryRun ? 'dry run patch' : 'patched'} ${resolved.relative}`, { path: resolved.relative, dry_run: dryRun, file_hash_before: hash, file_hash_after: sha256(next), line_range: { start_line: startLine, end_line: endLine }, preview: { before: lines.slice(start, end), after: replacementLines } });
+  return ok(`${dryRun ? 'dry run patch' : 'patched'} ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, dry_run: dryRun, file_hash_before: hash, file_hash_after: sha256(next), line_range: { start_line: startLine, end_line: endLine }, preview: { before: lines.slice(start, end), after: replacementLines } });
 }
 
 export async function updateTableRows(config: AppConfig, workspace: Workspace, requestedPath: string, where: FilterSpec, setValues: Record<string, string>, dryRun = true, allowMultiple = false) {
@@ -173,7 +173,7 @@ export async function updateTableRows(config: AppConfig, workspace: Workspace, r
   }
   const next = nextLines.join('\n');
   if (!dryRun) await writeFile(resolved.absolute, next, 'utf8');
-  return ok(`${dryRun ? 'dry run update' : 'updated'} table rows`, { path: resolved.relative, dry_run: dryRun, matched_rows: matched.length, line_numbers: matched.map((m) => m.index + 2), file_hash_before: sha256(text), file_hash_after: sha256(next), set: setValues });
+  return ok(`${dryRun ? 'dry run update' : 'updated'} table rows`, { path: resolved.displayPath, scope: resolved.scope, dry_run: dryRun, matched_rows: matched.length, line_numbers: matched.map((m) => m.index + 2), file_hash_before: sha256(text), file_hash_after: sha256(next), set: setValues });
 }
 
 async function fileMeta(absolute: string) { const info = await stat(absolute); return { type: info.isDirectory() ? 'dir' : info.isFile() ? 'file' : 'other', size: info.size, modified_at: info.mtime.toISOString(), media_type: mediaType(absolute), sha256: info.isFile() ? await fileSha256(absolute) : undefined }; }

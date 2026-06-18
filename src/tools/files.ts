@@ -38,29 +38,29 @@ function sensitiveNameReason(name: string) {
 export async function listDir(config: AppConfig, workspace: Workspace, requestedPath: string, maxEntries = 200) {
   const resolved = await resolveInside(workspace, requestedPath, config);
   const entries = await listEntries(resolved.absolute, Math.min(maxEntries, 500));
-  return ok(`listed ${entries.length} entries`, { path: resolved.relative, entries });
+  return ok(`listed ${entries.length} entries`, { path: resolved.displayPath, scope: resolved.scope, entries });
 }
 
 export async function statPath(config: AppConfig, workspace: Workspace, requestedPath: string) {
   const resolved = await resolveInside(workspace, requestedPath, config);
-  return ok(`stat ${resolved.relative}`, { path: resolved.relative, ...(await fileInfo(resolved.absolute)) });
+  return ok(`stat ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, ...(await fileInfo(resolved.absolute)) });
 }
 
 export async function treeTool(config: AppConfig, workspace: Workspace, requestedPath = '.', maxEntries = 200) {
   const resolved = await resolveInside(workspace, requestedPath, config);
   const entries = await treeEntries(resolved.absolute, Math.min(maxEntries, 500));
-  return ok(`tree ${resolved.relative}`, { path: resolved.relative, entries, truncated: entries.length >= Math.min(maxEntries, 500) });
+  return ok(`tree ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, entries, truncated: entries.length >= Math.min(maxEntries, 500) });
 }
 
 export async function readFileTool(config: AppConfig, workspace: Workspace, requestedPath: string, startLine = 1, maxLines = 250) {
   const resolved = await resolveInside(workspace, requestedPath, config);
   const range = await readTextRange(resolved.absolute, startLine, Math.min(maxLines, 500), config.security.max_file_bytes);
-  return ok(`read ${resolved.relative}`, { path: resolved.relative, ...range });
+  return ok(`read ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, ...range });
 }
 
 export async function readBinaryFileTool(config: AppConfig, workspace: Workspace, requestedPath: string) {
   const resolved = await resolveInside(workspace, requestedPath, config);
-  return ok(`read binary ${resolved.relative}`, { path: resolved.relative, ...(await readBinary(resolved.absolute, config.security.max_file_bytes)) });
+  return ok(`read binary ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, ...(await readBinary(resolved.absolute, config.security.max_file_bytes)) });
 }
 
 export async function writeFileTool(config: AppConfig, workspace: Workspace, requestedPath: string, content: string, overwrite = false) {
@@ -68,7 +68,7 @@ export async function writeFileTool(config: AppConfig, workspace: Workspace, req
   const resolved = await resolveWritableInside(workspace, requestedPath, config);
   if (!overwrite) await assertNewFile(resolved.absolute);
   await writeFile(resolved.absolute, content, 'utf8');
-  return ok(`wrote ${resolved.relative}`, { path: resolved.relative, bytes: Buffer.byteLength(content, 'utf8') });
+  return ok(`wrote ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, bytes: Buffer.byteLength(content, 'utf8') });
 }
 
 export async function writeBinaryFileTool(config: AppConfig, workspace: Workspace, requestedPath: string, base64: string, overwrite = false) {
@@ -77,7 +77,7 @@ export async function writeBinaryFileTool(config: AppConfig, workspace: Workspac
   const resolved = await resolveWritableInside(workspace, requestedPath, config);
   if (!overwrite) await assertNewFile(resolved.absolute);
   await writeFile(resolved.absolute, bytes);
-  return ok(`wrote binary ${resolved.relative}`, { path: resolved.relative, bytes: bytes.length, media_type: mediaType(resolved.absolute) });
+  return ok(`wrote binary ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, bytes: bytes.length, media_type: mediaType(resolved.absolute) });
 }
 
 export async function editFileTool(config: AppConfig, workspace: Workspace, requestedPath: string, oldText: string, newText: string) {
@@ -87,7 +87,7 @@ export async function editFileTool(config: AppConfig, workspace: Workspace, requ
   const next = replaceExactlyOnce(current, oldText, newText, resolved.relative);
   if (Buffer.byteLength(next, 'utf8') > config.security.max_file_bytes) throw new Error('edited file exceeds max_file_bytes');
   await writeFile(resolved.absolute, next, 'utf8');
-  return ok(`edited ${resolved.relative}`, { path: resolved.relative, bytes: Buffer.byteLength(next, 'utf8') });
+  return ok(`edited ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, bytes: Buffer.byteLength(next, 'utf8') });
 }
 
 export async function deleteFileTool(config: AppConfig, workspace: Workspace, requestedPath: string) {
@@ -96,17 +96,17 @@ export async function deleteFileTool(config: AppConfig, workspace: Workspace, re
   const info = await stat(resolved.absolute);
   if (!info.isFile()) throw new Error('delete_file only deletes regular files');
   await rm(resolved.absolute);
-  return ok(`deleted ${resolved.relative}`, { path: resolved.relative, bytes: info.size });
+  return ok(`deleted ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, bytes: info.size });
 }
 
 export async function deletePathTool(config: AppConfig, workspace: Workspace, requestedPath: string, recursive = false) {
   if (!workspace.allow_write) throw new Error('workspace does not allow file writes');
   const resolved = await resolveInside(workspace, requestedPath, config);
-  if (resolved.relative === '.') throw new Error('refusing to delete workspace root');
+  if (resolved.relative === '.') throw new Error(resolved.scope === 'host' ? 'refusing to delete host filesystem root' : 'refusing to delete workspace root');
   const info = await stat(resolved.absolute);
   if (info.isDirectory() && !recursive) throw new Error('path is a directory; set recursive=true to delete it');
   await rm(resolved.absolute, { recursive, force: false });
-  return ok(`deleted ${resolved.relative}`, { path: resolved.relative, type: info.isDirectory() ? 'dir' : info.isFile() ? 'file' : 'other', recursive, bytes: info.isFile() ? info.size : undefined });
+  return ok(`deleted ${resolved.relative}`, { path: resolved.displayPath, scope: resolved.scope, type: info.isDirectory() ? 'dir' : info.isFile() ? 'file' : 'other', recursive, bytes: info.isFile() ? info.size : undefined });
 }
 
 function assertTextWriteAllowed(config: AppConfig, workspace: Workspace, content: string): void {

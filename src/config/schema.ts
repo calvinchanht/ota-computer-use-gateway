@@ -37,6 +37,11 @@ export const apiSetsSchema = z.object({
   estate_admin: z.boolean().optional()
 }).default({});
 
+export const filesystemScopeSchema = z.object({
+  machine_admin_host_scope: z.boolean().optional(),
+  host_root: z.string().min(1).default('/')
+}).default({ host_root: '/' });
+
 const workspaceBaseSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -52,6 +57,7 @@ const workspaceBaseSchema = z.object({
   browser: browserSchema,
   windows_computer: windowsComputerSchema,
   commands: z.record(z.string(), z.string()).default({}),
+  filesystem: filesystemScopeSchema,
   git: z.object({ github_token_file: z.string().min(1).optional() }).default({})
 });
 
@@ -88,6 +94,10 @@ export const workspaceSchema = workspaceBaseSchema.transform((workspace) => {
   }
   if (sets.machine_admin) {
     next.allow_tests = true;
+    next.filesystem = {
+      ...next.filesystem,
+      machine_admin_host_scope: next.filesystem.machine_admin_host_scope ?? true
+    };
   }
   return next;
 });

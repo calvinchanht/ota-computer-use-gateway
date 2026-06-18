@@ -30,6 +30,9 @@ workspaces:
     allow_tests: true
     allow_screen: true
     allow_mouse_keyboard: true
+    filesystem:
+      machine_admin_host_scope: true
+      host_root: /
     commands:
       openclaw-status: "openclaw status"
       cua-permissions: "cua-driver call check_permissions"

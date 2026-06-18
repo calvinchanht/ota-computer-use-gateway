@@ -84,6 +84,9 @@ workspaces:
   allow_tests: true
   allow_screen: true
   allow_mouse_keyboard: true
+  filesystem:
+    machine_admin_host_scope: true
+    host_root: /
   commands: {}
   browser:
     profiles:

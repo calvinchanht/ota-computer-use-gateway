@@ -34,6 +34,9 @@ workspaces:
     # still stop for CAPTCHA, human verification, sensitive account decisions, and submissions.
     allow_screen: true
     allow_mouse_keyboard: true
+    filesystem:
+      machine_admin_host_scope: false
+      host_root: /
     browser:
       profiles:
         - label: "catalyst"

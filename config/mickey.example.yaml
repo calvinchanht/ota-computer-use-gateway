@@ -23,6 +23,11 @@ workspaces:
     allow_tests: true
     allow_screen: false
     allow_mouse_keyboard: false
+    # Mickey is intentionally not machine_admin; absolute host paths outside
+    # root remain denied by the existing file tools.
+    filesystem:
+      machine_admin_host_scope: false
+      host_root: /
     browser:
       profiles:
         - label: "mickey"
