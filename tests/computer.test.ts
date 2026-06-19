@@ -49,7 +49,8 @@ describe('cua driver proxy tools', () => {
     expect(calls[0].url).toBe('http://127.0.0.1:33988/v1/job/job_123/visual-followup');
     expect(JSON.parse(String(calls[0].init.body))).toMatchObject({ idempotency_key: 'vf-1', kind: 'screenshot', source: 'cua_driver', readable_url: 'https://boba-api.unrealize.com/api/v1/artifacts/screen.webp?sig=abc' });
     expect(JSON.parse(String(calls[0].init.body)).prompt_text).toBe('Parse this job image NOW: https://boba-api.unrealize.com/api/v1/artifacts/screen.webp?sig=abc');
-    expect(result).toMatchObject({ id: 'vf-1', state: 'pending', sent_to_provider: false, provider_visible: false, readable_url: 'https://boba-api.unrealize.com/api/v1/artifacts/screen.webp?sig=abc' });
+    expect(result).toMatchObject({ id: 'vf-1', state: 'pending', sent_to_provider: false, provider_visible: false });
+    expect(result.readable_url).toBeUndefined();
     expect(result.status_url).toBe('https://threaddex-boba.unrealize.com/v1/job/job_123/visual-followup/vf-1/status');
     expect(result.instruction).toContain('Poll visual_followup.status_url');
   });

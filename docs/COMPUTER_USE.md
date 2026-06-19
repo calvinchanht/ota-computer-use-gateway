@@ -85,7 +85,7 @@ Screen mouse coordinates are Windows virtual-screen coordinates. For multi-monit
 
 Window mouse coordinates require a current `hwnd` from `windows_list_windows`. Use `coordinate_space: "client"` for app-content coordinates, or `coordinate_space: "window"` for full window-frame coordinates. Window mouse tools convert those coordinates with native Win32 APIs and then send the same underlying screen mouse input. They default to focusing the target window except `windows_window_mouse_move`, whose default is hover-only `focus: false`.
 
-Screenshot results are artifact-first. They include a full PNG artifact and a WebP preview artifact under `.agent/artifacts/windows-screenshots/`. Each artifact includes `url_path`, and includes `url`/`readable_url` when `OTA_GATEWAY_PUBLIC_BASE_URL` is configured, matching the web-readable image URL pattern used by webchat visual follow-up flows. The response also exposes top-level `readable_url`, `image_web_url`, and `web_url` aliases for the default preview.
+Screenshot capture stores a full PNG artifact and a WebP preview artifact under `.agent/artifacts/windows-screenshots/`, but those image paths and signed URLs are internal to the OTA -> Threaddex visual-followup handoff. The `windows_screenshot` response must not expose local paths, `artifact`, `preview`, `full`, `readable_url`, `image_web_url`, or `web_url` as competing agent-facing visual sources.
 
 For webchat visual inspection, call `windows_screenshot` with the active Threaddex job id:
 
@@ -99,7 +99,7 @@ For webchat visual inspection, call `windows_screenshot` with the active Threadd
 }
 ```
 
-When the Threaddex follow-up endpoint is configured, the gateway posts the screenshot readable URL back to the active job as a visible follow-up prompt. If `visual_followup.job_id` is omitted, the screenshot is still captured and returned, but `visual_followup.state` is `not_requested`.
+When the Threaddex follow-up endpoint is configured, the gateway posts the screenshot readable URL back to the active job as a visible follow-up prompt. The action response returns only the capture metadata and `visual_followup` polling contract. The webchat agent must poll `visual_followup.status_url` until `sent_to_provider` is true before claiming visual inspection. If `visual_followup.job_id` is omitted, the screenshot is still captured, but `visual_followup.state` is `not_requested`.
 
 App launch is first-class because desktop development workflows, such as Roblox Studio work, require starting and controlling non-browser applications.
 

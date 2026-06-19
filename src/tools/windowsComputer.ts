@@ -48,15 +48,28 @@ export async function windowsScreenshot(workspace: Workspace, monitor = 'primary
     ...data,
     artifact,
     preview: artifact.preview,
-    full: artifact.full,
-    readable_url: artifact.preview.readable_url ?? artifact.full.readable_url,
-    image_web_url: artifact.preview.readable_url ?? artifact.full.readable_url,
-    web_url: artifact.preview.readable_url ?? artifact.full.readable_url
+    full: artifact.full
   };
-  return ok('windows screenshot', {
-    ...payload,
-    visual_followup: await screenshotVisualFollowup(payload, { ...params, source: 'windows_computer' })
-  });
+  const visualFollowup = await screenshotVisualFollowup(payload, { ...params, source: 'windows_computer' });
+  return ok('windows screenshot', windowsScreenshotResponse(data, visualFollowup));
+}
+
+function windowsScreenshotResponse(data: Record<string, unknown>, visualFollowup: unknown) {
+  return {
+    monitor: data.monitor,
+    bounds: data.bounds,
+    visual_followup: windowsVisualFollowupResponse(visualFollowup)
+  };
+}
+
+function windowsVisualFollowupResponse(value: unknown) {
+  if (!isRecord(value)) return value;
+  const { readable_url: _readableUrl, ...rest } = value;
+  return rest;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 export async function windowsUiaTree(workspace: Workspace, maxNodes = 120) {
