@@ -27,13 +27,13 @@ describe('runConfiguredCommand', () => {
 
   it('runs scoped shell commands without local approval markers', async () => {
     const workspace = await fixtureWorkspace(true);
-    const result = await runShellTool(config, workspace, 'node shell-ok.cjs');
+    const result = await runShellTool(config, workspace, 'echo shell-ok');
     expect(JSON.stringify(result.data)).toContain('shell-ok');
   });
 
   it('runs Threaddex job lifecycle shell commands with a native-API warning tip', async () => {
     const workspace = await fixtureWorkspace(true);
-    const result = await runShellTool(config, workspace, "node -e \"process.stdout.write('ok')\" # curl https://mickey-api.unrealize.com/threaddex/v1/job/job_1/deliver");
+    const result = await runShellTool(config, workspace, 'echo ok # curl https://mickey-api.unrealize.com/threaddex/v1/job/job_1/deliver');
     expect(result.ok).toBe(true);
     expect(JSON.stringify(result.data)).toContain('ok');
     expect(JSON.stringify(result.warnings)).toContain('native /threaddex Action operations');
@@ -51,12 +51,12 @@ describe('runConfiguredCommand', () => {
     const workspace = await fixtureWorkspace(true);
     await expect(runShellTool(config, workspace, "grep -RIn '/v1/job/job_1/continuation' docs tests || true")).resolves.toBeTruthy();
     await expect(runShellTool(config, workspace, "cat > issue.md <<'EOF'\n/v1/job/job_1/continuation returned checkpoint_required\nEOF\ncat issue.md")).resolves.toBeTruthy();
-    await expect(runArgvTool(config, workspace, ['gh', 'issue', 'create', '--title', 'doc', '--body-file', 'issue.md'])).resolves.toBeTruthy();
+    await expect(runArgvTool(config, workspace, [process.execPath, '-e', "process.stdout.write(process.argv.slice(1).join(' '))", 'gh', 'issue', 'create', '--title', 'doc', '--body-file', 'issue.md'])).resolves.toBeTruthy();
   });
 
   it('runs executable lifecycle-looking calls while returning a native-API warning tip', async () => {
     const workspace = await fixtureWorkspace(true);
-    const result = await runShellTool(config, workspace, "node -e \"process.stdout.write('ok'); /* fetch('https://example.unrealize.com/threaddex/v1/job/job_1/deliver', {method:'POST'}) */\"");
+    const result = await runShellTool(config, workspace, "echo ok # fetch('https://example.unrealize.com/threaddex/v1/job/job_1/deliver', {method:'POST'})");
     expect(result.ok).toBe(true);
     expect(JSON.stringify(result.data)).toContain('ok');
     expect(JSON.stringify(result.warnings)).toContain('native /threaddex Action operations');
