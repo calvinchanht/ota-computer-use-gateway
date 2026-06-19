@@ -18,6 +18,7 @@ import { agentBootstrap, checkpointThread, contextSnapshot, recordDecision, reco
 import { getProjectContext, memoryWrite } from '../tools/memory.js';
 import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
 import { computerScreenClick, computerScreenDrag, computerScreenMouseMove, computerScreenScroll, computerWindowClick, computerWindowDrag, computerWindowMouseMove, computerWindowScroll, cuaDriverBatch, cuaDriverCall, cuaDriverStatus, type CuaDriverBatchStep } from '../tools/computer.js';
+import { windowsComputerStatus, windowsListMonitors, windowsListWindows, windowsScreenshot } from '../tools/windowsComputer.js';
 import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable, queryTableAggregate, readAround, readFileChunk, readFileLinesLarge, sampleFile, searchFile, searchFiles, tableProfile, updateTableRows } from '../tools/largeFiles.js';
 import { runArgvTailTool, runArgvTool } from '../tools/runCommand.js';
 import { processKill, processList, processLog, processStart, processStartArgv, processWrite } from '../tools/processes.js';
@@ -681,6 +682,10 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'computer_screen_scroll') return computerScreenScroll(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), requiredString(args.direction, 'direction'), optionalNumber(args.amount) ?? 3, optionalString(args.by) ?? 'line');
   if (tool === 'computer_window_scroll') return computerWindowScroll(workspace, requiredNumber(args.pid, 'pid'), requiredString(args.direction, 'direction'), optionalNumber(args.window_id), optionalNumber(args.amount) ?? 3, optionalString(args.by) ?? 'line');
   if (tool === 'cua_driver_batch') return cuaDriverBatch(workspace, requiredCuaBatchSteps(args.calls));
+  if (tool === 'windows_computer_status') return windowsComputerStatus(workspace);
+  if (tool === 'windows_list_monitors') return windowsListMonitors(workspace);
+  if (tool === 'windows_list_windows') return windowsListWindows(workspace);
+  if (tool === 'windows_screenshot') return windowsScreenshot(workspace, optionalString(args.monitor) ?? 'primary');
   if (tool === 'infer_file_structure') return inferFileStructure(config, workspace, requiredString(args.path, 'path'));
   if (tool === 'sample_file') return sampleFile(config, workspace, requiredString(args.path, 'path'), optionalString(args.mode) ?? 'head_tail_random', optionalNumber(args.head_lines) ?? 20, optionalNumber(args.tail_lines) ?? 20, optionalNumber(args.random_lines) ?? 20, optionalNumber(args.max_bytes) ?? 20000);
   if (tool === 'read_file_chunk') return readFileChunk(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.offset) ?? 0, optionalNumber(args.max_bytes) ?? 50000);

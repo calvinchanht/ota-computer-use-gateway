@@ -1,7 +1,13 @@
+import { createServer, type Server } from 'node:http';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import type { AppConfig } from '../src/config/schema.js';
 import type { BrokeredExecutorJob } from '../src/brokeredExecutor/types.js';
 import { mapWindowsOperation, runWindowsBrokeredOperation, windowsExecutorHeartbeat } from '../src/brokeredExecutor/windowsAdapter.js';
 import { claimExecutorJob, completeExecutorJob, postExecutorHeartbeat } from '../src/brokeredExecutor/workerClient.js';
+import { createHttpRequestHandler } from '../src/server/http.js';
 
 describe('Windows brokered executor adapter', () => {
   it('maps public broker operation names to local OTA Windows tool names', () => {
@@ -33,6 +39,16 @@ describe('Windows brokered executor adapter', () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ ok: false, summary: 'windows computer-use capability disabled: allow_screenshot' }));
     const result = await runWindowsBrokeredOperation(adapter(fetchImpl), job('windows.screenshot', {}));
     expect(result).toMatchObject({ status: 'failed', error_code: 'local_ota_policy_denied' });
+  });
+
+  it('reaches Windows status through the local OTA HTTP dispatcher', async () => {
+    const harness = await startHarness();
+    try {
+      const result = await runWindowsBrokeredOperation({ localOtaBaseUrl: harness.baseUrl, workspaceId: 'anna' }, job('windows.status'));
+      expect(result).toMatchObject({ status: 'succeeded', result: { host_supported: process.platform === 'win32' } });
+    } finally {
+      await harness.close();
+    }
   });
 });
 
@@ -73,4 +89,27 @@ function toolSuccess() {
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+}
+
+async function startHarness() {
+  const root = await mkdtemp(path.join(tmpdir(), 'ota-windows-broker-test-'));
+  const server: Server = createServer(createHttpRequestHandler(config(root)));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('expected TCP address');
+  return { baseUrl: `http://127.0.0.1:${address.port}`, close: () => closeHarness(server, root) };
+}
+
+async function closeHarness(server: Server, root: string) {
+  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  await rm(root, { recursive: true, force: true });
+}
+
+function config(root: string): AppConfig {
+  return {
+    server: { host: '127.0.0.1', port: 0, auth: { enabled: false, bearer_token_env: 'TEST_TOKEN', allow_loopback_without_auth: true }, rate_limit: { enabled: false, window_ms: 60000, max_requests: 120, trust_proxy_headers: false }, tool_annotations: { mode: 'honest' }, exposed_tools: [] },
+    workspaces: [{ id: 'anna', name: 'Anna', root, allow_read: true, allow_write: true, allow_patch: true, allow_tests: true, allow_screen: true, allow_mouse_keyboard: true, api_sets: { computer_windows: true }, browser: { profiles: [] }, windows_computer: { enabled: true, allow_screenshot: false, allow_uia_tree: false, allow_mouse: false, allow_keyboard: false, allow_clipboard: false, allow_window_management: false, allow_app_launch: false, allow_process_attach: false, allow_multi_monitor: true }, commands: {}, filesystem: { machine_admin_host_scope: false, host_root: '/' }, git: {} }],
+    brokered_executors: { enabled: false, include_action_schema: false, default_ttl_ms: 60000, default_lease_ms: 30000, executors: [] },
+    security: { max_file_bytes: 100000, max_response_bytes: 100000, max_request_bytes: 100000, max_search_results: 10, max_exec_ms: 120000, protect_secret_paths: true, denied_globs: [] }
+  };
 }
