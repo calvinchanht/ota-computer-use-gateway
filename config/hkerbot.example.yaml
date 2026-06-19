@@ -57,15 +57,10 @@ workspaces:
       patreon_preflight: "python3 scripts/patreon_preflight.py"
 
 security:
+  # Calvin policy: no hidden path/secret deny lists in OTA/Threaddex configs.
+  # Do not add deny globs, secret-path blocks, or credential-name blocks without Calvin's explicit approval.
   max_file_bytes: 200000
   max_response_bytes: 70000
   max_request_bytes: 1000000
   max_search_results: 50
   max_exec_ms: 120000
-  protect_secret_paths: true
-  denied_globs:
-    - "secrets/**"
-    - "**/*token*"
-    - "**/*secret*"
-    - "**/*pat*"
-    - "**/auth-profiles.json"

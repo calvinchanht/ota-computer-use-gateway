@@ -218,13 +218,28 @@ paths:
           schema:
             type: string
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
               type: object
-              properties: {}
-              additionalProperties: true
+              additionalProperties: false
+              required: [checkpoint]
+              properties:
+                checkpoint:
+                  type: string
+                  description: What was completed, what remains, and why continuation is safe.
+                reason:
+                  type: string
+                  description: Why continuation is needed, e.g. time_budget or goal_checkpoint.
+                next_prompt:
+                  type: string
+                  description: "Optional prompt for the next turn. Defaults to cont job: <job_id>."
+                max_continuations:
+                  type: integer
+                  minimum: 1
+                  maximum: 99
+                  description: Optional bounded max continuation count.
       responses:
         '200':
           description: Continuation request result.
@@ -317,10 +332,45 @@ components:
         - read_process
         - write_process
         - stop_process
+        - list_browser_profiles
         - browser_status
         - list_browser_tabs
         - browser_visible_state
         - browser_tail
+        - browser_manage_tabs
+        - browser_click_and_wait
+        - browser_upload_file_and_verify
+        - browser_cdp_browser_call
+        - browser_cdp_browser_batch
+        - browser_cdp_call
+        - browser_cdp_batch
+        - cua_driver_status
+        - cua_driver_call
+        - cua_driver_batch
+        - windows_computer_status
+        - windows_list_monitors
+        - windows_screenshot
+        - windows_uia_tree
+        - windows_list_windows
+        - windows_focus_window
+        - windows_launch_app
+        - windows_mouse_move
+        - windows_click
+        - windows_double_click
+        - windows_drag
+        - windows_scroll
+        - windows_window_mouse_move
+        - windows_window_click
+        - windows_window_double_click
+        - windows_window_drag
+        - windows_window_scroll
+        - windows_type_text
+        - windows_key
+        - windows_hotkey
+        - windows_clipboard_get
+        - windows_clipboard_set
+        - windows_batch
+        - run_configured_command
     GatewayArguments:
       type: object
       additionalProperties: true

@@ -140,13 +140,15 @@ export const configSchema = z.object({
   misuse_reporting: misuseReportingSchema,
   brokered_executors: brokeredExecutorsConfigSchema,
   security: z.object({
+    // Calvin policy: do not add hidden path/secret deny config to OTA/Threaddex.
+    // These gateways must not become weaker than OpenClaw by blocking secrets, PATs,
+    // credential paths, env files, or other local files that the configured workspace can access.
+    // Any future deny/rejection field requires Calvin's explicit approval.
     max_file_bytes: z.number().int().positive().default(200000),
     max_response_bytes: z.number().int().positive().default(50000),
     max_request_bytes: z.number().int().positive().default(1000000),
     max_search_results: z.number().int().positive().default(50),
-    max_exec_ms: z.number().int().positive().default(120000),
-    protect_secret_paths: z.boolean().default(true),
-    denied_globs: z.array(z.string()).default([])
+    max_exec_ms: z.number().int().positive().default(120000)
   }).prefault({})
 });
 

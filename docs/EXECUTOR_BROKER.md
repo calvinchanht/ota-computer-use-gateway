@@ -115,4 +115,31 @@ The initial Mickey/testbed slice is intentionally in-memory and not a production
 - fake Windows read-only adapter results/artifacts;
 - default Action schemas do not expose broker routes.
 
-Before production use, the remaining hardening includes persistent storage, persistent storage, broker-owned artifact signing/exposure, deployment-specific Mickey opt-in config, and WindowsPC-Genesis integration for the real Anna Windows adapter.
+## Anna Windows worker adapter
+
+The Windows-side adapter lives behind the broker. It claims `windows.*` jobs and calls the existing localhost-only OTA Windows tools:
+
+```text
+windows.status        -> windows_computer_status
+windows.list_monitors -> windows_list_monitors
+windows.list_windows  -> windows_list_windows
+windows.screenshot    -> windows_screenshot
+```
+
+The public broker contract uses `monitor_id` for screenshots. The adapter maps it to the existing local OTA `monitor` argument.
+
+Example one-shot worker run after build:
+
+```powershell
+npm run build
+$env:WINDOWS_EXECUTOR_BROKER_URL='https://anna-api.unrealize.com/ota'
+$env:WINDOWS_EXECUTOR_LOCAL_OTA_URL='http://127.0.0.1:8769'
+$env:WINDOWS_EXECUTOR_ID='anna-windows-local'
+$env:WINDOWS_EXECUTOR_WORKSPACE_ID='anna'
+$env:WINDOWS_EXECUTOR_WORKER_TOKEN_FILE='D:\Projects\Anna\secrets\anna_windows_executor_token.txt'
+node scripts/run-windows-brokered-executor.mjs
+```
+
+The local OTA gateway must run in the interactive Windows desktop session so screenshots, UI Automation, window enumeration, mouse, keyboard, clipboard, and app launch see the real desktop. V1 broker exposure remains read-only even if the private Windows OTA lane has broader local capabilities.
+
+Before production use, the remaining hardening includes persistent storage, broker-owned artifact signing/exposure, deployment-specific opt-in config, and converting the one-shot worker into a supervised local polling loop.

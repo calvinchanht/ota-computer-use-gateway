@@ -5,7 +5,8 @@ const AGENTS = [
   { agentId: 'mickey', displayName: 'Mickey', serverUrl: 'https://mickey-api.unrealize.com' },
   { agentId: 'hkerbot', displayName: 'HKerBot', serverUrl: 'https://hkerbot-api.unrealize.com' },
   { agentId: 'boba', displayName: 'Boba', serverUrl: 'https://boba-api.unrealize.com' },
-  { agentId: 'catalyst', displayName: 'Catalyst', serverUrl: 'https://catalyst-api.unrealize.com' }
+  { agentId: 'catalyst', displayName: 'Catalyst', serverUrl: 'https://catalyst-api.unrealize.com' },
+  { agentId: 'anna', displayName: 'Anna', serverUrl: 'https://anna-api.unrealize.com' }
 ];
 
 let failures = 0;
@@ -32,6 +33,9 @@ function validateSchemaText(text, agent) {
   if (!text.includes(`url: ${agent.serverUrl}`)) fail('missing expected server URL');
   if (!text.includes(`/ota/api/v1/tool:`)) fail('missing /ota tool path');
   if (!text.includes(`/threaddex/v1/job/{job_id}:`)) fail('missing /threaddex job path');
+  if (!text.includes(`operationId: requestJobContinuation`)) fail('missing continuation operation');
+  if (!text.includes(`required: [checkpoint]`)) fail('continuation body must require checkpoint');
+  if (!text.includes(`max_continuations:`)) fail('continuation body must expose max_continuations');
   if (text.includes(`/ota/api/v1/executor-jobs`) || text.includes(`/ota/api/v1/executors/`)) {
     fail('brokered executor Action paths must be absent unless an agent explicitly opts in');
   }

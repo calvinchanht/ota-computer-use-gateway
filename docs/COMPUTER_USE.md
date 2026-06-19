@@ -68,19 +68,40 @@ Tools:
 
 - `windows_computer_status` — report host/platform and configured Windows authority.
 - `windows_list_monitors` — list monitor bounds, working areas, and primary flags.
-- `windows_screenshot` — capture `primary`, `all`, or a monitor index and save PNG/WebP artifacts.
+- `windows_screenshot` — capture `primary`, `all`, or a monitor index and save PNG/WebP artifacts with provider-fetchable URL metadata.
 - `windows_uia_tree` — return a bounded Microsoft UI Automation tree snapshot.
 - `windows_list_windows` — list visible top-level windows with hwnd, title, pid, and bounds.
 - `windows_focus_window` — focus a top-level window by hwnd.
 - `windows_launch_app` — launch a local executable or application path with optional args/cwd.
-- `windows_click`, `windows_double_click`, `windows_drag`, `windows_scroll` — mouse control.
+- `windows_mouse_move`, `windows_click`, `windows_double_click`, `windows_drag`, `windows_scroll` — screen-coordinate mouse control.
+- `windows_window_mouse_move`, `windows_window_click`, `windows_window_double_click`, `windows_window_drag`, `windows_window_scroll` — window-local mouse control for a known top-level hwnd.
 - `windows_type_text`, `windows_key`, `windows_hotkey` — keyboard control.
 - `windows_clipboard_get`, `windows_clipboard_set` — clipboard text.
 - `windows_batch` — sequence common Windows input actions plus delay steps.
 
 Authority is adjustable, but capability is not intentionally weakened. A trusted local webchat agent can be granted full screen, mouse, keyboard, clipboard, multi-monitor, window-management, and app-launch rights. Less trusted agents can receive a smaller subset from the same contract.
 
-Coordinates are Windows screen coordinates. For multi-monitor work, call `windows_list_monitors` first and choose either an explicit monitor for screenshots or absolute screen coordinates for input. App launch is first-class because desktop development workflows, such as Roblox Studio work, require starting and controlling non-browser applications.
+Screen mouse coordinates are Windows virtual-screen coordinates. For multi-monitor work, call `windows_list_monitors` first and choose either an explicit monitor for screenshots or absolute screen coordinates for input; secondary monitors may have negative `x`/`y` origins.
+
+Window mouse coordinates require a current `hwnd` from `windows_list_windows`. Use `coordinate_space: "client"` for app-content coordinates, or `coordinate_space: "window"` for full window-frame coordinates. Window mouse tools convert those coordinates with native Win32 APIs and then send the same underlying screen mouse input. They default to focusing the target window except `windows_window_mouse_move`, whose default is hover-only `focus: false`.
+
+Screenshot capture stores a full PNG artifact and a WebP preview artifact under `.agent/artifacts/windows-screenshots/`, but those image paths and signed URLs are internal to the OTA -> Threaddex visual-followup handoff. The `windows_screenshot` response must not expose local paths, `artifact`, `preview`, `full`, `readable_url`, `image_web_url`, or `web_url` as competing agent-facing visual sources.
+
+For webchat visual inspection, call `windows_screenshot` with the active Threaddex job id:
+
+```json
+{
+  "workspace_id": "anna",
+  "monitor": "primary",
+  "visual_followup": {
+    "job_id": "job_..."
+  }
+}
+```
+
+When the Threaddex follow-up endpoint is configured, the gateway posts the screenshot readable URL back to the active job as a visible follow-up prompt. The action response returns only the capture metadata and `visual_followup` polling contract. The webchat agent must poll `visual_followup.status_url` until `sent_to_provider` is true before claiming visual inspection. If `visual_followup.job_id` is omitted, the screenshot is still captured, but `visual_followup.state` is `not_requested`.
+
+App launch is first-class because desktop development workflows, such as Roblox Studio work, require starting and controlling non-browser applications.
 
 For a non-screenshot validation lane, enable only the required rights instead of using that full macro:
 

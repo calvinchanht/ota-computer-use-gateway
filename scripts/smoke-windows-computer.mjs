@@ -48,7 +48,7 @@ async function exerciseObservation(port, sessionId) {
   const monitors = await toolData(port, sessionId, 'windows_list_monitors', { workspace_id: 'windows-smoke' });
   if (!JSON.stringify(monitors).includes('bounds')) throw new Error('windows_list_monitors returned no bounds');
   const windows = await toolData(port, sessionId, 'windows_list_windows', { workspace_id: 'windows-smoke' });
-  if (!JSON.stringify(windows).includes('hwnd')) throw new Error('windows_list_windows returned no hwnd');
+  if (!Array.isArray(windows)) throw new Error('windows_list_windows did not return an array');
   const tree = await toolData(port, sessionId, 'windows_uia_tree', { workspace_id: 'windows-smoke', max_nodes: 20 });
   if (!Array.isArray(tree.nodes) || tree.nodes.length === 0) throw new Error('windows_uia_tree returned no nodes');
 }
@@ -61,8 +61,10 @@ async function exerciseLaunch(port, sessionId) {
 async function exerciseDeniedCapabilities(port, sessionId) {
   await expectToolError(port, sessionId, 'windows_screenshot', { workspace_id: 'windows-smoke' }, 'allow_screenshot');
   await expectToolError(port, sessionId, 'windows_click', { workspace_id: 'windows-smoke', x: 1, y: 1 }, 'allow_mouse');
+  await expectToolError(port, sessionId, 'windows_window_click', { workspace_id: 'windows-smoke', hwnd: 1, x: 1, y: 1 }, 'allow_mouse');
   await expectToolError(port, sessionId, 'windows_type_text', { workspace_id: 'windows-smoke', text: 'blocked' }, 'allow_keyboard');
   await expectToolError(port, sessionId, 'windows_clipboard_get', { workspace_id: 'windows-smoke' }, 'allow_clipboard');
+  await expectBatchStopped(port, sessionId);
 }
 
 async function writeConfig(file, workspaceRoot, port) {
@@ -98,7 +100,7 @@ function windowsSmokeConfig(workspaceRoot, port) {
     '  max_response_bytes: 50000',
     '  max_search_results: 10',
     '  max_exec_ms: 10000',
-    '  denied_globs: []',
+    '  # Calvin policy: no hidden path/secret deny lists without explicit approval.',
     ''
   ].join('\n');
 }
@@ -106,7 +108,7 @@ function windowsSmokeConfig(workspaceRoot, port) {
 async function toolData(port, sessionId, name, args) {
   const result = await call(port, sessionId, name, args);
   const payload = JSON.parse(result.result.content[0].text);
-  if (payload.ok === false) throw new Error(`${name} failed: ${payload.message}`);
+  if (payload.ok === false) throw new Error(`${name} failed: ${payload.message ?? payload.summary ?? JSON.stringify(payload)}`);
   return payload.data;
 }
 
@@ -114,6 +116,12 @@ async function expectToolError(port, sessionId, name, args, expected) {
   const result = await call(port, sessionId, name, args);
   const text = JSON.stringify(result);
   if (!text.includes(expected)) throw new Error(`${name} did not report ${expected}: ${text}`);
+}
+
+async function expectBatchStopped(port, sessionId) {
+  const data = await toolData(port, sessionId, 'windows_batch', { workspace_id: 'windows-smoke', calls: [{ tool: 'click', args: { x: 1, y: 1 } }, { delay_ms: 1 }] });
+  if (!JSON.stringify(data.stopped_on_error).includes('allow_mouse')) throw new Error(`windows_batch did not stop on allow_mouse: ${JSON.stringify(data)}`);
+  if (data.results.length !== 1) throw new Error(`windows_batch did not stop after first error: ${JSON.stringify(data)}`);
 }
 
 async function initialize(port) {

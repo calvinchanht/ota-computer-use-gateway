@@ -23,7 +23,8 @@ function canonicalTools(): string[] {
     'cua_driver_status', 'computer_screen_click', 'computer_window_click', 'computer_screen_mouse_move', 'computer_window_mouse_move', 'computer_screen_drag', 'computer_window_drag', 'computer_screen_scroll', 'computer_window_scroll', 'cua_driver_call', 'cua_driver_batch',
     'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_uia_tree',
     'windows_list_windows', 'windows_focus_window', 'windows_launch_app',
-    'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
+    'windows_mouse_move', 'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
+    'windows_window_mouse_move', 'windows_window_click', 'windows_window_double_click', 'windows_window_drag', 'windows_window_scroll',
     'windows_type_text', 'windows_key', 'windows_hotkey',
     'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch',
     'workspace_inventory', 'read_file', 'read_file_chunk', 'read_file_lines', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
@@ -56,7 +57,7 @@ function apiCapabilitySets() {
         purpose: 'Windows desktop computer use with monitor capture, UIA, mouse, keyboard, clipboard, windows, and app launch.',
         full_macro: 'api_sets.computer_windows grants the complete Windows computer-use surface.',
         partial_rights: 'Use windows_computer.enabled plus individual allow_* rights for narrower lanes such as non-screenshot validation.',
-        tools: ['windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_uia_tree', 'windows_launch_app', 'windows_click', 'windows_type_text', 'windows_batch']
+        tools: windowsComputerTools()
       },
       machine_admin: {
         purpose: 'Own-machine/lane management through configured commands/processes and scoped service/config/runbook work.',
@@ -75,6 +76,17 @@ function apiCapabilitySets() {
     },
     policy_flags: ['external_actions', 'destructive_actions', 'secret_return', 'credential_use']
   };
+}
+
+function windowsComputerTools() {
+  return [
+    'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_uia_tree',
+    'windows_list_windows', 'windows_focus_window', 'windows_launch_app',
+    'windows_mouse_move', 'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
+    'windows_window_mouse_move', 'windows_window_click', 'windows_window_double_click', 'windows_window_drag', 'windows_window_scroll',
+    'windows_type_text', 'windows_key', 'windows_hotkey',
+    'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch'
+  ];
 }
 
 function apiBehavior() {

@@ -10,7 +10,7 @@ import type { Workspace } from '../src/core/workspaces.js';
 const config: AppConfig = {
   server: { host: '127.0.0.1', port: 8765 },
   workspaces: [],
-  security: { max_file_bytes: 1000, max_response_bytes: 1000, max_request_bytes: 1000, max_search_results: 10, max_exec_ms: 120000, denied_globs: [] }
+  security: { max_file_bytes: 1000, max_response_bytes: 1000, max_request_bytes: 1000, max_search_results: 10, max_exec_ms: 120000 }
 };
 
 describe('file primitive tools', () => {
@@ -64,24 +64,24 @@ describe('file primitive tools', () => {
 
   it('uses host scope for machine_admin absolute reads and keeps workspace-only agents scoped', async () => {
     const workspaceOnly = await fixtureWorkspace();
-    const machineAdmin = await fixtureWorkspace(false, true);
     const outsideRoot = await mkdtemp(path.join(tmpdir(), 'gtp-host-'));
+    const machineAdmin = await fixtureWorkspace(false, true, path.parse(outsideRoot).root);
     const outside = path.join(outsideRoot, 'host-note.txt');
     await writeFile(outside, 'host ok');
 
     await expect(statPath(config, workspaceOnly, outside)).rejects.toThrow('workspace-relative');
     const result = await statPath(config, machineAdmin, outside);
-    expect(result.data).toMatchObject({ path: outside, scope: 'host', type: 'file', size: 7 });
+    expect(result.data).toMatchObject({ path: outside.replaceAll('\\', '/'), scope: 'host', type: 'file', size: 7 });
   });
 
   it('allows machine_admin writes and routine deletes in host scope', async () => {
-    const workspace = await fixtureWorkspace(true, true);
     const outsideRoot = await mkdtemp(path.join(tmpdir(), 'gtp-host-write-'));
+    const workspace = await fixtureWorkspace(true, true, path.parse(outsideRoot).root);
     const outside = path.join(outsideRoot, 'tmp', 'note.txt');
     const wrote = await writeFileTool(config, workspace, outside, 'tmp cleanup ok', true);
-    expect(wrote.data).toMatchObject({ path: outside, scope: 'host', bytes: 14 });
+    expect(wrote.data).toMatchObject({ path: outside.replaceAll('\\', '/'), scope: 'host', bytes: 14 });
     const deleted = await import('../src/tools/files.js').then((tools) => tools.deletePathTool(config, workspace, path.join(outsideRoot, 'tmp'), true));
-    expect(deleted.data).toMatchObject({ path: path.join(outsideRoot, 'tmp'), scope: 'host', type: 'dir', recursive: true });
+    expect(deleted.data).toMatchObject({ path: path.join(outsideRoot, 'tmp').replaceAll('\\', '/'), scope: 'host', type: 'dir', recursive: true });
   });
 
   it('returns a bounded recursive tree', async () => {
@@ -93,7 +93,7 @@ describe('file primitive tools', () => {
   });
 });
 
-async function fixtureWorkspace(allowWrite = false, machineAdmin = false): Promise<Workspace> {
+async function fixtureWorkspace(allowWrite = false, machineAdmin = false, hostRoot = '/'): Promise<Workspace> {
   const root = await mkdtemp(path.join(tmpdir(), 'gtp-file-'));
-  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: allowWrite, allow_patch: false, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, api_sets: machineAdmin ? { machine_admin: true } : {}, filesystem: { machine_admin_host_scope: machineAdmin, host_root: '/' }, browser: { profiles: [] }, commands: {} };
+  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: allowWrite, allow_patch: false, allow_tests: false, allow_screen: false, allow_mouse_keyboard: false, api_sets: machineAdmin ? { machine_admin: true } : {}, filesystem: { machine_admin_host_scope: machineAdmin, host_root: hostRoot }, browser: { profiles: [] }, commands: {} };
 }

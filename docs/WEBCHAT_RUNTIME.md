@@ -9,4 +9,4 @@ Use these docs for Custom GPT / webchat lanes:
 - `AUDIT_RETENTION.md` — audit zip/prune defaults and screenshot metadata policy.
 - `examples/*-api-action-openapi.yaml` — lane-specific Action schemas.
 
-Private implementation notes and secret paths belong under private continuity/runbooks or `docs/private-notes/`, not in GPT editor instructions.
+Private implementation notes and deployment-specific credential locations belong under private continuity/runbooks or `docs/private-notes/`, not in GPT editor instructions.

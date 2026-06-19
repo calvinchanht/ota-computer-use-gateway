@@ -10,7 +10,7 @@ import type { Workspace } from '../src/core/workspaces.js';
 const config: AppConfig = {
   server: { host: '127.0.0.1', port: 8765 },
   workspaces: [],
-  security: { max_file_bytes: 1000, max_response_bytes: 1000, max_request_bytes: 1000, max_search_results: 10, max_exec_ms: 120000, denied_globs: [] }
+  security: { max_file_bytes: 1000, max_response_bytes: 1000, max_request_bytes: 1000, max_search_results: 10, max_exec_ms: 120000 }
 };
 
 describe('git display hygiene', () => {

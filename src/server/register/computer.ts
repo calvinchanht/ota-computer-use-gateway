@@ -15,10 +15,16 @@ import {
   windowsLaunchApp,
   windowsListMonitors,
   windowsListWindows,
+  windowsMouseMove,
   windowsScreenshot,
   windowsScroll,
   windowsTypeText,
-  windowsUiaTree
+  windowsUiaTree,
+  windowsWindowClick,
+  windowsWindowDoubleClick,
+  windowsWindowDrag,
+  windowsWindowMouseMove,
+  windowsWindowScroll
 } from '../../tools/windowsComputer.js';
 import { READ_ONLY, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import type { RegisterContext } from './types.js';
@@ -27,6 +33,18 @@ const cuaBatchStepSchema = z.union([
   z.object({ method: z.string().min(1).max(80), params: z.record(z.string(), z.unknown()).default({}) }),
   z.object({ delay_ms: z.number().int().min(0).max(5000) })
 ]);
+const finiteNumberSchema = z.number().refine(Number.isFinite, 'must be finite');
+const mouseButtonSchema = z.enum(['left', 'right']).default('left');
+const coordinateSpaceSchema = z.enum(['client', 'window']).default('client');
+const visualFollowupSchema = z.object({
+  job_id: z.string().optional(),
+  base_url: z.string().optional(),
+  public_base_url: z.string().optional(),
+  idempotency_key: z.string().optional(),
+  source: z.string().optional(),
+  mime: z.string().optional(),
+  prompt_text: z.string().optional()
+}).optional();
 
 export function registerComputerTools(context: RegisterContext): void {
   registerCuaDriverStatus(context);
@@ -146,25 +164,40 @@ function registerCuaDriverBatch({ server, workspaces }: RegisterContext): void {
 function registerWindowsTools({ server, workspaces }: RegisterContext): void {
   server.registerTool('windows_computer_status', { title: 'Windows computer status', description: 'Return Windows computer-use capability and adapter status.', inputSchema: { workspace_id: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_computer_status', windowsComputerStatus));
   server.registerTool('windows_list_monitors', { title: 'Windows list monitors', description: 'List Windows monitor bounds and primary flags.', inputSchema: { workspace_id: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_list_monitors', windowsListMonitors));
-  server.registerTool('windows_screenshot', { title: 'Windows screenshot', description: 'Capture one monitor or all monitors and store screenshot artifacts.', inputSchema: { workspace_id: z.string(), monitor: z.string().default('primary') }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_screenshot', (workspace) => windowsScreenshot(workspace, args.monitor)));
+  server.registerTool('windows_screenshot', { title: 'Windows screenshot', description: 'Capture one monitor or all monitors and store screenshot artifacts.', inputSchema: { workspace_id: z.string(), monitor: z.string().default('primary'), visual_followup: visualFollowupSchema, job_id: z.string().optional(), threaddex_job_id: z.string().optional(), threaddex_base_url: z.string().optional() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_screenshot', (workspace) => windowsScreenshot(workspace, args.monitor, args)));
   server.registerTool('windows_uia_tree', { title: 'Windows UIA tree', description: 'Return a bounded Microsoft UI Automation tree snapshot.', inputSchema: { workspace_id: z.string(), max_nodes: z.number().int().min(1).max(1000).default(120) }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_uia_tree', (workspace) => windowsUiaTree(workspace, args.max_nodes)));
   server.registerTool('windows_list_windows', { title: 'Windows list windows', description: 'List visible top-level Windows desktop windows.', inputSchema: { workspace_id: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_list_windows', windowsListWindows));
-  server.registerTool('windows_focus_window', { title: 'Windows focus window', description: 'Focus a top-level window by hwnd.', inputSchema: { workspace_id: z.string(), hwnd: z.number().int() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_focus_window', (workspace) => windowsFocusWindow(workspace, args.hwnd)));
+  server.registerTool('windows_focus_window', { title: 'Windows focus window', description: 'Focus a top-level window by hwnd.', inputSchema: { workspace_id: z.string(), hwnd: z.number().int().finite() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_focus_window', (workspace) => windowsFocusWindow(workspace, args.hwnd)));
   server.registerTool('windows_launch_app', { title: 'Windows launch app', description: 'Launch a local Windows app or executable.', inputSchema: { workspace_id: z.string(), file_path: z.string(), args: z.array(z.string()).default([]), cwd: z.string().optional() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_launch_app', (workspace) => windowsLaunchApp(workspace, args.file_path, args.args, args.cwd)));
   registerWindowsInputTools(server, workspaces);
 }
 
 function registerWindowsInputTools(server: RegisterContext['server'], workspaces: RegisterContext['workspaces']): void {
-  server.registerTool('windows_click', { title: 'Windows click', description: 'Move the mouse and click at screen coordinates.', inputSchema: { workspace_id: z.string(), x: z.number(), y: z.number(), button: z.string().default('left') }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_click', (workspace) => windowsClick(workspace, args.x, args.y, args.button)));
-  server.registerTool('windows_double_click', { title: 'Windows double click', description: 'Move the mouse and double click at screen coordinates.', inputSchema: { workspace_id: z.string(), x: z.number(), y: z.number(), button: z.string().default('left') }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_double_click', (workspace) => windowsDoubleClick(workspace, args.x, args.y, args.button)));
-  server.registerTool('windows_drag', { title: 'Windows drag', description: 'Drag from one screen coordinate to another.', inputSchema: { workspace_id: z.string(), from_x: z.number(), from_y: z.number(), to_x: z.number(), to_y: z.number() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_drag', (workspace) => windowsDrag(workspace, args.from_x, args.from_y, args.to_x, args.to_y)));
-  server.registerTool('windows_scroll', { title: 'Windows scroll', description: 'Scroll at screen coordinates.', inputSchema: { workspace_id: z.string(), x: z.number(), y: z.number(), delta: z.number() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_scroll', (workspace) => windowsScroll(workspace, args.x, args.y, args.delta)));
+  server.registerTool('windows_mouse_move', { title: 'Windows mouse move', description: 'Move the mouse to screen coordinates.', inputSchema: { workspace_id: z.string(), x: finiteNumberSchema, y: finiteNumberSchema }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_mouse_move', (workspace) => windowsMouseMove(workspace, args.x, args.y)));
+  server.registerTool('windows_click', { title: 'Windows click', description: 'Move the mouse and click at screen coordinates.', inputSchema: { workspace_id: z.string(), x: finiteNumberSchema, y: finiteNumberSchema, button: mouseButtonSchema }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_click', (workspace) => windowsClick(workspace, args.x, args.y, args.button)));
+  server.registerTool('windows_double_click', { title: 'Windows double click', description: 'Move the mouse and double click at screen coordinates.', inputSchema: { workspace_id: z.string(), x: finiteNumberSchema, y: finiteNumberSchema, button: mouseButtonSchema }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_double_click', (workspace) => windowsDoubleClick(workspace, args.x, args.y, args.button)));
+  server.registerTool('windows_drag', { title: 'Windows drag', description: 'Drag from one screen coordinate to another.', inputSchema: { workspace_id: z.string(), from_x: finiteNumberSchema, from_y: finiteNumberSchema, to_x: finiteNumberSchema, to_y: finiteNumberSchema }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_drag', (workspace) => windowsDrag(workspace, args.from_x, args.from_y, args.to_x, args.to_y)));
+  server.registerTool('windows_scroll', { title: 'Windows scroll', description: 'Scroll at screen coordinates.', inputSchema: { workspace_id: z.string(), x: finiteNumberSchema, y: finiteNumberSchema, delta: finiteNumberSchema }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_scroll', (workspace) => windowsScroll(workspace, args.x, args.y, args.delta)));
+  registerWindowsWindowInputTools(server, workspaces);
   server.registerTool('windows_type_text', { title: 'Windows type text', description: 'Type text into the active Windows UI.', inputSchema: { workspace_id: z.string(), text: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_type_text', (workspace) => windowsTypeText(workspace, args.text)));
   server.registerTool('windows_key', { title: 'Windows key', description: 'Send a Windows Forms SendKeys key sequence.', inputSchema: { workspace_id: z.string(), key: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_key', (workspace) => windowsKey(workspace, args.key)));
   server.registerTool('windows_hotkey', { title: 'Windows hotkey', description: 'Send a modifier hotkey combination.', inputSchema: { workspace_id: z.string(), keys: z.array(z.string()).min(1) }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_hotkey', (workspace) => windowsHotkey(workspace, args.keys)));
   server.registerTool('windows_clipboard_get', { title: 'Windows clipboard get', description: 'Read Windows clipboard text.', inputSchema: { workspace_id: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_clipboard_get', windowsClipboardGet));
   server.registerTool('windows_clipboard_set', { title: 'Windows clipboard set', description: 'Set Windows clipboard text.', inputSchema: { workspace_id: z.string(), text: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_clipboard_set', (workspace) => windowsClipboardSet(workspace, args.text)));
   server.registerTool('windows_batch', { title: 'Windows computer batch', description: 'Run a sequence of Windows computer-use input actions and delay steps.', inputSchema: { workspace_id: z.string(), calls: z.array(windowsBatchStepSchema).min(1).max(50) }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_batch', (workspace) => windowsBatch(workspace, args.calls as any)));
+}
+
+function registerWindowsWindowInputTools(server: RegisterContext['server'], workspaces: RegisterContext['workspaces']): void {
+  const point = { workspace_id: z.string(), hwnd: z.number().int().finite(), x: finiteNumberSchema, y: finiteNumberSchema, coordinate_space: coordinateSpaceSchema, focus: z.boolean().default(true) };
+  server.registerTool('windows_window_mouse_move', { title: 'Windows window mouse move', description: 'Move the mouse to window-local coordinates.', inputSchema: { ...point, focus: z.boolean().default(false) }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_window_mouse_move', (workspace) => windowsWindowMouseMove(workspace, args.hwnd, args.x, args.y, args.coordinate_space, args.focus)));
+  server.registerTool('windows_window_click', { title: 'Windows window click', description: 'Click at client/window-local coordinates for a top-level hwnd.', inputSchema: { ...point, button: mouseButtonSchema }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_window_click', (workspace) => windowsWindowClick(workspace, args.hwnd, args.x, args.y, args.button, args.coordinate_space, args.focus)));
+  server.registerTool('windows_window_double_click', { title: 'Windows window double click', description: 'Double click at client/window-local coordinates for a top-level hwnd.', inputSchema: { ...point, button: mouseButtonSchema }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_window_double_click', (workspace) => windowsWindowDoubleClick(workspace, args.hwnd, args.x, args.y, args.button, args.coordinate_space, args.focus)));
+  server.registerTool('windows_window_scroll', { title: 'Windows window scroll', description: 'Scroll at client/window-local coordinates for a top-level hwnd.', inputSchema: { ...point, delta: finiteNumberSchema }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_window_scroll', (workspace) => windowsWindowScroll(workspace, args.hwnd, args.x, args.y, args.delta, args.coordinate_space, args.focus)));
+  server.registerTool('windows_window_drag', { title: 'Windows window drag', description: 'Drag between client/window-local coordinates for a top-level hwnd.', inputSchema: windowDragSchema(), outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_window_drag', (workspace) => windowsWindowDrag(workspace, args.hwnd, args.from_x, args.from_y, args.to_x, args.to_y, args.coordinate_space, args.focus)));
+}
+
+function windowDragSchema() {
+  return { workspace_id: z.string(), hwnd: z.number().int().finite(), from_x: finiteNumberSchema, from_y: finiteNumberSchema, to_x: finiteNumberSchema, to_y: finiteNumberSchema, coordinate_space: coordinateSpaceSchema, focus: z.boolean().default(true) };
 }
 
 const windowsBatchStepSchema = z.union([

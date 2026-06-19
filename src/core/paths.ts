@@ -1,6 +1,5 @@
 import { mkdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { deniedPath } from './deny.js';
 import type { AppConfig } from '../config/schema.js';
 import type { Workspace } from './workspaces.js';
 
@@ -15,7 +14,7 @@ export async function resolveInside(workspace: Workspace, requested: string, con
   assertInside(boundary.root, real, requested, boundary.scope);
   const relative = displayRelative(boundary.root, real);
   const displayPath = boundary.scope === 'host' ? ensureAbsoluteDisplay(boundary.root, relative) : relative;
-  assertNotDenied(relative, displayPath, config);
+  assertNoShadowDeny(config);
   return { absolute: real, relative, displayPath, scope: boundary.scope };
 }
 
@@ -25,7 +24,7 @@ export async function resolveWritableInside(workspace: Workspace, requested: str
   assertInside(boundary.root, absolute, requested, boundary.scope);
   const relative = displayRelative(boundary.root, absolute);
   const displayPath = boundary.scope === 'host' ? ensureAbsoluteDisplay(boundary.root, relative) : relative;
-  assertNotDenied(relative, displayPath, config);
+  assertNoShadowDeny(config);
   await mkdir(path.dirname(absolute), { recursive: true });
   return { absolute, relative, displayPath, scope: boundary.scope };
 }
@@ -50,10 +49,10 @@ function canUseHostFilesystem(workspace: Workspace, requested: string): boolean 
   return Boolean(path.isAbsolute(requested) && workspace.api_sets?.machine_admin && workspace.filesystem?.machine_admin_host_scope);
 }
 
-function assertNotDenied(relative: string, displayPath: string, config: AppConfig): void {
-  const denied = deniedPath(relative, config.security.denied_globs, config.security.protect_secret_paths)
-    || deniedPath(displayPath, config.security.denied_globs, false);
-  if (denied) throw new Error(denied);
+function assertNoShadowDeny(_config: AppConfig): void {
+  // Calvin policy: OTA/Threaddex must not add hidden path/secret deny lists.
+  // File access is controlled by workspace root, host_root, and explicit capability flags only.
+  // Do not add path-name, secret-name, glob, or content deny logic here without Calvin's explicit approval.
 }
 
 export function assertInside(root: string, candidate: string, requested = candidate, scope: PathScope = 'workspace'): void {

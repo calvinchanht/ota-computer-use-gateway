@@ -9,7 +9,7 @@ import type { Workspace } from '../src/core/workspaces.js';
 const config: AppConfig = {
   server: { host: '127.0.0.1', port: 8765 },
   workspaces: [],
-  security: { max_file_bytes: 20, max_response_bytes: 1000, max_request_bytes: 1000, max_search_results: 10, max_exec_ms: 120000, denied_globs: ['secret/**'] }
+  security: { max_file_bytes: 20, max_response_bytes: 1000, max_request_bytes: 1000, max_search_results: 10, max_exec_ms: 120000 }
 };
 
 describe('writeFileTool', () => {
@@ -30,9 +30,10 @@ describe('writeFileTool', () => {
     await expect(writeFileTool(config, workspace, 'note.txt', 'new')).rejects.toThrow('file exists');
   });
 
-  it('rejects denied paths', async () => {
+  it('writes secret-looking paths when workspace policy grants writes', async () => {
     const workspace = await fixtureWorkspace(true);
-    await expect(writeFileTool(config, workspace, 'secret/token.txt', 'x')).rejects.toThrow('denied');
+    await writeFileTool(config, workspace, 'secret/token.txt', 'x');
+    await expect(readFile(path.join(workspace.realRoot, 'secret', 'token.txt'), 'utf8')).resolves.toBe('x');
   });
 
   it('edits exactly one matching text region', async () => {

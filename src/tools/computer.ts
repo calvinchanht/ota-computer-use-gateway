@@ -467,7 +467,6 @@ export async function screenshotVisualFollowup(screenshot: Record<string, unknow
       sent_to_provider: false,
       provider_visible: false,
       reason: 'threaddex_job_id_required',
-      readable_url: readableUrl,
       instruction: 'To make this screenshot visible to the model, call screenshot with params.visual_followup.job_id set to the active Threaddex job id, then poll visual_followup.status_url until sent_to_provider is true.'
     };
   }
@@ -486,11 +485,11 @@ export async function screenshotVisualFollowup(screenshot: Record<string, unknow
     });
     const body = await response.json().catch(() => ({})) as Record<string, unknown>;
     if (!response.ok || body.ok !== true || !isRecord(body.visual_followup)) {
-      return { state: 'failed', sent_to_provider: false, provider_visible: false, reason: `visual_followup_request_failed:${response.status}:${String(body.error ?? 'bad_response')}`, readable_url: readableUrl };
+      return { state: 'failed', sent_to_provider: false, provider_visible: false, reason: `visual_followup_request_failed:${response.status}:${String(body.error ?? 'bad_response')}` };
     }
-    return normalizeVisualFollowupContract(body.visual_followup, input.public_base_url, readableUrl);
+    return normalizeVisualFollowupContract(body.visual_followup, input.public_base_url);
   } catch (error) {
-    return { state: 'failed', sent_to_provider: false, provider_visible: false, reason: `visual_followup_request_exception:${error instanceof Error ? error.message : String(error)}`, readable_url: readableUrl };
+    return { state: 'failed', sent_to_provider: false, provider_visible: false, reason: `visual_followup_request_exception:${error instanceof Error ? error.message : String(error)}` };
   }
 }
 
@@ -512,17 +511,16 @@ function visualFollowupInput(params: Record<string, unknown>, readableUrl: strin
   const base_url = stripTrailingSlash(stringValue(visual.base_url) ?? stringValue(params.threaddex_base_url) ?? process.env.THREADEX_VISUAL_FOLLOWUP_BASE_URL ?? process.env.THREADEX_JOB_API_BASE_URL ?? 'http://127.0.0.1:33988');
   const public_base_url = stripTrailingSlash(stringValue(visual.public_base_url) ?? process.env.THREADEX_VISUAL_FOLLOWUP_PUBLIC_BASE_URL ?? '');
   const idempotency_key = stringValue(visual.idempotency_key) ?? `cua-screenshot:${job_id ?? 'unknown'}:${createHash('sha256').update(readableUrl).digest('hex').slice(0, 16)}`;
-  const source = stringValue(visual.source) ?? 'cua_driver';
-  const mime = stringValue(visual.mime) ?? 'image/webp';
-  const prompt_text = stringValue(visual.prompt_text) ?? `Screenshot follow-up for the current active job:\nscreenshot readable url: ${readableUrl}\nUse this screenshot as visual input for the current job. Do not claim the screenshot is missing if this visible follow-up is present.`;
+  const source = stringValue(visual.source) ?? stringValue(params.source) ?? 'cua_driver';
+  const mime = stringValue(visual.mime) ?? stringValue(params.mime) ?? 'image/webp';
+  const prompt_text = stringValue(visual.prompt_text) ?? stringValue(params.prompt_text) ?? `Parse this job image NOW: ${readableUrl}`;
   return { job_id, base_url, public_base_url, idempotency_key, source, mime, prompt_text };
 }
 
-function normalizeVisualFollowupContract(contract: Record<string, unknown>, publicBaseUrl: string, readableUrl: string) {
+function normalizeVisualFollowupContract(contract: Record<string, unknown>, publicBaseUrl: string) {
   const out = { ...contract } as Record<string, unknown>;
   out.sent_to_provider = contract.sent_to_provider === true;
   out.provider_visible = contract.provider_visible === true;
-  out.readable_url = readableUrl;
   if (publicBaseUrl && typeof contract.status_path === 'string') out.status_url = `${publicBaseUrl}${contract.status_path}`;
   out.instruction = out.sent_to_provider === true
     ? 'The screenshot URL has been sent as a visible follow-up prompt. Continue using the visible screenshot follow-up.'
