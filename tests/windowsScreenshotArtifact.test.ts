@@ -44,12 +44,18 @@ describe('windows screenshot artifacts', () => {
 
   it('returns provider-fetchable URLs for full and preview images', async () => {
     const result = await windowsScreenshot(fixtureWorkspace(root), 'primary');
-    const artifact = (result.data as ScreenshotData).artifact;
+    const data = result.data as ScreenshotData;
+    const artifact = data.artifact;
     expect(artifact.full.url_path).toContain('/api/v1/artifacts/windows/');
     expect(artifact.preview.url_path).toContain('/api/v1/artifacts/windows/');
     expect(artifact.full.readable_url).toContain('https://gateway.example.test/');
     expect(artifact.preview.readable_url).toContain('https://gateway.example.test/');
     expect(artifact.preview.readable_url).toContain('sig=');
+    expect(data.readable_url).toBe(artifact.preview.readable_url);
+    expect(data.image_web_url).toBe(artifact.preview.readable_url);
+    expect(data.web_url).toBe(artifact.preview.readable_url);
+    expect(data.visual_followup.state).toBe('not_requested');
+    expect(data.visual_followup.readable_url).toBe(artifact.preview.readable_url);
   });
 });
 
@@ -58,6 +64,10 @@ interface ScreenshotData {
     full: { url_path: string; readable_url: string };
     preview: { url_path: string; readable_url: string };
   };
+  readable_url: string;
+  image_web_url: string;
+  web_url: string;
+  visual_followup: { state: string; readable_url: string };
 }
 
 function fixtureWorkspace(root: string): Workspace {

@@ -512,9 +512,9 @@ function visualFollowupInput(params: Record<string, unknown>, readableUrl: strin
   const base_url = stripTrailingSlash(stringValue(visual.base_url) ?? stringValue(params.threaddex_base_url) ?? process.env.THREADEX_VISUAL_FOLLOWUP_BASE_URL ?? process.env.THREADEX_JOB_API_BASE_URL ?? 'http://127.0.0.1:33988');
   const public_base_url = stripTrailingSlash(stringValue(visual.public_base_url) ?? process.env.THREADEX_VISUAL_FOLLOWUP_PUBLIC_BASE_URL ?? '');
   const idempotency_key = stringValue(visual.idempotency_key) ?? `cua-screenshot:${job_id ?? 'unknown'}:${createHash('sha256').update(readableUrl).digest('hex').slice(0, 16)}`;
-  const source = stringValue(visual.source) ?? 'cua_driver';
-  const mime = stringValue(visual.mime) ?? 'image/webp';
-  const prompt_text = stringValue(visual.prompt_text) ?? `Screenshot follow-up for the current active job:\nscreenshot readable url: ${readableUrl}\nUse this screenshot as visual input for the current job. Do not claim the screenshot is missing if this visible follow-up is present.`;
+  const source = stringValue(visual.source) ?? stringValue(params.source) ?? 'cua_driver';
+  const mime = stringValue(visual.mime) ?? stringValue(params.mime) ?? 'image/webp';
+  const prompt_text = stringValue(visual.prompt_text) ?? stringValue(params.prompt_text) ?? `Screenshot follow-up for the current active job:\nscreenshot readable url: ${readableUrl}\nUse this screenshot as visual input for the current job. Do not claim the screenshot is missing if this visible follow-up is present.`;
   return { job_id, base_url, public_base_url, idempotency_key, source, mime, prompt_text };
 }
 

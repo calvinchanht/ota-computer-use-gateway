@@ -710,7 +710,7 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'windows_computer_status') return windowsComputerStatus(workspace);
   if (tool === 'windows_list_monitors') return windowsListMonitors(workspace);
   if (tool === 'windows_list_windows') return windowsListWindows(workspace);
-  if (tool === 'windows_screenshot') return windowsScreenshot(workspace, optionalString(args.monitor) ?? 'primary');
+  if (tool === 'windows_screenshot') return windowsScreenshot(workspace, optionalString(args.monitor) ?? 'primary', windowsScreenshotParams(args));
   if (tool === 'windows_uia_tree') return windowsUiaTree(workspace, optionalNumber(args.max_nodes) ?? 120);
   if (tool === 'windows_focus_window') return windowsFocusWindow(workspace, requiredNumber(args.hwnd, 'hwnd'));
   if (tool === 'windows_launch_app') return windowsLaunchApp(workspace, requiredString(args.file_path, 'file_path'), optionalStringArray(args.args), optionalString(args.cwd));
@@ -882,6 +882,15 @@ function recordArg(value: unknown, name: string): Record<string, unknown> | unde
   if (value === undefined) return undefined;
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${name} must be an object`);
   return value as Record<string, unknown>;
+}
+
+function windowsScreenshotParams(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (args.visual_followup !== undefined) out.visual_followup = recordArg(args.visual_followup, 'visual_followup');
+  for (const key of ['job_id', 'threaddex_job_id', 'threaddex_base_url']) {
+    if (typeof args[key] === 'string') out[key] = args[key];
+  }
+  return out;
 }
 
 function requiredString(value: unknown, name: string): string {

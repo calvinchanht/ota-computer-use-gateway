@@ -7,6 +7,7 @@ import { ok } from '../core/result.js';
 import { platformInfo } from '../core/platform.js';
 import type { Workspace } from '../core/workspaces.js';
 import { signedArtifactUrl } from '../server/artifactSignatures.js';
+import { screenshotVisualFollowup } from './computer.js';
 
 const execFileAsync = promisify(execFile);
 const MAX_POWERSHELL_BUFFER = 8 * 1024 * 1024;
@@ -33,7 +34,7 @@ export async function windowsListMonitors(workspace: Workspace) {
   return ok('windows monitors', await psJson(monitorScript()));
 }
 
-export async function windowsScreenshot(workspace: Workspace, monitor = 'primary') {
+export async function windowsScreenshot(workspace: Workspace, monitor = 'primary', params: Record<string, unknown> = {}) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_screenshot');
   ensureMonitorAllowed(workspace, monitor);
@@ -42,7 +43,20 @@ export async function windowsScreenshot(workspace: Workspace, monitor = 'primary
   await mkdir(path.dirname(paths.full), { recursive: true });
   const data = await psObject(screenshotScript(paths.full, monitor));
   const preview = await writePreview(paths.full, paths.preview);
-  return ok('windows screenshot', { ...data, artifact: artifactPair(workspace, paths.full, preview) });
+  const artifact = artifactPair(workspace, paths.full, preview);
+  const payload = {
+    ...data,
+    artifact,
+    preview: artifact.preview,
+    full: artifact.full,
+    readable_url: artifact.preview.readable_url ?? artifact.full.readable_url,
+    image_web_url: artifact.preview.readable_url ?? artifact.full.readable_url,
+    web_url: artifact.preview.readable_url ?? artifact.full.readable_url
+  };
+  return ok('windows screenshot', {
+    ...payload,
+    visual_followup: await screenshotVisualFollowup(payload, { ...params, source: 'windows_computer' })
+  });
 }
 
 export async function windowsUiaTree(workspace: Workspace, maxNodes = 120) {
