@@ -19,18 +19,17 @@ export function workspacePolicy(workspace: Workspace) {
     policy_model: {
       principle: 'Webchat agents should not be weaker than OpenClaw agents when a capability set is enabled; safety wraps powerful primitives instead of replacing them with toy actions.',
       workspace_exec: 'Bounded run_command/start_process/read_process/write_process/stop_process are normal workspace-agent primitives when workspace or allow_tests is enabled.',
-      workspace_delete: 'delete_file/delete_path are normal scoped workspace editing tools, suitable for tmp cleanup and routine file management. Irreversible or out-of-scope destructive workflows remain stop-boundary events.',
+      workspace_delete: 'delete_file/delete_path are normal scoped workspace editing tools, suitable for tmp cleanup and routine file management.',
       machine_admin: 'run_configured_command and service/tunnel/host administration are machine_admin. Existing file tools remain one vocabulary: workspace-only lanes stay root-scoped; machine_admin host-scope lanes may use explicit absolute host paths inside host_root. No hidden path/secret/glob deny layer exists; adding one requires Calvin approval.',
-      provider_prompts: 'Provider-side confirmation prompts are intentionally minimized for routine scoped workspace/browser/computer work; stop boundaries describe when the agent must pause for Calvin.'
+      provider_prompts: 'Provider-side confirmation prompts are intentionally minimized for routine scoped workspace/browser/computer work. OTA policy must not add generic stop-boundary lists; if the real UI blocks progress, report the concrete blocker.'
     },
     allowed_tools: allowedTools(workspace),
     windows_computer_rights: workspace.windows_computer,
-    blocked_tools: ['mouse_click', 'keyboard_type'],
     // Provider-side confirmation prompts are harmful for OpenClaw-like chat-thread agents.
-    // Routine scoped workspace/computer tools are intentionally not listed as requiring
-    // per-call approval; external/irreversible actions are handled by stop boundaries.
-    requires_approval: [],
-    stop_boundaries: ['captcha_or_human_verification', 'credential_or_secret_use_or_secret_exfiltration', 'external_messages_email_chat_or_public_posts', 'third_party_uploads_or_form_submissions', 'payments_purchases_or_terms_acceptance', 'account_security_settings_or_identity_verification', 'irreversible_or_out_of_scope_destructive_actions']
+    // Routine scoped workspace/browser/computer tools are intentionally not listed as blocked
+    // or requiring per-call approval. Calvin policy: do not add stop_boundaries or blocked_tools
+    // without Calvin's explicit approval.
+    requires_approval: []
   });
 }
 

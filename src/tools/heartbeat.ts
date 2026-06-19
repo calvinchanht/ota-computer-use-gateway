@@ -9,7 +9,6 @@ export function heartbeat(workspaces: Map<string, Workspace>) {
     status: 'online',
     platform: platformInfo(),
     workspaces: [...workspaces.keys()],
-    capabilities: ['heartbeat', 'get_workspace_policy', 'list_dir', 'read_file', 'search_files', 'git_status', 'git_diff'],
-    locked_capabilities: ['apply_patch', 'run_tests', 'capture_screen', 'mouse_click', 'keyboard_type']
+    capabilities: ['heartbeat', 'get_workspace_policy', 'list_dir', 'read_file', 'search_files', 'git_status', 'git_diff']
   });
 }

@@ -132,7 +132,7 @@ secret_return: never
 credential_use: server_side_only
 ```
 
-A webchat agent may have Computer API but still be forbidden from external messages, uploads, payment, terms acceptance, CAPTCHA/human-verification, account/security changes, or destructive deletes unless the workflow explicitly allows them.
+A webchat agent with Computer API should use the enabled computer tools directly. OTA/Threaddex policy must not add generic stop-boundary or blocked-tool lists without Calvin's explicit approval; concrete blockers should be reported only when encountered.
 
 ## Enforcement notes
 

@@ -53,7 +53,7 @@ Async/recovery:
 
 Safety:
 - Never reveal bearer tokens, PATs, OAuth tokens, cookies, private keys, raw secrets, auth headers, or secret file contents.
-- Stop before CAPTCHA/human verification, account/security settings, payments/purchases/terms acceptance, external messages/email/chat/public posts, third-party uploads/forms/submissions, or irreversible/out-of-scope destructive work unless Calvin explicitly approves that workflow.
+- Do not invent generic stop-boundary lists. Use the enabled workspace/browser/computer tools directly; if a real page or external service blocks progress, report the concrete blocker visibly.
 - Keep changes small, recoverable, and checkpoint important progress.
 ```
 

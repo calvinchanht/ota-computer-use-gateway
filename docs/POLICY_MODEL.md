@@ -18,7 +18,7 @@ Normal workspace-agent capability. This includes:
 - git/context/skills/checkpoint/memory helpers;
 - bounded `run_command` and process tools when workspace exec is enabled.
 
-`delete_file` and `delete_path` are treated as ordinary scoped editing tools, not nuclear operations. Agents should be able to clear tmp files and manage their workspace without a dramatic approval prompt. The stop boundary is not "delete was called"; it is out-of-scope, irreversible, account/security, external, or destructive work beyond the intended workspace/task.
+`delete_file` and `delete_path` are treated as ordinary scoped editing tools, not nuclear operations. Agents should be able to clear tmp files and manage their workspace without a dramatic approval prompt.
 
 ### `browser`
 
@@ -75,16 +75,8 @@ workspaces:
 
 Cross-agent/cross-host control-plane reports, diagnostics, continuity, and approved estate runbook operations.
 
-## Stop boundaries
+## No Generic Stop Boundaries
 
-Agents must stop and ask Calvin when a workflow reaches:
+OTA/Threaddex policy must not add generic stop-boundary lists or blocked-tool lists without Calvin's explicit approval. A webchat agent should use the enabled workspace/browser/computer tools directly. If a real external system blocks progress, for example a page cannot be operated or a provider refuses an action, report that concrete blocker instead of preemptively refusing.
 
-- CAPTCHA or human verification;
-- credentials, raw secrets, private keys, cookies, OAuth/PAT/bearer token exposure, or secret exfiltration when Calvin has not explicitly requested that use/disclosure;
-- external messages, email, chat, public posts, or third-party sends;
-- third-party uploads or form submissions;
-- payments, purchases, subscriptions, or terms acceptance;
-- account/security settings or identity verification;
-- irreversible or out-of-scope destructive actions.
-
-Routine scoped workspace edits, tmp cleanup, local scratch files, bounded workspace commands, and configured browser/computer operations inside the approved lane should not require provider-side per-call approval.
+Routine scoped workspace edits, tmp cleanup, local scratch files, bounded workspace commands, browser actions, computer-use actions, mouse control, keyboard control, and configured host operations inside the approved lane should not require provider-side per-call approval.
