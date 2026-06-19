@@ -1,0 +1,22 @@
+# Anna-only brokered Windows executor config fragment for OTA issue #33.
+# This opts Anna into brokered read-only Windows computer-use jobs.
+# Other agents remain default-off unless they add their own explicit executor.
+
+brokered_executors:
+  enabled: true
+  include_action_schema: true
+  default_ttl_ms: 60000
+  default_lease_ms: 30000
+  executors:
+    - executor_id: anna-windows-local
+      executor_kind: windows_computer_use
+      agent_id: anna
+      enabled: true
+      allowed_operations:
+        - windows.status
+        - windows.list_monitors
+        - windows.list_windows
+        - windows.screenshot
+      default_lease_ms: 30000
+      max_ttl_ms: 60000
+      worker_bearer_token_env: ANNA_WINDOWS_EXECUTOR_TOKEN
