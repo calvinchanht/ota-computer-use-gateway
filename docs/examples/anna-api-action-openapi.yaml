@@ -1,16 +1,16 @@
 openapi: 3.1.0
 info:
-  title: HKerBot OTA + Threaddex API Action
+  title: Anna OTA + Threaddex API Action
   version: 0.5.0
-  description: "HKerBot single-host Action with strict path boundary: /ota for capability tools and /threaddex for native Job API delivery."
+  description: "Anna single-host Action with strict path boundary: /ota for capability tools and /threaddex for native Job API delivery."
 servers:
-  - url: https://hkerbot-api.unrealize.com
+  - url: https://anna-api.unrealize.com
 paths:
   /ota/api/v1/tool:
     post:
       operationId: gateway_request
-      summary: Run one scoped HKerBot gateway tool call.
-      description: Runs one scoped OTA capability tool call in workspace_id hkerbot. Do not use this operation for Threaddex job retrieval or delivery; use the native /threaddex operations getJob, deliverJobProgress, deliverJob, and requestJobContinuation instead.
+      summary: Run one scoped Anna gateway tool call.
+      description: Runs one scoped OTA capability tool call in workspace_id anna. Do not use this operation for Threaddex job retrieval or delivery; use the native /threaddex operations getJob, deliverJobProgress, deliverJob, and requestJobContinuation instead.
       security:
         - bearerAuth: []
       requestBody:
@@ -29,8 +29,8 @@ paths:
   /ota/api/v1/batch:
     post:
       operationId: gateway_batch
-      summary: Run multiple scoped HKerBot gateway tool calls.
-      description: Runs up to 20 scoped HKerBot OTA capability tool calls in order. Prefer this for multi-step read/write/read-back or checkpoint flows. Do not use batch for Threaddex job retrieval or delivery; use /threaddex operations directly.
+      summary: Run multiple scoped Anna gateway tool calls.
+      description: Runs up to 20 scoped Anna OTA capability tool calls in order. Prefer this for multi-step read/write/read-back or checkpoint flows. Do not use batch for Threaddex job retrieval or delivery; use /threaddex operations directly.
       security:
         - bearerAuth: []
       requestBody:
@@ -69,7 +69,7 @@ paths:
   /threaddex/v1/schema:
     get:
       operationId: getThreaddexSchema
-      summary: Read HKerBot Threaddex Job API schema metadata.
+      summary: Read Anna Threaddex Job API schema metadata.
       security:
         - bearerAuth: []
       responses:
@@ -84,7 +84,7 @@ paths:
   /threaddex/v1/job/{job_id}:
     get:
       operationId: getJob
-      summary: Read a HKerBot Threaddex job by id.
+      summary: Read a Anna Threaddex job by id.
       description: Use the job_id from a Telegram job prompt. This is the correct operation for job retrieval. Do not call gateway_request with tool=getJob. Pass job_token when supplied by the job prompt.
       security:
         - bearerAuth: []
@@ -111,7 +111,7 @@ paths:
   /threaddex/v1/job/{job_id}/progress:
     post:
       operationId: deliverJobProgress
-      summary: Deliver non-final progress for a HKerBot Threaddex job.
+      summary: Deliver non-final progress for a Anna Threaddex job.
       description: Use for Telegram job progress. This is the correct operation for progress delivery. Do not call gateway_request with tool=deliverJobProgress. Pass job_token when supplied by the job prompt.
       security:
         - bearerAuth: []
@@ -161,7 +161,7 @@ paths:
   /threaddex/v1/job/{job_id}/deliver:
     post:
       operationId: deliverJob
-      summary: Deliver the final result for a HKerBot Threaddex job.
+      summary: Deliver the final result for a Anna Threaddex job.
       description: Use for the substantive final answer. Pass job_token when supplied by the job prompt. If this API call fails, report the full visible error details in chat with secrets-type information redacted instead of replying ok.
       security:
         - bearerAuth: []
@@ -203,7 +203,7 @@ paths:
   /threaddex/v1/job/{job_id}/continuation:
     post:
       operationId: requestJobContinuation
-      summary: Request a continuation for a HKerBot Threaddex job instead of final delivery.
+      summary: Request a continuation for a Anna Threaddex job instead of final delivery.
       security:
         - bearerAuth: []
       parameters:
@@ -378,7 +378,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
       description: |
         Tool-specific arguments. For browser work, prefer high-level visible-state and tab-hygiene helpers before raw
         CDP: browser_visible_state returns human-visible text/buttons/forms/required-missing/file upload/error state;
@@ -395,7 +395,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
     ListDirArguments:
       type: object
       additionalProperties: false
@@ -403,7 +403,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
         path:
           type: string
         max_entries:
@@ -417,7 +417,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
         path:
           type: string
         start_line:
@@ -434,7 +434,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
         path:
           type: string
         content:
@@ -450,7 +450,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
     GitDiffArguments:
       type: object
       additionalProperties: false
@@ -458,7 +458,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
         max_bytes:
           type: integer
           minimum: 1
@@ -470,7 +470,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
         title:
           type: string
           maxLength: 120
@@ -490,7 +490,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
         type:
           type: string
           enum: [note, decision, progress, handoff]
@@ -514,7 +514,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
     BrowserStatusArguments:
       type: object
       additionalProperties: false
@@ -522,7 +522,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
         profile_label:
           type: string
     ListBrowserTabsArguments:
@@ -532,7 +532,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
         profile_label:
           type: string
         include_urls:
@@ -546,7 +546,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
         profile_label:
           type: string
         method:
@@ -563,7 +563,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
         profile_label:
           type: string
         calls:
@@ -579,7 +579,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
         profile_label:
           type: string
         target_id:
@@ -598,7 +598,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
         profile_label:
           type: string
         target_id:
@@ -643,7 +643,7 @@ components:
       properties:
         workspace_id:
           type: string
-          enum: [hkerbot]
+          enum: [anna]
         path:
           type: string
         root:
