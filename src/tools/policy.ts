@@ -10,7 +10,7 @@ export function workspacePolicy(workspace: Workspace) {
     api_sets: resolvedApiSets(workspace),
     api_set_notes: {
       workspace: 'OpenClaw-like workspace agent primitives: scoped files, tmp cleanup/delete, artifacts, context, skills, bounded run_command/processes, git/context helpers, and async run recovery.',
-      browser: 'Preassigned browser profiles/ports plus CDP-backed tabs, visible state, click/wait, and upload verification.',
+      browser: 'Direct full scoped CDP access to preassigned browser profiles/ports. browser_visible_state/click/upload helpers are convenience tools only, not an observer/read-only fallback.',
       computer: 'Local GUI/computer-use via Cua Driver: screenshots, windows, accessibility tree, mouse, keyboard, and local app control.',
       computer_windows: 'Windows desktop computer-use via native APIs. The api_sets.computer_windows macro grants full Windows rights; partial lanes should set windows_computer.enabled plus individual rights.',
       machine_admin: 'Host/lane administration and configured operations such as run_configured_command, services, config, tunnels, and deployment workflows. When filesystem.machine_admin_host_scope is enabled, existing file tools may resolve explicit absolute host paths inside host_root; no host_* duplicate tools are used.',

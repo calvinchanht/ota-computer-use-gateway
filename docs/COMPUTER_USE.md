@@ -1,6 +1,6 @@
 # Computer-Use Primitives
 
-The browser layer is Chrome DevTools Protocol (CDP) proxying. It does not expose form/action wrapper tools for browser features that CDP already provides.
+Browser access is direct Chrome DevTools Protocol (CDP) proxying. It does not expose form/action wrapper tools for browser features that CDP already provides.
 
 ## Browser/CDP tools
 
@@ -12,7 +12,7 @@ The browser layer is Chrome DevTools Protocol (CDP) proxying. It does not expose
 - `browser_cdp_call` — call one CDP method on a scoped page-target websocket.
 - `browser_cdp_batch` — send a sequence of raw CDP command steps to a scoped page-target websocket; also supports gateway-side `{ "delay_ms": number }` steps and command-level `wait_for: "page_load" | "dom_content_loaded"`.
 
-Use CDP directly for browser work, including DOM inspection, snapshots, screenshots, navigation, clicking, typing, file upload flows, form filling, page scripting, tab management, and browser-level operations. Batch tools are transport sequencers for raw CDP commands; they do not invent browser actions.
+Use CDP directly for browser work, including DOM inspection, snapshots, screenshots, navigation, clicking, typing, file upload flows, form filling, page scripting, tab management, and browser-level operations. Batch tools are transport sequencers for raw CDP commands; they do not invent browser actions. Do not create observer/read-only fallback behavior: browser access is either direct CDP ON or explicit OFF/error.
 
 Examples of CDP methods provider-thread agents may use directly:
 

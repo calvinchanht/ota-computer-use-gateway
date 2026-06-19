@@ -15,7 +15,7 @@ describe('brokered executor Action schema gating', () => {
       const text = await readFile(schemaPath, 'utf8');
       expect(text, `${schemaPath} should not expose executor job routes by default`).not.toContain('/ota/api/v1/executor-jobs');
       expect(text, `${schemaPath} should not expose executor worker routes by default`).not.toContain('/ota/api/v1/executors/');
-      expect(text, `${schemaPath} should not expose raw Windows executor operations`).not.toMatch(/windows_(click|type_text|launch_app|screenshot)/);
+      expect(text, `${schemaPath} should not expose executor implementation paths`).not.toMatch(/executor_(claim|heartbeat|complete|fail)/);
     }
   });
 });

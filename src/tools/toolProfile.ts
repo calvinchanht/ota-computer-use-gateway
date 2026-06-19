@@ -46,8 +46,8 @@ function apiCapabilitySets() {
         tools: ['workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'read_file_chunk', 'read_file_lines', 'write_file', 'edit_file', 'apply_patch', 'run_command', 'start_process', 'get_agent_bootstrap', 'get_project_context', 'list_skills', 'record_progress', 'checkpoint_thread']
       },
       browser: {
-        purpose: 'Web/browser automation using preassigned profiles and CDP ports.',
-        tools: ['list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_call', 'browser_cdp_batch']
+        purpose: 'Direct full CDP browser automation using preassigned profiles and ports.',
+        tools: ['list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch']
       },
       computer: {
         purpose: 'Local GUI/computer use; independent from machine administration.',
@@ -105,9 +105,12 @@ function apiBehavior() {
       statuses: ['queued', 'running', 'waiting_for_navigation', 'waiting_for_dom', 'waiting_for_upload', 'waiting_for_user', 'completed', 'blocked_by_login', 'blocked_by_captcha', 'timed_out', 'failed'],
       instruction: 'When a response has api.status=running, wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. Do not retry the original tool call unless the run is missing or explicitly failed.'
     },
-    browser_semantic_layer: {
-      compact_tools: ['browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify'],
-      direction: 'Keep browser truth generic and business workflow judgment in repo helpers/scripts.'
+    browser_direct_cdp_contract: {
+      mode: 'binary_on_off',
+      on: 'browser api_set grants direct full scoped CDP execution through browser_cdp_browser_* and browser_cdp_* tools.',
+      off: 'no CDP session or browser action should be implied.',
+      no_observer_fallback: 'Do not downgrade to an observer/read-only browser mode. If CDP binding fails, report the binding failure explicitly.',
+      convenience_tools: ['browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify']
     },
     browser_targets: {
       list_browser_tabs_default: 'real page targets only',

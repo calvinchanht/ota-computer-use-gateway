@@ -380,8 +380,8 @@ components:
           type: string
           enum: [catalyst]
       description: |
-        Tool-specific arguments. For browser work, prefer high-level visible-state and tab-hygiene helpers before raw
-        CDP: browser_visible_state returns human-visible text/buttons/forms/required-missing/file upload/error state;
+        Tool-specific arguments. For browser work, direct CDP is the primary browser access path:
+        use browser_cdp_browser_* and browser_cdp_* for full scoped CDP execution. Browser_visible_state returns human-visible text/buttons/forms/required-missing/file upload/error state;
         browser_manage_tabs lists/focuses/closes real page tabs; browser_click_and_wait clicks by selector/text and
         waits for visible text, selector, URL substring, or page stability; browser_upload_file_and_verify sets a
         workspace-relative file input and confirms expected filename/text appears in human-visible page text. For
