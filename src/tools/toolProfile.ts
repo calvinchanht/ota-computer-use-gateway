@@ -32,7 +32,7 @@ function canonicalTools(): string[] {
     'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch',
     'workspace_inventory', 'read_file', 'read_file_chunk', 'read_file_lines', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
     'run_command', 'run_configured_command', 'list_dir', 'stat_path', 'tree', 'search_files',
-    'git_status', 'git_diff', 'git_push_current_branch', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',
+    'github', 'git_status', 'git_diff', 'git_push_current_branch', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',
     'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'memory_search', 'memory_write',
     'list_skills', 'read_skill', 'approval_status', 'list_artifacts', 'record_artifact',
     'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread'
@@ -46,7 +46,7 @@ function apiCapabilitySets() {
     sets: {
       workspace: {
         purpose: 'Normal agent workspace operations.',
-        tools: ['workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'read_file_chunk', 'read_file_lines', 'write_file', 'edit_file', 'apply_patch', 'run_command', 'start_process', 'get_agent_bootstrap', 'get_project_context', 'list_skills', 'record_progress', 'checkpoint_thread']
+        tools: ['workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'read_file_chunk', 'read_file_lines', 'write_file', 'edit_file', 'apply_patch', 'run_command', 'github', 'start_process', 'get_agent_bootstrap', 'get_project_context', 'list_skills', 'record_progress', 'checkpoint_thread']
       },
       browser: {
         purpose: 'Direct full CDP browser automation using preassigned profiles and ports.',
@@ -64,7 +64,7 @@ function apiCapabilitySets() {
       },
       machine_admin: {
         purpose: 'Own-machine/lane management through configured commands/processes and scoped service/config/runbook work.',
-        tools: ['run_configured_command', 'run_command', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process']
+        tools: ['run_configured_command', 'run_command', 'github', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process']
       },
       estate_admin: {
         purpose: 'Cross-agent/cross-host Genesis control-plane reporting and approved estate operations.',
@@ -141,6 +141,7 @@ function toolAsync() {
     cua_driver_batch: quotaSaverAsync('Cua Driver'),
     search_files: quotaSaverAsync('workspace search'),
     run_command: quotaSaverAsync('workspace command'),
+    github: quotaSaverAsync('GitHub command'),
     read_process: { may_return_running: false, tail_supported: true, cursor_field: 'cursor', next_cursor_field: 'data.next_cursor', note: 'For long-running commands, prefer start_process plus read_process(cursor) to retrieve only new buffered output.' },
     browser_tail: { may_return_running: false, tail_supported: true, cursor_field: 'cursor', next_cursor_field: 'data.next_cursor', note: 'For long-running browser observation, call browser_tail with cursor=previous next_cursor to retrieve visible-state deltas.' },
     get_gateway_run: { may_return_running: false, note: 'Poll/recovery endpoint for prior HTTP JSON API run_id values.' }
@@ -169,6 +170,8 @@ function aliases(): Record<string, string> {
     Edit: 'edit_file',
     Bash: 'run_command',
     Shell: 'run_command',
+    gh: 'github',
+    GitHub: 'github',
     Grep: 'search_files',
     Glob: 'list_dir',
     exec: 'run_command'

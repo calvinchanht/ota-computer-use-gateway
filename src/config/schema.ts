@@ -67,7 +67,11 @@ const workspaceBaseSchema = z.object({
   windows_computer: windowsComputerSchema,
   commands: z.record(z.string(), z.string()).default({}),
   filesystem: filesystemScopeSchema,
-  git: z.object({ github_token_file: z.string().min(1).optional() }).default({})
+  git: z.object({
+    github_token_file: z.string().min(1).optional(),
+    github_cli_wrapper: z.string().min(1).optional(),
+    github_cli: z.string().min(1).default('gh')
+  }).prefault({})
 });
 
 export const workspaceSchema = workspaceBaseSchema.transform((workspace) => {

@@ -56,6 +56,12 @@ workspaces:
       test: "npm test"
       lint: "npm run lint"
       build: "npm run build"
+    git:
+      github_token_file: "/absolute/path/to/secrets/example_github_pat.txt"
+      # Optional: set this to a PAT-backed wrapper such as /home/genesis/workspace/bin/gh-genesis.
+      # If omitted, the github tool invokes github_cli with GH_TOKEN/GITHUB_TOKEN from github_token_file.
+      # github_cli_wrapper: "/absolute/path/to/bin/gh-wrapper"
+      github_cli: "gh"
 
 command_runtime:
   # HTTP run_command remains argv-first. This shell is used only by legacy shell-string

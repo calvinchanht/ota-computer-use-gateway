@@ -13,6 +13,7 @@ import { toolProfile } from '../tools/toolProfile.js';
 import { allowedTools, workspacePolicy } from '../tools/policy.js';
 import { deleteFileTool, deletePathTool, editFileTool, listDir, readBinaryFileTool, readFileTool, statPath, treeTool, workspaceInventory, writeBinaryFileTool, writeFileTool } from '../tools/files.js';
 import { gitDiff, gitStatus } from '../tools/git.js';
+import { githubCliTool } from '../tools/github.js';
 import { genesisAgentDeepDive, genesisBootstrap, genesisEstateOverview, genesisHostDeepDive, genesisSafeDiagnostic } from '../tools/genesis.js';
 import { agentBootstrap, checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../tools/context.js';
 import { getProjectContext, memoryWrite } from '../tools/memory.js';
@@ -61,6 +62,7 @@ import { completeExecutorJobSchema, executorClaimSchema, executorHeartbeatSchema
 
 const MCP_PATH = '/mcp';
 const API_TOOL_PATH = '/api/v1/tool';
+const API_GITHUB_PATHS = new Set(['/api/v1/github', '/api/v1/gh']);
 const API_BATCH_PATH = '/api/v1/batch';
 const API_DEBUG_REQUEST_CONTEXT_PATH = '/api/v1/debug/request_context';
 const API_RUNS_PREFIX = '/api/v1/runs/';
@@ -124,6 +126,7 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
   if (isBrokeredExecutorPath(req)) return handleBrokeredExecutorApi(config, req, res);
   if (isApiArtifactPath(req)) return handleApiArtifact(config, req, res);
   if (isApiRunPath(req)) return handleApiRun(req, res);
+  if (isApiGithub(req)) return handleApiGithub(config, req, res);
   if (isApiTool(req)) return handleApiTool(config, req, res);
   if (isApiBatch(req)) return handleApiBatch(config, req, res);
 
@@ -163,7 +166,7 @@ function isMcp(req: IncomingMessage): boolean {
 
 function isApi(req: IncomingMessage): boolean {
   const path = req.url?.split('?')[0];
-  return path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || path === API_BATCH_PATH || isApiRunPath(req) || isApiArtifactPath(req) || isBrokeredExecutorPath(req);
+  return path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || API_GITHUB_PATHS.has(path ?? '') || path === API_BATCH_PATH || isApiRunPath(req) || isApiArtifactPath(req) || isBrokeredExecutorPath(req);
 }
 
 function isApiArtifactPath(req: IncomingMessage): boolean {
@@ -187,6 +190,10 @@ function isApiDebugRequestContext(req: IncomingMessage): boolean {
 
 function isApiTool(req: IncomingMessage): boolean {
   return req.url?.split('?')[0] === API_TOOL_PATH;
+}
+
+function isApiGithub(req: IncomingMessage): boolean {
+  return API_GITHUB_PATHS.has(req.url?.split('?')[0] ?? '');
 }
 
 function isApiBatch(req: IncomingMessage): boolean {
@@ -256,6 +263,21 @@ async function handleApiTool(config: AppConfig, req: IncomingMessage, res: Serve
   const result = await runApiTool(config, request.value.tool, args);
   const response = { ...result, api: { transport: 'http-json', tool: request.value.tool, thread: safeBodyThread(parsedBody) } };
   const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool: request.value.tool, thread: safeBodyThread(parsedBody) } });
+  return sendJson(res, 200, attachRun(response, record));
+}
+
+async function handleApiGithub(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
+  const parsed = await readApiJsonBody(req);
+  if (!parsed.ok) return sendJson(res, parsed.status, { ok: false, error: parsed.error });
+  const args = recordArg(parsed.body, 'github request') ?? {};
+  const idempotencyKey = idempotencyKeyFor(req, parsed.body);
+  const existing = existingRun(idempotencyKey);
+  if (existing) return sendJson(res, 200, existing.response);
+  if (shouldUseQuotaSaver('github', args)) return handleQuotaSaverApiTool(config, res, 'github', args, idempotencyKey, safeBodyThread(parsed.body));
+  const result = await runApiTool(config, 'github', args);
+  const response = { ...result, api: { transport: 'http-json', tool: 'github', path_alias: req.url?.split('?')[0], thread: safeBodyThread(parsed.body) } };
+  const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool: 'github', thread: safeBodyThread(parsed.body) } });
   return sendJson(res, 200, attachRun(response, record));
 }
 
@@ -552,7 +574,7 @@ export function shouldUseQuotaSaver(tool: string, args: Record<string, unknown>)
 }
 
 function defaultQuotaSaverTool(tool: string): boolean {
-  if (tool === 'run_command' || tool === 'search_files') return true;
+  if (tool === 'run_command' || tool === 'search_files' || tool === 'github') return true;
   if (tool === 'cua_driver_status') return false;
   return tool.startsWith('browser_cdp') || tool.startsWith('cua_driver_') || tool.startsWith('computer_');
 }
@@ -562,6 +584,7 @@ function initialWaitReason(tool: string): string {
   if (tool.startsWith('cua_driver') || tool.startsWith('computer_')) return 'waiting_for_computer';
   if (tool === 'search_files') return 'searching_workspace';
   if (tool === 'run_command') return 'running_command';
+  if (tool === 'github') return 'running_github_command';
   return 'running';
 }
 
@@ -668,6 +691,7 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'delete_path') return deletePathTool(config, workspace, requiredString(args.path, 'path'), Boolean(args.recursive));
   if (tool === 'git_status') return gitStatus(workspace);
   if (tool === 'git_diff') return gitDiff(workspace, optionalNumber(args.max_bytes) ?? 20000);
+  if (tool === 'github') return githubCliTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 60000, optionalNumber(args.max_output_chars) ?? optionalNumber(args.max_stdout_bytes) ?? 20000);
   if (tool === 'get_agent_bootstrap') return agentBootstrap(workspace);
   if (tool === 'get_context_snapshot') return contextSnapshot(workspace);
   if (tool === 'get_project_context') return getProjectContext(workspace);

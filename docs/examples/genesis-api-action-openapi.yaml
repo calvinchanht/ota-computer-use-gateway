@@ -322,6 +322,7 @@ components:
       - search_files
       - git_status
       - git_diff
+      - github
       - git_push_current_branch
       - get_project_context
       - get_context_snapshot

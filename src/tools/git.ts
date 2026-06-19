@@ -92,7 +92,8 @@ export function sanitizeGitRemoteForDisplay(url: string): string {
 }
 
 export function redactGitOutputForDisplay(text: string): string {
-  return text.replace(/gh[pousr]_[A-Za-z0-9_]+/g, '[GITHUB_TOKEN_REDACTED]')
+  return text.replace(/github_pat_[A-Za-z0-9_]+/g, '[GITHUB_TOKEN_REDACTED]')
+    .replace(/gh[pousr]_[A-Za-z0-9_]+/g, '[GITHUB_TOKEN_REDACTED]')
     .replace(/(https?:\/\/)([^\s/@:]+)(:[^\s/@]+)?@/g, '$1');
 }
 

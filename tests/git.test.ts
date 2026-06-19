@@ -1,9 +1,12 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { createServer, type Server } from 'node:http';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { gitPushCurrentBranch, redactGitOutputForDisplay, sanitizeGitRemoteForDisplay } from '../src/tools/git.js';
+import { githubCliTool } from '../src/tools/github.js';
+import { createHttpRequestHandler } from '../src/server/http.js';
 import type { AppConfig } from '../src/config/schema.js';
 import type { Workspace } from '../src/core/workspaces.js';
 
@@ -54,6 +57,49 @@ describe('git display hygiene', () => {
     const result = await gitPushCurrentBranch(config, workspace(repo.root, repo.tokenFile), '.', 'origin', 'missing-branch');
     expect(result.data).toMatchObject({ status: 'failed', failure_class: 'ref_mismatch' });
   });
+
+  it('runs github argv through configured PAT-backed wrapper without leaking token', async () => {
+    const repo = await fixtureRepo();
+    const ws = workspace(repo.root, repo.tokenFile);
+    ws.git = { ...ws.git, github_cli_wrapper: process.execPath };
+    await writeFile(repo.tokenFile, 'github_pat_TESTSECRET\n');
+    const script = "process.stdout.write(`${process.env.GH_TOKEN} ${process.argv.slice(1).join('|')}`)";
+    const result = await githubCliTool(config, ws, ['-e', script, 'issue', 'list'], '.');
+    expect(result.data).toMatchObject({ exit_code: 0, auth_lane: 'configured_wrapper' });
+    expect(JSON.stringify(result.data)).toContain('issue|list');
+    expect(JSON.stringify(result.data)).not.toContain('github_pat_TESTSECRET');
+    expect(JSON.stringify(result.data)).toContain('[GITHUB_TOKEN_REDACTED]');
+  });
+
+  it('reports missing github token without exposing token path', async () => {
+    const repo = await fixtureRepo();
+    await expect(githubCliTool(config, workspace(repo.root, path.join(repo.root, 'missing-token.txt')), ['issue', 'list'], '.'))
+      .rejects.toThrow('github auth diagnostic');
+  });
+
+  it('exposes github through the /ota/api/v1/gh HTTP alias', async () => {
+    const repo = await fixtureRepo();
+    await writeFile(repo.tokenFile, 'github_pat_TESTSECRET\n');
+    const server: Server = createServer(createHttpRequestHandler(configForGithub(repo.root, repo.tokenFile)));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('expected TCP address');
+      const script = "process.stdout.write(`${process.env.GH_TOKEN} ${process.argv.slice(1).join('|')}`)";
+      const response = await fetch(`http://127.0.0.1:${address.port}/ota/api/v1/gh`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ workspace_id: 'anna', cmd_array: ['-e', script, 'issue', 'view', '40'], async_mode: 'sync' })
+      });
+      const body = await response.json() as { ok: boolean; data: { output: string } };
+      expect(body.ok).toBe(true);
+      expect(body.data.output).toContain('issue|view|40');
+      expect(body.data.output).not.toContain('github_pat_TESTSECRET');
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      await rm(repo.root, { recursive: true, force: true });
+    }
+  });
 });
 
 async function fixtureRepo() {
@@ -86,6 +132,15 @@ function workspace(root: string, tokenFile?: string): Workspace {
     browser: { profiles: [] },
     commands: {},
     git: tokenFile ? { github_token_file: tokenFile } : {}
+  };
+}
+
+function configForGithub(root: string, tokenFile: string): AppConfig {
+  return {
+    ...config,
+    server: { host: '127.0.0.1', port: 0, auth: { enabled: false, bearer_token_env: 'TEST_TOKEN', allow_loopback_without_auth: true }, rate_limit: { enabled: false, window_ms: 60000, max_requests: 120, trust_proxy_headers: false }, tool_annotations: { mode: 'honest' }, exposed_tools: [] },
+    workspaces: [{ ...workspace(root, tokenFile), id: 'anna', git: { github_token_file: tokenFile, github_cli_wrapper: process.execPath } }],
+    brokered_executors: { enabled: false, include_action_schema: false, default_ttl_ms: 60000, default_lease_ms: 30000, executors: [] }
   };
 }
 

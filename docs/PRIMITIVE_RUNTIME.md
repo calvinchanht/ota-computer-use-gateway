@@ -115,9 +115,12 @@ If a stale or out-of-range cursor is provided, the gateway clamps it to the curr
 
 ## Git primitives
 
+- `github` — run GitHub CLI argv through the workspace configured PAT-backed lane. `cmd_array` starts after `gh`; for example `["issue", "view", "40", "-R", "owner/repo"]`.
 - `git_status` — return concise git status.
 - `git_diff` — return bounded git diff output.
 - `git_push_current_branch` — push the current branch using configured server-side credentials.
+
+`github` is raw GitHub CLI argv, not raw shell. It never shell-interpolates the request. Configure `git.github_token_file` for the workspace; optionally configure `git.github_cli_wrapper` when the host has a canonical wrapper such as `/home/genesis/workspace/bin/gh-genesis`. Token values, tokenized remotes, and GitHub token patterns are redacted from output.
 
 Git output contract:
 

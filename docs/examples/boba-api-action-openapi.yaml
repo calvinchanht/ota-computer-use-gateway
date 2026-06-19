@@ -326,6 +326,7 @@ components:
         - search_files
         - git_status
         - git_diff
+        - github
         - run_command
         - start_process
         - list_processes
