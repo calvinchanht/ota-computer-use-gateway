@@ -11,6 +11,7 @@ let server: Server | undefined;
 let tempRoot: string | undefined;
 
 afterEach(async () => {
+  delete process.env.TEST_OTA_TOKEN;
   delete process.env.MICKEY_FAKE_EXECUTOR_TOKEN;
   if (server) await new Promise<void>((resolve, reject) => server!.close((error) => error ? reject(error) : resolve()));
   server = undefined;
@@ -27,7 +28,9 @@ describe('brokered executor HTTP routes', () => {
   });
 
   it('submits, claims, completes, and reads a brokered fake-executor result when explicitly enabled', async () => {
-    const baseUrl = await start(defaultConfig(true));
+    process.env.TEST_OTA_TOKEN = 'main-secret';
+    const baseUrl = await start(defaultConfig(true, true));
+    const mainHeaders = { authorization: 'Bearer main-secret' };
     const submit = await post(`${baseUrl}/api/v1/executor-jobs`, {
       requester_agent_id: 'genesis',
       target_agent_id: 'mickey',
@@ -36,7 +39,7 @@ describe('brokered executor HTTP routes', () => {
       operation_name: 'windows.screenshot',
       operation_arguments: { monitor_id: 'primary' },
       idempotency_key: 'http-idem-1'
-    });
+    }, mainHeaders);
     expect(submit.status).toBe(200);
     expect(submit.body.job).toMatchObject({ state: 'queued', target_agent_id: 'mickey', operation_name: 'windows.screenshot' });
     const jobId = submit.body.job.broker_job_id;
@@ -46,7 +49,7 @@ describe('brokered executor HTTP routes', () => {
       executor_kind: 'windows_computer_use',
       contract_version: BROKERED_EXECUTOR_CONTRACT_VERSION,
       supported_operations: ['windows.screenshot']
-    });
+    }, mainHeaders);
     expect(rejectedHeartbeat.status).toBe(401);
     expect(rejectedHeartbeat.body).toMatchObject({ error: 'executor_unauthorized' });
 
@@ -76,7 +79,7 @@ describe('brokered executor HTTP routes', () => {
     expect(complete.status).toBe(200);
     expect(complete.body.job).toMatchObject({ state: 'succeeded', broker_job_id: jobId });
 
-    const result = await fetch(`${baseUrl}/api/v1/executor-jobs/${jobId}/result`);
+    const result = await fetch(`${baseUrl}/api/v1/executor-jobs/${jobId}/result`, { headers: mainHeaders });
     expect(result.status).toBe(200);
     await expect(result.json()).resolves.toMatchObject({ ok: true, state: 'succeeded', artifacts: [{ mime_type: 'image/png' }] });
   });
@@ -95,13 +98,13 @@ async function post(url: string, body: unknown, extraHeaders: Record<string, str
   return { status: response.status, body: await response.json() };
 }
 
-function defaultConfig(enabled: boolean): AppConfig {
+function defaultConfig(enabled: boolean, authEnabled = false): AppConfig {
   tempRoot = path.join(tmpdir(), `ota-brokered-executor-${Math.random().toString(36).slice(2)}`);
   return {
     server: {
       host: '127.0.0.1',
       port: 0,
-      auth: { enabled: false, bearer_token_env: 'TEST_BEARER', allow_loopback_without_auth: true },
+      auth: { enabled: authEnabled, bearer_token_env: 'TEST_OTA_TOKEN', allow_loopback_without_auth: false },
       rate_limit: { enabled: false, window_ms: 60000, max_requests: 120, trust_proxy_headers: false },
       tool_annotations: { mode: 'honest' },
       exposed_tools: []

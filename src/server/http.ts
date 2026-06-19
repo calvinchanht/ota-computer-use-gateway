@@ -93,7 +93,7 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
   if (!rateLimiter.check(config, req)) return sendJson(res, 429, { error: 'rate_limited' });
   if (requestTooLarge(config, req)) return sendJson(res, 413, { error: 'payload_too_large' });
   const signedArtifact = isApiArtifactPath(req) && hasValidArtifactSignature(req);
-  if (!signedArtifact && !isAuthorized(config, req)) return sendAuthError(config, res);
+  if (!signedArtifact && !isAuthorized(config, req) && !isBrokeredExecutorWorkerRequestAuthorized(config, req)) return sendAuthError(config, res);
   if (isApiDebugRequestContext(req)) return handleApiDebugRequestContext(req, res);
   if (isBrokeredExecutorPath(req)) return handleBrokeredExecutorApi(config, req, res);
   if (isApiArtifactPath(req)) return handleApiArtifact(config, req, res);
@@ -303,6 +303,22 @@ function batchOptionalNumber(steps: Array<{ arguments?: Record<string, unknown> 
   return undefined;
 }
 
+
+
+function isBrokeredExecutorWorkerRequestAuthorized(config: AppConfig, req: IncomingMessage): boolean {
+  const path = req.url?.split('?')[0] ?? '';
+  if (!path.startsWith(`${API_EXECUTORS_PREFIX}/`)) return false;
+  const rest = path.slice(`${API_EXECUTORS_PREFIX}/`.length);
+  const parts = rest.split('/').map((part) => decodeURIComponent(part));
+  const executorId = parts[0];
+  if (!executorId) return false;
+  const isWorkerRoute = (parts.length === 2 && (parts[1] === 'heartbeat' || parts[1] === 'claim')) || (parts.length === 4 && parts[1] === 'jobs' && (parts[3] === 'complete' || parts[3] === 'fail'));
+  if (!isWorkerRoute) return false;
+  const executor = enabledExecutor(config, executorId);
+  const envName = executor?.worker_bearer_token_env;
+  const expected = envName ? process.env[envName] : undefined;
+  return Boolean(expected && bearerTokenMatches(req, expected));
+}
 
 async function handleBrokeredExecutorApi(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!brokeredExecutorEnabled(config)) return sendJson(res, 404, { ok: false, error: 'brokered_executors_disabled', summary: 'brokered executor stack is disabled' });
