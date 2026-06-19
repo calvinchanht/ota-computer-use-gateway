@@ -722,7 +722,7 @@ components:
           default: false
         cmd_array:
           type: array
-          description: Preferred argv-style command, for example ["node", "-e", "console.log(1)"]. Use ["bash", "-lc", "..."] only when shell behavior is intentional.
+          description: Preferred argv-style command, for example ["node", "-e", "console.log(1)"]. For shell behavior, call get_tool_profile or get_workspace_policy and use command_runtime.recommended_cmd_array_for_shell.
           minItems: 1
           items:
             type: string

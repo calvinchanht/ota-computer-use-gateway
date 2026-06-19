@@ -10,7 +10,7 @@ const MAX_LOG_BYTES = 50000;
 export async function processStart(config: AppConfig, workspace: Workspace, command: string) {
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   const warnings = jobLifecycleCommandWarnings(command);
-  const item = startManagedProcess(command, workspace.realRoot, config.security.max_exec_ms);
+  const item = startManagedProcess(command, workspace.realRoot, config.security.max_exec_ms, config.command_runtime);
   const response = ok('process started', describeManagedProcess(item));
   response.warnings = warnings;
   return response;

@@ -1,7 +1,9 @@
 import { ok } from '../core/result.js';
+import { commandRuntimeInfo } from '../core/commandAdapter.js';
 import type { Workspace } from '../core/workspaces.js';
+import type { AppConfig } from '../config/schema.js';
 
-export function workspacePolicy(workspace: Workspace) {
+export function workspacePolicy(workspace: Workspace, config?: AppConfig) {
   return ok('workspace policy', {
     id: workspace.id,
     name: workspace.name,
@@ -23,6 +25,7 @@ export function workspacePolicy(workspace: Workspace) {
       machine_admin: 'run_configured_command and service/tunnel/host administration are machine_admin. Existing file tools remain one vocabulary: workspace-only lanes stay root-scoped; machine_admin host-scope lanes may use explicit absolute host paths inside host_root. No hidden path/secret/glob deny layer exists; adding one requires Calvin approval.',
       provider_prompts: 'Provider-side confirmation prompts are intentionally minimized for routine scoped workspace/browser/computer work. OTA policy must not add generic stop-boundary lists; if the real UI blocks progress, report the concrete blocker.'
     },
+    command_runtime: commandRuntimeInfo(undefined, config?.command_runtime),
     allowed_tools: allowedTools(workspace),
     windows_computer_rights: workspace.windows_computer,
     // Provider-side confirmation prompts are harmful for OpenClaw-like chat-thread agents.

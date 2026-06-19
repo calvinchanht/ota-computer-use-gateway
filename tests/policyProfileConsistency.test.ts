@@ -32,6 +32,20 @@ describe('policy and tool profile consistency', () => {
     expect(policy?.allowed_tools).toContain('run_configured_command');
   });
 
+  it('exposes command runtime guidance through workspace policy', () => {
+    const policy = workspacePolicy(fixtureWorkspace(), {
+      command_runtime: {
+        preferred_shell: 'powershell7',
+        shell: { command: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe', args: ['-Command'] }
+      }
+    } as any).data;
+    expect(policy?.command_runtime).toMatchObject({
+      run_command_mode: 'argv_first_http',
+      preferred_shell: 'powershell7',
+      shell_command: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
+    });
+  });
+
 
 
   it('exposes filesystem scope for machine_admin and workspace-only lanes', () => {

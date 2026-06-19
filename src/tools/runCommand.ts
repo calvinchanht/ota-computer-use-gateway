@@ -10,12 +10,12 @@ import type { Workspace } from '../core/workspaces.js';
 
 const MAX_OUTPUT_BYTES = 50000;
 
-export async function runConfiguredCommand(workspace: Workspace, commandId: string) {
+export async function runConfiguredCommand(config: AppConfig, workspace: Workspace, commandId: string) {
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   const command = workspace.commands[commandId];
   if (!command) throw new Error(`unknown command id: ${commandId}`);
   const warnings = jobLifecycleCommandWarnings(command);
-  const result = await runShellCommand(command, workspace.realRoot);
+  const result = await runShellCommand(config, command, workspace.realRoot);
   const output = truncateText(result.stdout + result.stderr, MAX_OUTPUT_BYTES);
   const response = ok('configured command finished', { command_id: commandId, exit_code: result.code, timed_out: result.timed_out, output: output.text, truncated: output.truncated });
   response.warnings = warnings;
@@ -25,7 +25,7 @@ export async function runConfiguredCommand(workspace: Workspace, commandId: stri
 export async function runShellTool(config: AppConfig, workspace: Workspace, command: string) {
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   const warnings = jobLifecycleCommandWarnings(command);
-  const result = await runShellCommand(command, workspace.realRoot, config.security.max_exec_ms);
+  const result = await runShellCommand(config, command, workspace.realRoot, config.security.max_exec_ms);
   const output = truncateText(result.stdout + result.stderr, MAX_OUTPUT_BYTES);
   const response = ok('command finished', { exit_code: result.code, timed_out: result.timed_out, output: output.text, truncated: output.truncated });
   response.warnings = warnings;
@@ -60,7 +60,7 @@ export async function runArgvTailTool(config: AppConfig, workspace: Workspace, c
   return response;
 }
 
-async function runShellCommand(command: string, cwd: string, timeoutMs = 120000) {
-  const invocation = shellInvocation(command);
+async function runShellCommand(config: AppConfig, command: string, cwd: string, timeoutMs = 120000) {
+  const invocation = shellInvocation(command, undefined, config.command_runtime);
   return runCommand(invocation.command, invocation.args, cwd, timeoutMs);
 }

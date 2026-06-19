@@ -651,9 +651,9 @@ async function runApiTool(config: AppConfig, tool: string, args: Record<string, 
 async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typeof buildWorkspaces>>, workspace: Workspace | null, tool: string, args: Record<string, unknown>): Promise<ToolResult> {
   if (tool === 'heartbeat') return heartbeat(workspaces);
   if (tool === 'workspace_status') return workspaceStatus(workspaces);
-  if (tool === 'get_tool_profile') return toolProfile();
+  if (tool === 'get_tool_profile') return toolProfile(config);
   if (!workspace) throw new Error('workspace_id is required');
-  if (tool === 'get_workspace_policy') return workspacePolicy(workspace);
+  if (tool === 'get_workspace_policy') return workspacePolicy(workspace, config);
   if (!allowedTools(workspace).includes(tool)) throw new Error(toolExposureError(tool));
   if (tool === 'workspace_inventory') return workspaceInventory(config, workspace, optionalNumber(args.max_entries));
   if (tool === 'list_dir') return listDir(config, workspace, String(args.path ?? '.'), optionalNumber(args.max_entries));
@@ -751,7 +751,7 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'stop_process') return processKill(requiredString(args.process_id, 'process_id'));
   if (tool === 'run_command' && Boolean(args.tail)) return runArgvTailTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000);
   if (tool === 'run_command') return runArgvTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000, optionalNumber(args.max_stdout_bytes) ?? 20000, optionalNumber(args.max_stderr_bytes) ?? 8000);
-  if (tool === 'run_configured_command') return runConfiguredCommand(workspace, requiredString(args.command_id, 'command_id'));
+  if (tool === 'run_configured_command') return runConfiguredCommand(config, workspace, requiredString(args.command_id, 'command_id'));
   throw new Error(`unsupported API tool: ${tool}`);
 }
 
@@ -979,7 +979,7 @@ async function startProcessFromArgs(config: AppConfig, workspace: Workspace, arg
 export function runCommandCmdArray(args: Record<string, unknown>): string[] {
   const preferred = args.cmd_array;
   const legacy = args.cmd;
-  if (typeof legacy === 'string') throw new Error('cmd must be an array. Use cmd_array: ["git", "status", "--short"]. If shell behavior is intentional, use cmd_array: ["bash", "-lc", "..."] on POSIX lanes or an explicit platform equivalent.');
+  if (typeof legacy === 'string') throw new Error('cmd must be an array. Use cmd_array: ["git", "status", "--short"]. If shell behavior is intentional, call get_tool_profile or get_workspace_policy and use command_runtime.recommended_cmd_array_for_shell.');
   if (preferred !== undefined && legacy !== undefined) {
     const preferredArray = requiredStringArray(preferred, 'cmd_array');
     const legacyArray = requiredStringArray(legacy, 'cmd');

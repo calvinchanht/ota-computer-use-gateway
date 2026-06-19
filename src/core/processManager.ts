@@ -2,6 +2,7 @@ import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:chil
 import { randomUUID } from 'node:crypto';
 import { shellInvocation } from './commandAdapter.js';
 import { truncateText } from './text.js';
+import type { CommandRuntime } from './commandAdapter.js';
 
 export type ManagedProcess = {
   id: string;
@@ -18,8 +19,8 @@ export type ManagedProcess = {
 const processes = new Map<string, ManagedProcess>();
 const MAX_BUFFER_BYTES = 100000;
 
-export function startManagedProcess(command: string, cwd: string, timeoutMs: number): ManagedProcess {
-  const invocation = shellInvocation(command);
+export function startManagedProcess(command: string, cwd: string, timeoutMs: number, runtime?: CommandRuntime): ManagedProcess {
+  const invocation = shellInvocation(command, undefined, runtime);
   return startManagedArgvProcess(invocation.command, invocation.args, cwd, timeoutMs, command);
 }
 

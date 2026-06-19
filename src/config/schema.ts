@@ -38,6 +38,14 @@ export const apiSetsSchema = z.object({
   estate_admin: z.boolean().optional()
 }).default({});
 
+export const commandRuntimeSchema = z.object({
+  preferred_shell: z.string().min(1).default('platform-default'),
+  shell: z.object({
+    command: z.string().min(1),
+    args: z.array(z.string()).default([])
+  }).optional()
+}).prefault({});
+
 export const filesystemScopeSchema = z.object({
   machine_admin_host_scope: z.boolean().optional(),
   host_root: z.string().min(1).default('/')
@@ -137,6 +145,7 @@ export const configSchema = z.object({
     exposed_tools: z.array(z.string().min(1)).default([])
   }).prefault({}),
   workspaces: z.array(workspaceSchema).min(1),
+  command_runtime: commandRuntimeSchema,
   misuse_reporting: misuseReportingSchema,
   brokered_executors: brokeredExecutorsConfigSchema,
   security: z.object({

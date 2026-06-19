@@ -8,7 +8,7 @@ import { workspaceStatus } from '../../tools/workspace.js';
 import { READ_ONLY, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import type { RegisterContext, WorkspaceMap } from './types.js';
 
-export function registerWorkspaceTools({ server, workspaces }: RegisterContext): void {
+export function registerWorkspaceTools({ server, config, workspaces }: RegisterContext): void {
   server.registerTool('workspace_status', {
     title: 'Workspace status',
     description: 'List configured workspaces, capabilities, and command ids.',
@@ -27,17 +27,17 @@ export function registerWorkspaceTools({ server, workspaces }: RegisterContext):
     description: 'Return allowed tools and policy for a workspace.',
     inputSchema: { workspace_id: z.string() },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
-  }, async ({ workspace_id }) => safePolicy(workspaces, workspace_id));
+  }, async ({ workspace_id }) => safePolicy(workspaces, workspace_id, config));
 
   server.registerTool('get_tool_profile', {
     title: 'Get tool profile',
     description: 'Return canonical tool naming, aliases, deprecated names, and context conventions.',
     inputSchema: {},
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
-  }, async () => asText(toolProfile()));
+  }, async () => asText(toolProfile(config)));
 }
 
-function safePolicy(workspaces: WorkspaceMap, workspaceId: string) {
-  try { return asText(workspacePolicy(getWorkspace(workspaces, workspaceId))); }
+function safePolicy(workspaces: WorkspaceMap, workspaceId: string, config: RegisterContext['config']) {
+  try { return asText(workspacePolicy(getWorkspace(workspaces, workspaceId), config)); }
   catch (error) { return asText(fail(error instanceof Error ? error.message : String(error))); }
 }

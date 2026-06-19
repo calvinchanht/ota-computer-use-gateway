@@ -57,6 +57,23 @@ workspaces:
       lint: "npm run lint"
       build: "npm run build"
 
+command_runtime:
+  # HTTP run_command remains argv-first. This shell is used only by legacy shell-string
+  # surfaces such as MCP run_command(command), run_configured_command, and start_process(command).
+  # On Windows hosts, prefer PowerShell 7 by explicit executable path instead of Windows Terminal.
+  preferred_shell: "platform-default"
+  # Windows example:
+  # preferred_shell: "powershell7"
+  # shell:
+  #   command: "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
+  #   args:
+  #     - "-NoLogo"
+  #     - "-NoProfile"
+  #     - "-NonInteractive"
+  #     - "-ExecutionPolicy"
+  #     - "Bypass"
+  #     - "-Command"
+
 security:
   # Calvin policy: no hidden path/secret deny lists in OTA/Threaddex configs.
   # Do not add deny globs, secret-path blocks, or credential-name blocks without Calvin's explicit approval.

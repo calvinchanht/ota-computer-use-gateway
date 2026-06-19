@@ -10,4 +10,18 @@ describe('shellInvocation', () => {
   it('uses cmd on windows', () => {
     expect(shellInvocation('echo ok', 'windows')).toEqual({ command: 'cmd.exe', args: ['/d', '/s', '/c', 'echo ok'] });
   });
+
+  it('uses configured shell runtime when supplied', () => {
+    const runtime = {
+      preferred_shell: 'powershell7',
+      shell: {
+        command: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+        args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command']
+      }
+    };
+    expect(shellInvocation('Write-Output ok', 'windows', runtime)).toEqual({
+      command: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+      args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', 'Write-Output ok']
+    });
+  });
 });

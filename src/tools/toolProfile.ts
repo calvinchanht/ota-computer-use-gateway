@@ -1,12 +1,15 @@
 import { ok } from '../core/result.js';
+import { commandRuntimeInfo } from '../core/commandAdapter.js';
+import type { AppConfig } from '../config/schema.js';
 
-export function toolProfile() {
+export function toolProfile(config?: AppConfig) {
   return ok('tool profile', {
     profile: 'api_explicit',
     naming: 'descriptive snake_case canonical tool names',
     canonical_tools: canonicalTools(),
     api_capability_sets: apiCapabilitySets(),
     api_behavior: apiBehavior(),
+    command_runtime: commandRuntimeInfo(undefined, config?.command_runtime),
     tool_async: toolAsync(),
     aliases: aliases(),
     deprecated_tools: deprecatedTools(),

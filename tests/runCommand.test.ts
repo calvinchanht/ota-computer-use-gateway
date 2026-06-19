@@ -16,12 +16,12 @@ const config: AppConfig = {
 describe('runConfiguredCommand', () => {
   it('requires workspace command execution permission', async () => {
     const workspace = await fixtureWorkspace(false);
-    await expect(runConfiguredCommand(workspace, 'echo')).rejects.toThrow('does not allow');
+    await expect(runConfiguredCommand(config, workspace, 'echo')).rejects.toThrow('does not allow');
   });
 
   it('runs allowlisted commands without local approval markers', async () => {
     const workspace = await fixtureWorkspace(true);
-    const result = await runConfiguredCommand(workspace, 'echo');
+    const result = await runConfiguredCommand(config, workspace, 'echo');
     expect(JSON.stringify(result.data)).toContain('hello');
   });
 

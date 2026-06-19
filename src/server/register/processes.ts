@@ -20,7 +20,7 @@ function registerCommandTools(context: RegisterContext): void {
   ));
   server.registerTool('run_configured_command', configuredTool(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'run_configured_command',
-    (workspace) => runConfiguredCommand(workspace, args.command_id)
+    (workspace) => runConfiguredCommand(config, workspace, args.command_id)
   ));
   server.registerTool('exec', execTool(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'exec',

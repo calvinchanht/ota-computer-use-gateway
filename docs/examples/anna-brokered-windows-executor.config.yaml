@@ -2,6 +2,18 @@
 # This opts Anna into brokered read-only Windows computer-use jobs.
 # Other agents remain default-off unless they add their own explicit executor.
 
+command_runtime:
+  preferred_shell: powershell7
+  shell:
+    command: "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
+    args:
+      - "-NoLogo"
+      - "-NoProfile"
+      - "-NonInteractive"
+      - "-ExecutionPolicy"
+      - "Bypass"
+      - "-Command"
+
 brokered_executors:
   enabled: true
   include_action_schema: true
