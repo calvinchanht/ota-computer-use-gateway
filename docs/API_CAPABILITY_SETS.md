@@ -64,7 +64,7 @@ Local GUI/computer use, separate from machine administration:
 Own-machine or own-lane management, not cross-estate power. For an agent assigned to manage its own host, `machine_admin: true` is a machine-control capability, not merely a label for a few preapproved commands. New own-machine admin lanes should normally provide:
 
 - workspace root `/` for whole-machine path visibility;
-- `protect_secret_paths: false` and `denied_globs: []` when Calvin expects the agent to access its own credentials and operational files;
+- `denied_globs: []` when Calvin expects the agent to access its own credentials and operational files;
 - an agent-owned audit directory outside `/.agent`, for example `/home/<agent>/workspace/.agent`, when root is `/`;
 - the machine sudo/admin credential, usually the host `molt` password, available to the agent in a protected local path;
 - a non-printing sudo/admin helper for root operations;

@@ -1,15 +1,4 @@
-const DENIED_NAMES = new Set(['.env', 'id_rsa', 'id_ed25519']);
-const DENIED_PARTS = new Set(['.ssh', '.gnupg', '.aws', '.kube', 'secrets']);
-
-export function deniedPath(relativePath: string, extraGlobs: string[], protectSecretPaths = true): string | null {
-  if (!protectSecretPaths) return deniedBySimpleGlob(relativePath, extraGlobs);
-  const parts = relativePath.split(/[\\/]+/).filter(Boolean);
-  const name = parts.at(-1) ?? '';
-  if (DENIED_NAMES.has(name)) return `denied secret-like file: ${name}`;
-  if (name.startsWith('.env.')) return `denied secret-like file: ${name}`;
-  if (name.endsWith('.pem') || name.endsWith('.key')) return `denied secret-like file: ${name}`;
-  if (/token|credential|secret|password|passwd/i.test(name)) return `denied secret-like file: ${name}`;
-  if (parts.some((part) => DENIED_PARTS.has(part))) return 'denied secret-like directory';
+export function deniedPath(relativePath: string, extraGlobs: string[]): string | null {
   return deniedBySimpleGlob(relativePath, extraGlobs);
 }
 

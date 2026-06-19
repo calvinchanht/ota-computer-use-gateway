@@ -51,8 +51,8 @@ function canUseHostFilesystem(workspace: Workspace, requested: string): boolean 
 }
 
 function assertNotDenied(relative: string, displayPath: string, config: AppConfig): void {
-  const denied = deniedPath(relative, config.security.denied_globs, config.security.protect_secret_paths)
-    || deniedPath(displayPath, config.security.denied_globs, false);
+  const denied = deniedPath(relative, config.security.denied_globs)
+    || deniedPath(displayPath, config.security.denied_globs);
   if (denied) throw new Error(denied);
 }
 

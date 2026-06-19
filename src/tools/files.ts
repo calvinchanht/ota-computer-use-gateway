@@ -12,7 +12,7 @@ export async function workspaceInventory(config: AppConfig, workspace: Workspace
   if (!workspace.allow_read) throw new Error('workspace does not allow reads');
   const entries: Array<{ path: string; name: string; type: string; protected?: boolean; reason?: string }> = [];
   await walkInventory(config, workspace.realRoot, '.', entries, Math.min(maxEntries, 1000));
-  return ok('workspace inventory', { root_label: 'configured workspace root', entries, truncated: entries.length >= Math.min(maxEntries, 1000), note: 'Inventory lists workspace names/metadata only. Protected entries are not read and may not be descended into.' });
+  return ok('workspace inventory', { root_label: 'configured workspace root', entries, truncated: entries.length >= Math.min(maxEntries, 1000), note: 'Inventory lists workspace names/metadata only.' });
 }
 
 async function walkInventory(config: AppConfig, root: string, relative: string, output: Array<{ path: string; name: string; type: string; protected?: boolean; reason?: string }>, maxEntries: number): Promise<void> {
@@ -22,17 +22,11 @@ async function walkInventory(config: AppConfig, root: string, relative: string, 
   for (const child of children) {
     if (output.length >= maxEntries) return;
     const childPath = relative === '.' ? child.name : path.posix.join(relative.replaceAll('\\', '/'), child.name);
-    const reason = deniedPath(childPath, config.security.denied_globs, config.security.protect_secret_paths) || sensitiveNameReason(child.name);
+    const reason = deniedPath(childPath, config.security.denied_globs);
     const item = { path: childPath, name: child.name, type: child.isDirectory() ? 'dir' : child.isFile() ? 'file' : 'other', ...(reason ? { protected: true, reason } : {}) };
     output.push(item);
     if (child.isDirectory() && !reason) await walkInventory(config, root, childPath, output, maxEntries);
   }
-}
-
-function sensitiveNameReason(name: string) {
-  const lower = name.toLowerCase();
-  if (lower.includes('secret') || lower.includes('token') || lower.includes('credential')) return 'sensitive-looking name; metadata only';
-  return null;
 }
 
 export async function listDir(config: AppConfig, workspace: Workspace, requestedPath: string, maxEntries = 200) {
