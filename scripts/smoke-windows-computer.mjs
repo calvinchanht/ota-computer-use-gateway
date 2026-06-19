@@ -48,7 +48,7 @@ async function exerciseObservation(port, sessionId) {
   const monitors = await toolData(port, sessionId, 'windows_list_monitors', { workspace_id: 'windows-smoke' });
   if (!JSON.stringify(monitors).includes('bounds')) throw new Error('windows_list_monitors returned no bounds');
   const windows = await toolData(port, sessionId, 'windows_list_windows', { workspace_id: 'windows-smoke' });
-  if (!JSON.stringify(windows).includes('hwnd')) throw new Error('windows_list_windows returned no hwnd');
+  if (!Array.isArray(windows)) throw new Error('windows_list_windows did not return an array');
   const tree = await toolData(port, sessionId, 'windows_uia_tree', { workspace_id: 'windows-smoke', max_nodes: 20 });
   if (!Array.isArray(tree.nodes) || tree.nodes.length === 0) throw new Error('windows_uia_tree returned no nodes');
 }
@@ -108,7 +108,7 @@ function windowsSmokeConfig(workspaceRoot, port) {
 async function toolData(port, sessionId, name, args) {
   const result = await call(port, sessionId, name, args);
   const payload = JSON.parse(result.result.content[0].text);
-  if (payload.ok === false) throw new Error(`${name} failed: ${payload.message}`);
+  if (payload.ok === false) throw new Error(`${name} failed: ${payload.message ?? payload.summary ?? JSON.stringify(payload)}`);
   return payload.data;
 }
 

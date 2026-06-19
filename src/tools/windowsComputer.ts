@@ -274,7 +274,7 @@ function uiaTreeScript(maxNodes: number) {
 }
 
 function listWindowsScript() {
-  return `${win32WindowTypes()}; [Win32Windows]::List() | ConvertTo-Json -Depth 5`;
+  return `${win32WindowTypes()}; $items=@([Win32Windows]::List()); if($items.Count -eq 0){'[]'} else {$items | ConvertTo-Json -Depth 5}`;
 }
 
 function focusWindowScript(hwnd: number) {

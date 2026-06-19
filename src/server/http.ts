@@ -18,9 +18,34 @@ import { agentBootstrap, checkpointThread, contextSnapshot, recordDecision, reco
 import { getProjectContext, memoryWrite } from '../tools/memory.js';
 import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
 import { computerScreenClick, computerScreenDrag, computerScreenMouseMove, computerScreenScroll, computerWindowClick, computerWindowDrag, computerWindowMouseMove, computerWindowScroll, cuaDriverBatch, cuaDriverCall, cuaDriverStatus, type CuaDriverBatchStep } from '../tools/computer.js';
-import { windowsComputerStatus, windowsListMonitors, windowsListWindows, windowsScreenshot } from '../tools/windowsComputer.js';
+import {
+  windowsBatch,
+  windowsClick,
+  windowsClipboardGet,
+  windowsClipboardSet,
+  windowsComputerStatus,
+  windowsDoubleClick,
+  windowsDrag,
+  windowsFocusWindow,
+  windowsHotkey,
+  windowsKey,
+  windowsLaunchApp,
+  windowsListMonitors,
+  windowsListWindows,
+  windowsMouseMove,
+  windowsScreenshot,
+  windowsScroll,
+  windowsTypeText,
+  windowsUiaTree,
+  windowsWindowClick,
+  windowsWindowDoubleClick,
+  windowsWindowDrag,
+  windowsWindowMouseMove,
+  windowsWindowScroll,
+  type WindowsBatchStep
+} from '../tools/windowsComputer.js';
 import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable, queryTableAggregate, readAround, readFileChunk, readFileLinesLarge, sampleFile, searchFile, searchFiles, tableProfile, updateTableRows } from '../tools/largeFiles.js';
-import { runArgvTailTool, runArgvTool } from '../tools/runCommand.js';
+import { runArgvTailTool, runArgvTool, runConfiguredCommand } from '../tools/runCommand.js';
 import { processKill, processList, processLog, processStart, processStartArgv, processWrite } from '../tools/processes.js';
 import { listArtifacts, recordArtifact } from '../tools/artifacts.js';
 import { createServer } from './create.js';
@@ -686,6 +711,25 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'windows_list_monitors') return windowsListMonitors(workspace);
   if (tool === 'windows_list_windows') return windowsListWindows(workspace);
   if (tool === 'windows_screenshot') return windowsScreenshot(workspace, optionalString(args.monitor) ?? 'primary');
+  if (tool === 'windows_uia_tree') return windowsUiaTree(workspace, optionalNumber(args.max_nodes) ?? 120);
+  if (tool === 'windows_focus_window') return windowsFocusWindow(workspace, requiredNumber(args.hwnd, 'hwnd'));
+  if (tool === 'windows_launch_app') return windowsLaunchApp(workspace, requiredString(args.file_path, 'file_path'), optionalStringArray(args.args), optionalString(args.cwd));
+  if (tool === 'windows_mouse_move') return windowsMouseMove(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'));
+  if (tool === 'windows_click') return windowsClick(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left');
+  if (tool === 'windows_double_click') return windowsDoubleClick(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left');
+  if (tool === 'windows_drag') return windowsDrag(workspace, requiredNumber(args.from_x, 'from_x'), requiredNumber(args.from_y, 'from_y'), requiredNumber(args.to_x, 'to_x'), requiredNumber(args.to_y, 'to_y'));
+  if (tool === 'windows_scroll') return windowsScroll(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), requiredNumber(args.delta, 'delta'));
+  if (tool === 'windows_window_mouse_move') return windowsWindowMouseMove(workspace, requiredNumber(args.hwnd, 'hwnd'), requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.coordinate_space) ?? 'client', optionalBoolean(args.focus) ?? false);
+  if (tool === 'windows_window_click') return windowsWindowClick(workspace, requiredNumber(args.hwnd, 'hwnd'), requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left', optionalString(args.coordinate_space) ?? 'client', optionalBoolean(args.focus) ?? true);
+  if (tool === 'windows_window_double_click') return windowsWindowDoubleClick(workspace, requiredNumber(args.hwnd, 'hwnd'), requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left', optionalString(args.coordinate_space) ?? 'client', optionalBoolean(args.focus) ?? true);
+  if (tool === 'windows_window_drag') return windowsWindowDrag(workspace, requiredNumber(args.hwnd, 'hwnd'), requiredNumber(args.from_x, 'from_x'), requiredNumber(args.from_y, 'from_y'), requiredNumber(args.to_x, 'to_x'), requiredNumber(args.to_y, 'to_y'), optionalString(args.coordinate_space) ?? 'client', optionalBoolean(args.focus) ?? true);
+  if (tool === 'windows_window_scroll') return windowsWindowScroll(workspace, requiredNumber(args.hwnd, 'hwnd'), requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), requiredNumber(args.delta, 'delta'), optionalString(args.coordinate_space) ?? 'client', optionalBoolean(args.focus) ?? true);
+  if (tool === 'windows_type_text') return windowsTypeText(workspace, requiredString(args.text, 'text'));
+  if (tool === 'windows_key') return windowsKey(workspace, requiredString(args.key, 'key'));
+  if (tool === 'windows_hotkey') return windowsHotkey(workspace, requiredStringArray(args.keys, 'keys'));
+  if (tool === 'windows_clipboard_get') return windowsClipboardGet(workspace);
+  if (tool === 'windows_clipboard_set') return windowsClipboardSet(workspace, requiredTextArg(args.text, 'text', true));
+  if (tool === 'windows_batch') return windowsBatch(workspace, requiredWindowsBatchSteps(args.calls));
   if (tool === 'infer_file_structure') return inferFileStructure(config, workspace, requiredString(args.path, 'path'));
   if (tool === 'sample_file') return sampleFile(config, workspace, requiredString(args.path, 'path'), optionalString(args.mode) ?? 'head_tail_random', optionalNumber(args.head_lines) ?? 20, optionalNumber(args.tail_lines) ?? 20, optionalNumber(args.random_lines) ?? 20, optionalNumber(args.max_bytes) ?? 20000);
   if (tool === 'read_file_chunk') return readFileChunk(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.offset) ?? 0, optionalNumber(args.max_bytes) ?? 50000);
@@ -707,6 +751,7 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'stop_process') return processKill(requiredString(args.process_id, 'process_id'));
   if (tool === 'run_command' && Boolean(args.tail)) return runArgvTailTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000);
   if (tool === 'run_command') return runArgvTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000, optionalNumber(args.max_stdout_bytes) ?? 20000, optionalNumber(args.max_stderr_bytes) ?? 8000);
+  if (tool === 'run_configured_command') return runConfiguredCommand(workspace, requiredString(args.command_id, 'command_id'));
   throw new Error(`unsupported API tool: ${tool}`);
 }
 
@@ -887,6 +932,11 @@ function requiredCuaBatchSteps(value: unknown): CuaDriverBatchStep[] {
     if ('delay_ms' in source) return { delay_ms: optionalNumber(source.delay_ms) ?? 0 };
     return { method: requiredString(source.method, `calls[${index}].method`), params: recordArg(source.params, `calls[${index}].params`) ?? {} };
   });
+}
+
+function requiredWindowsBatchSteps(value: unknown): WindowsBatchStep[] {
+  if (!Array.isArray(value) || value.length === 0) throw new Error('calls array is required');
+  return value as WindowsBatchStep[];
 }
 
 function browserTargetFilter(args: Record<string, unknown>) {
