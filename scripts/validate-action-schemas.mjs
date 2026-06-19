@@ -32,6 +32,9 @@ function validateSchemaText(text, agent) {
   if (!text.includes(`url: ${agent.serverUrl}`)) fail('missing expected server URL');
   if (!text.includes(`/ota/api/v1/tool:`)) fail('missing /ota tool path');
   if (!text.includes(`/threaddex/v1/job/{job_id}:`)) fail('missing /threaddex job path');
+  if (text.includes(`/ota/api/v1/executor-jobs`) || text.includes(`/ota/api/v1/executors/`)) {
+    fail('brokered executor Action paths must be absent unless an agent explicitly opts in');
+  }
   if (!text.includes(`enum: [${agent.agentId}]`)) fail('missing expected workspace enum');
 
   for (const other of AGENTS) {

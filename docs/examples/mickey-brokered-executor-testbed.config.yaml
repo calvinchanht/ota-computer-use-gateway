@@ -1,0 +1,21 @@
+# Mickey-only brokered executor testbed config fragment for OTA issue #33.
+# This is intentionally not part of the default generated Action schema.
+# Existing agents remain default-off unless they explicitly add a brokered_executors block.
+brokered_executors:
+  enabled: true
+  include_action_schema: false
+  default_ttl_ms: 60000
+  default_lease_ms: 30000
+  executors:
+    - executor_id: mickey-fake-windows
+      executor_kind: windows_computer_use
+      agent_id: mickey
+      enabled: true
+      allowed_operations:
+        - windows.status
+        - windows.list_monitors
+        - windows.list_windows
+        - windows.screenshot
+      default_lease_ms: 30000
+      max_ttl_ms: 60000
+      worker_bearer_token_env: MICKEY_FAKE_EXECUTOR_TOKEN

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { brokeredExecutorsConfigSchema } from '../brokeredExecutor/config.js';
 
 export const browserProfileSchema = z.object({
   label: z.string().min(1).optional(),
@@ -137,6 +138,7 @@ export const configSchema = z.object({
   }).prefault({}),
   workspaces: z.array(workspaceSchema).min(1),
   misuse_reporting: misuseReportingSchema,
+  brokered_executors: brokeredExecutorsConfigSchema,
   security: z.object({
     max_file_bytes: z.number().int().positive().default(200000),
     max_response_bytes: z.number().int().positive().default(50000),

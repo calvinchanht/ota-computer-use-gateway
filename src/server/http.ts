@@ -1,7 +1,7 @@
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { appendFile, mkdir, readFile, stat } from 'node:fs/promises';
 import path, { dirname } from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { AppConfig } from '../config/schema.js';
 import { buildWorkspaces, getWorkspace, type Workspace } from '../core/workspaces.js';
@@ -29,6 +29,9 @@ import { hasValidArtifactSignature } from './artifactSignatures.js';
 import { auditHttpRequest } from './httpAudit.js';
 import { RateLimiter } from './rateLimit.js';
 import { installShutdownHooks } from './shutdown.js';
+import { brokeredExecutorStore } from '../brokeredExecutor/store.js';
+import { brokeredExecutorEnabled, enabledExecutor } from '../brokeredExecutor/config.js';
+import { completeExecutorJobSchema, executorClaimSchema, executorHeartbeatSchema, submitExecutorJobSchema } from '../brokeredExecutor/types.js';
 
 const MCP_PATH = '/mcp';
 const API_TOOL_PATH = '/api/v1/tool';
@@ -36,6 +39,8 @@ const API_BATCH_PATH = '/api/v1/batch';
 const API_DEBUG_REQUEST_CONTEXT_PATH = '/api/v1/debug/request_context';
 const API_RUNS_PREFIX = '/api/v1/runs/';
 const API_ARTIFACTS_PREFIX = '/api/v1/artifacts/';
+const API_EXECUTOR_JOBS_PREFIX = '/api/v1/executor-jobs';
+const API_EXECUTORS_PREFIX = '/api/v1/executors';
 const OTA_PATH_PREFIX = '/ota';
 const MAX_RUN_RECORDS = 200;
 
@@ -64,15 +69,19 @@ export async function listenHttp(config: AppConfig): Promise<void> {
   const rateLimiter = new RateLimiter();
   const auditWorkspace = (await buildWorkspaces(config)).values().next().value ?? null;
 
-  const httpServer = createHttpServer((req, res) => {
-    auditHttpRequest(auditWorkspace, req, res);
-    void handleRequest(config, rateLimiter, startedAt, req, res);
-  });
+  const httpServer = createHttpServer(createHttpRequestHandler(config, rateLimiter, startedAt, auditWorkspace));
 
   installShutdownHooks(httpServer);
   httpServer.listen(config.server.port, config.server.host, () => {
     console.error(`OTA gateway HTTP API listening on http://${config.server.host}:${config.server.port}/api/v1/tool; compatibility transport at ${MCP_PATH}`);
   });
+}
+
+export function createHttpRequestHandler(config: AppConfig, rateLimiter = new RateLimiter(), startedAt = Date.now(), auditWorkspace: Workspace | null = null) {
+  return (req: IncomingMessage, res: ServerResponse) => {
+    auditHttpRequest(auditWorkspace, req, res);
+    void handleRequest(config, rateLimiter, startedAt, req, res);
+  };
 }
 
 async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, startedAt: number, req: IncomingMessage, res: ServerResponse) {
@@ -86,6 +95,7 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
   const signedArtifact = isApiArtifactPath(req) && hasValidArtifactSignature(req);
   if (!signedArtifact && !isAuthorized(config, req)) return sendAuthError(config, res);
   if (isApiDebugRequestContext(req)) return handleApiDebugRequestContext(req, res);
+  if (isBrokeredExecutorPath(req)) return handleBrokeredExecutorApi(config, req, res);
   if (isApiArtifactPath(req)) return handleApiArtifact(config, req, res);
   if (isApiRunPath(req)) return handleApiRun(req, res);
   if (isApiTool(req)) return handleApiTool(config, req, res);
@@ -127,11 +137,16 @@ function isMcp(req: IncomingMessage): boolean {
 
 function isApi(req: IncomingMessage): boolean {
   const path = req.url?.split('?')[0];
-  return path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || path === API_BATCH_PATH || isApiRunPath(req) || isApiArtifactPath(req);
+  return path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || path === API_BATCH_PATH || isApiRunPath(req) || isApiArtifactPath(req) || isBrokeredExecutorPath(req);
 }
 
 function isApiArtifactPath(req: IncomingMessage): boolean {
   return req.url?.split('?')[0]?.startsWith(API_ARTIFACTS_PREFIX) ?? false;
+}
+
+function isBrokeredExecutorPath(req: IncomingMessage): boolean {
+  const path = req.url?.split('?')[0] ?? '';
+  return path === API_EXECUTOR_JOBS_PREFIX || path.startsWith(`${API_EXECUTOR_JOBS_PREFIX}/`) || path.startsWith(`${API_EXECUTORS_PREFIX}/`);
 }
 
 
@@ -286,6 +301,98 @@ function batchOptionalNumber(steps: Array<{ arguments?: Record<string, unknown> 
     if (value !== undefined) return value;
   }
   return undefined;
+}
+
+
+async function handleBrokeredExecutorApi(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!brokeredExecutorEnabled(config)) return sendJson(res, 404, { ok: false, error: 'brokered_executors_disabled', summary: 'brokered executor stack is disabled' });
+  const path = req.url?.split('?')[0] ?? '';
+  try {
+    if (path === API_EXECUTOR_JOBS_PREFIX && req.method === 'POST') {
+      const parsed = await readApiJsonBody(req);
+      if (!parsed.ok) return sendJson(res, parsed.status, { ok: false, error: parsed.error });
+      const input = submitExecutorJobSchema.parse(parsed.body);
+      const job = brokeredExecutorStore.submit(config, input);
+      return sendJson(res, 200, { ok: true, summary: 'brokered executor job submitted', job });
+    }
+
+    if (path.startsWith(`${API_EXECUTOR_JOBS_PREFIX}/`) && req.method === 'GET') {
+      const rest = path.slice(`${API_EXECUTOR_JOBS_PREFIX}/`.length);
+      const resultOnly = rest.endsWith('/result');
+      const jobId = decodeURIComponent(resultOnly ? rest.slice(0, -'/result'.length) : rest);
+      const job = brokeredExecutorStore.get(jobId);
+      if (!job) return sendJson(res, 404, { ok: false, error: 'brokered_executor_job_not_found', broker_job_id: jobId });
+      if (resultOnly) return sendJson(res, 200, { ok: true, summary: 'brokered executor job result', broker_job_id: job.broker_job_id, state: job.state, result: job.result, artifacts: job.artifacts, error_code: job.error_code, error_message: job.error_message });
+      return sendJson(res, 200, { ok: true, summary: 'brokered executor job status', job });
+    }
+
+    if (path.startsWith(`${API_EXECUTORS_PREFIX}/`) && req.method === 'POST') return await handleBrokeredExecutorWorkerApi(config, req, res, path);
+    return sendJson(res, 404, { ok: false, error: 'brokered_executor_route_not_found' });
+  } catch (error) {
+    const body = brokeredExecutorErrorBody(error);
+    return sendJson(res, body.status, body.body);
+  }
+}
+
+async function handleBrokeredExecutorWorkerApi(config: AppConfig, req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
+  const rest = path.slice(`${API_EXECUTORS_PREFIX}/`.length);
+  const parts = rest.split('/').map((part) => decodeURIComponent(part));
+  const executorId = parts[0];
+  if (!executorId) return sendJson(res, 400, { ok: false, error: 'executor_id_required' });
+  const auth = brokeredExecutorWorkerAuth(config, executorId, req);
+  if (!auth.ok) return sendJson(res, auth.status, auth.body);
+  const parsed = await readApiJsonBody(req);
+  if (!parsed.ok) return sendJson(res, parsed.status, { ok: false, error: parsed.error });
+  const body = parsed.body && typeof parsed.body === 'object' ? parsed.body as Record<string, unknown> : {};
+  const withExecutorId = { ...body, executor_id: body.executor_id ?? executorId };
+
+  if (parts.length === 2 && parts[1] === 'heartbeat') {
+    const input = executorHeartbeatSchema.parse(withExecutorId);
+    const heartbeat = brokeredExecutorStore.heartbeat(input);
+    return sendJson(res, 200, { ok: true, summary: 'brokered executor heartbeat recorded', heartbeat });
+  }
+
+  if (parts.length === 2 && parts[1] === 'claim') {
+    const input = executorClaimSchema.parse(withExecutorId);
+    const job = brokeredExecutorStore.claim(config, input);
+    return sendJson(res, 200, job ? { ok: true, summary: 'brokered executor job claimed', job } : { ok: true, summary: 'no brokered executor job available', no_job: true });
+  }
+
+  if (parts.length === 4 && parts[1] === 'jobs' && (parts[3] === 'complete' || parts[3] === 'fail')) {
+    const input = completeExecutorJobSchema.parse(withExecutorId);
+    const job = brokeredExecutorStore.complete(parts[2], input);
+    return sendJson(res, 200, { ok: true, summary: `brokered executor job ${input.result.status}`, job });
+  }
+
+  return sendJson(res, 404, { ok: false, error: 'brokered_executor_worker_route_not_found' });
+}
+
+
+function brokeredExecutorWorkerAuth(config: AppConfig, executorId: string, req: IncomingMessage): { ok: true } | { ok: false; status: number; body: Record<string, unknown> } {
+  const executor = enabledExecutor(config, executorId);
+  if (!executor) return { ok: false, status: 404, body: { ok: false, error: 'executor_offline', error_code: 'executor_offline', message: 'brokered executor is disabled or unknown' } };
+  const envName = executor.worker_bearer_token_env;
+  if (!envName) return { ok: true };
+  const expected = process.env[envName];
+  if (!expected) return { ok: false, status: 401, body: { ok: false, error: 'executor_auth_missing', error_code: 'executor_auth_missing', message: `missing ${envName}` } };
+  if (!bearerTokenMatches(req, expected)) return { ok: false, status: 401, body: { ok: false, error: 'executor_unauthorized', error_code: 'executor_unauthorized', message: 'invalid executor bearer token' } };
+  return { ok: true };
+}
+
+function bearerTokenMatches(req: IncomingMessage, expected: string): boolean {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) return false;
+  const actual = header.slice('Bearer '.length);
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+function brokeredExecutorErrorBody(error: unknown): { status: number; body: Record<string, unknown> } {
+  const message = error instanceof Error ? error.message : String(error);
+  const code = error && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : 'invalid_arguments';
+  const status = code === 'executor_offline' ? 404 : code === 'operation_not_allowed' ? 403 : code === 'lease_expired' ? 409 : 400;
+  return { status, body: { ok: false, error: code, error_code: code, message } };
 }
 
 async function handleApiArtifact(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
