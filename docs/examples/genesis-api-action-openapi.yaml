@@ -428,7 +428,7 @@ components:
           type: integer
       description: Tool-specific arguments. Always include workspace_id=genesis. Use get_tool_profile and get_workspace_policy
         early. This broad private schema intentionally exposes Genesis workspace/browser/computer/machine/estate tools while
-        relying on server-side auth, workspace policy, denied secret globs, and Calvin-approved workflow boundaries.
+        relying on server-side auth, workspace policy, and Calvin-approved workflow boundaries. There is no hidden path/secret/glob deny layer.
     GatewayResponse:
       type: object
       additionalProperties: true

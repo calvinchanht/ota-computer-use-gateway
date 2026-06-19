@@ -54,7 +54,7 @@ Machine-admin filesystem scope uses the same file tool vocabulary as workspace a
 - machine-admin lanes with `filesystem.machine_admin_host_scope: true`: file tools may resolve explicit absolute host paths inside `filesystem.host_root`;
 - relative paths, including `../` escapes, remain workspace-root scoped and cannot implicitly jump into host scope;
 - responses include `scope: workspace` or `scope: host` so audit/debugging can see which boundary was used;
-- denied globs and protected secret path rules still apply, including to host-scope absolute paths.
+- no hidden path, secret, credential, or glob deny lists apply; adding any such deny layer requires Calvin's explicit approval.
 
 Example:
 
@@ -80,7 +80,7 @@ Cross-agent/cross-host control-plane reports, diagnostics, continuity, and appro
 Agents must stop and ask Calvin when a workflow reaches:
 
 - CAPTCHA or human verification;
-- credentials, raw secrets, private keys, cookies, OAuth/PAT/bearer token exposure, or secret exfiltration;
+- credentials, raw secrets, private keys, cookies, OAuth/PAT/bearer token exposure, or secret exfiltration when Calvin has not explicitly requested that use/disclosure;
 - external messages, email, chat, public posts, or third-party sends;
 - third-party uploads or form submissions;
 - payments, purchases, subscriptions, or terms acceptance;

@@ -10,7 +10,7 @@ import type { Workspace } from '../src/core/workspaces.js';
 const config: AppConfig = {
   server: { host: '127.0.0.1', port: 8765, rate_limit: { enabled: false, window_ms: 60000, max_requests: 120, trust_proxy_headers: false }, auth: { enabled: false, bearer_token_env: 'TEST', allow_loopback_without_auth: true } },
   workspaces: [],
-  security: { max_file_bytes: 1000000, max_response_bytes: 1000000, max_request_bytes: 1000000, max_search_results: 50, max_exec_ms: 120000, denied_globs: [] }
+  security: { max_file_bytes: 1000000, max_response_bytes: 1000000, max_request_bytes: 1000000, max_search_results: 50, max_exec_ms: 120000 }
 };
 
 describe('searchFiles defaults', () => {

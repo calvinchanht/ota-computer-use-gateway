@@ -9,7 +9,7 @@ import type { Workspace } from '../src/core/workspaces.js';
 const config: AppConfig = {
   server: { host: '127.0.0.1', port: 8765 },
   workspaces: [],
-  security: { max_file_bytes: 1000, max_response_bytes: 1000, max_request_bytes: 1000, max_search_results: 10, max_exec_ms: 120000, denied_globs: [] }
+  security: { max_file_bytes: 1000, max_response_bytes: 1000, max_request_bytes: 1000, max_search_results: 10, max_exec_ms: 120000 }
 };
 
 describe('resolveInside', () => {
@@ -31,13 +31,6 @@ describe('resolveInside', () => {
     await expect(resolveInside(workspace, outside, config)).resolves.toMatchObject({ absolute: outside, displayPath: outside.replaceAll('\\', '/'), scope: 'host' });
   });
 
-
-  it('applies configured absolute denied globs to host-scope machine_admin reads', async () => {
-    const outside = await outsideFile('blocked-token.txt');
-    const workspace = await fixtureWorkspace(false, true, path.parse(outside).root);
-    const denyConfig = { ...config, security: { ...config.security, denied_globs: [outside.replace(/blocked-token\.txt$/, '*-token.txt')] } };
-    await expect(resolveInside(workspace, outside, denyConfig)).rejects.toThrow('denied by configured glob');
-  });
 
   it('keeps relative escapes blocked even when machine_admin host scope is enabled', async () => {
     const workspace = await fixtureWorkspace(false, true);

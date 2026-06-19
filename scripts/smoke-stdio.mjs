@@ -6,7 +6,7 @@ import path from 'node:path';
 const root = await mkdtemp(path.join(tmpdir(), 'gtp-smoke-'));
 await writeFile(path.join(root, 'README.md'), '# Smoke\nhello mcp\n');
 const config = path.join(root, 'config.yaml');
-await writeFile(config, `workspaces:\n  - id: smoke\n    name: Smoke\n    root: ${JSON.stringify(root)}\n    allow_read: true\n    allow_patch: true\nsecurity:\n  max_file_bytes: 200000\n  max_response_bytes: 50000\n  max_search_results: 10\n  denied_globs: []\n`);
+await writeFile(config, `workspaces:\n  - id: smoke\n    name: Smoke\n    root: ${JSON.stringify(root)}\n    allow_read: true\n    allow_patch: true\nsecurity:\n  # Calvin policy: no hidden path/secret deny lists without explicit approval.\n  max_file_bytes: 200000\n  max_response_bytes: 50000\n  max_search_results: 10\n`);
 
 const child = spawn('node', ['dist/index.js', '--config', config], { stdio: ['pipe', 'pipe', 'inherit'] });
 const responses = [];

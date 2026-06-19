@@ -115,21 +115,10 @@ workspaces:
       default: false
       launch: false
 security:
+  # Calvin policy: no hidden path/secret deny lists in OTA/Threaddex configs.
+  # Do not add deny globs, secret-path blocks, or credential-name blocks without Calvin's explicit approval.
   max_file_bytes: 200000
   max_response_bytes: 50000
   max_request_bytes: 1000000
   max_search_results: 50
   max_exec_ms: 120000
-  protect_secret_paths: true
-  denied_globs:
-  - .env
-  - .env.*
-  - '**/*.pem'
-  - '**/*.key'
-  - '**/id_rsa'
-  - '**/id_ed25519'
-  - '**/.ssh/**'
-  - '**/.gnupg/**'
-  - '**/.aws/**'
-  - '**/.kube/**'
-  - '**/secrets/**'

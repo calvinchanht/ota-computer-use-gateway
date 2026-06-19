@@ -103,7 +103,7 @@ async function expectProcessText(port, sessionId, processId, expected) {
 }
 
 async function writeConfig(file, workspaceRoot, port) {
-  await writeFile(file, `server:\n  host: 127.0.0.1\n  port: ${port}\nworkspaces:\n  - id: smoke\n    name: Smoke\n    root: ${JSON.stringify(workspaceRoot)}\n    allow_read: true\n    allow_write: true\n    allow_patch: true\n    allow_tests: true\nsecurity:\n  max_file_bytes: 200000\n  max_response_bytes: 50000\n  max_search_results: 10\n  max_exec_ms: 10000\n  denied_globs: []\n`);
+  await writeFile(file, `server:\n  host: 127.0.0.1\n  port: ${port}\nworkspaces:\n  - id: smoke\n    name: Smoke\n    root: ${JSON.stringify(workspaceRoot)}\n    allow_read: true\n    allow_write: true\n    allow_patch: true\n    allow_tests: true\nsecurity:\n  # Calvin policy: no hidden path/secret deny lists without explicit approval.\n  max_file_bytes: 200000\n  max_response_bytes: 50000\n  max_search_results: 10\n  max_exec_ms: 10000\n`);
 }
 
 async function initialize(port) {

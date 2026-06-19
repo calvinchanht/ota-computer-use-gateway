@@ -100,7 +100,7 @@ function windowsSmokeConfig(workspaceRoot, port) {
     '  max_response_bytes: 50000',
     '  max_search_results: 10',
     '  max_exec_ms: 10000',
-    '  denied_globs: []',
+    '  # Calvin policy: no hidden path/secret deny lists without explicit approval.',
     ''
   ].join('\n');
 }

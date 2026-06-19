@@ -20,7 +20,7 @@ export function workspacePolicy(workspace: Workspace) {
       principle: 'Webchat agents should not be weaker than OpenClaw agents when a capability set is enabled; safety wraps powerful primitives instead of replacing them with toy actions.',
       workspace_exec: 'Bounded run_command/start_process/read_process/write_process/stop_process are normal workspace-agent primitives when workspace or allow_tests is enabled.',
       workspace_delete: 'delete_file/delete_path are normal scoped workspace editing tools, suitable for tmp cleanup and routine file management. Irreversible or out-of-scope destructive workflows remain stop-boundary events.',
-      machine_admin: 'run_configured_command and service/tunnel/host administration are machine_admin. Existing file tools remain one vocabulary: workspace-only lanes stay root-scoped; machine_admin host-scope lanes may use explicit absolute host paths inside host_root with deny-glob/secret protections.',
+      machine_admin: 'run_configured_command and service/tunnel/host administration are machine_admin. Existing file tools remain one vocabulary: workspace-only lanes stay root-scoped; machine_admin host-scope lanes may use explicit absolute host paths inside host_root. No hidden path/secret/glob deny layer exists; adding one requires Calvin approval.',
       provider_prompts: 'Provider-side confirmation prompts are intentionally minimized for routine scoped workspace/browser/computer work; stop boundaries describe when the agent must pause for Calvin.'
     },
     allowed_tools: allowedTools(workspace),

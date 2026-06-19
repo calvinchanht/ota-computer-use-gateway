@@ -15,7 +15,7 @@ MCP/App connectors may remain useful for compatibility or discovery, but the Cus
 
 ## What to paste into the GPT editor
 
-Use this section only. Do not paste private deployment notes, secret paths, bearer tokens, SSH commands, tunnel credentials, or PAT paths into the GPT editor.
+Use this section only. Do not paste private deployment notes, bearer tokens, SSH commands, tunnel credentials, PAT paths, or other private deployment details into the GPT editor.
 
 ### GPT basics
 

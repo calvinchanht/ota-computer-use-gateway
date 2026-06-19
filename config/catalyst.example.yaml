@@ -57,13 +57,10 @@ workspaces:
       push_career_control_panel: "bin/push-career-control-panel.sh"
 
 security:
+  # Calvin policy: no hidden path/secret deny lists in OTA/Threaddex configs.
+  # Do not add deny globs, secret-path blocks, or credential-name blocks without Calvin's explicit approval.
   max_file_bytes: 200000
   max_response_bytes: 50000
   max_request_bytes: 1000000
   max_search_results: 50
   max_exec_ms: 120000
-  # Catalyst is an OpenClaw-like full workspace agent: all paths inside the
-  # configured workspace root are accessible. The root boundary still prevents
-  # escaping to host paths outside the workspace.
-  protect_secret_paths: false
-  denied_globs: []

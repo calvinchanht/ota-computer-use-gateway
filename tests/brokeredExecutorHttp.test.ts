@@ -121,6 +121,6 @@ function defaultConfig(enabled: boolean, authEnabled = false): AppConfig {
       default_lease_ms: 30000,
       executors: enabled ? [{ executor_id: 'mickey-fake-windows', executor_kind: 'windows_computer_use', agent_id: 'mickey', enabled: true, allowed_operations: ['windows.status', 'windows.list_monitors', 'windows.list_windows', 'windows.screenshot'], default_lease_ms: 30000, max_ttl_ms: 60000, worker_bearer_token_env: 'MICKEY_FAKE_EXECUTOR_TOKEN' }] : []
     },
-    security: { max_file_bytes: 100000, max_response_bytes: 100000, max_request_bytes: 100000, max_search_results: 10, max_exec_ms: 120000, denied_globs: [] }
+    security: { max_file_bytes: 100000, max_response_bytes: 100000, max_request_bytes: 100000, max_search_results: 10, max_exec_ms: 120000 }
   };
 }

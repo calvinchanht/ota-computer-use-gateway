@@ -110,6 +110,6 @@ function config(root: string): AppConfig {
     server: { host: '127.0.0.1', port: 0, auth: { enabled: false, bearer_token_env: 'TEST_TOKEN', allow_loopback_without_auth: true }, rate_limit: { enabled: false, window_ms: 60000, max_requests: 120, trust_proxy_headers: false }, tool_annotations: { mode: 'honest' }, exposed_tools: [] },
     workspaces: [{ id: 'anna', name: 'Anna', root, allow_read: true, allow_write: true, allow_patch: true, allow_tests: true, allow_screen: true, allow_mouse_keyboard: true, api_sets: { computer_windows: true }, browser: { profiles: [] }, windows_computer: { enabled: true, allow_screenshot: false, allow_uia_tree: false, allow_mouse: false, allow_keyboard: false, allow_clipboard: false, allow_window_management: false, allow_app_launch: false, allow_process_attach: false, allow_multi_monitor: true }, commands: {}, filesystem: { machine_admin_host_scope: false, host_root: '/' }, git: {} }],
     brokered_executors: { enabled: false, include_action_schema: false, default_ttl_ms: 60000, default_lease_ms: 30000, executors: [] },
-    security: { max_file_bytes: 100000, max_response_bytes: 100000, max_request_bytes: 100000, max_search_results: 10, max_exec_ms: 120000, denied_globs: [] }
+    security: { max_file_bytes: 100000, max_response_bytes: 100000, max_request_bytes: 100000, max_search_results: 10, max_exec_ms: 120000 }
   };
 }

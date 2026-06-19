@@ -29,7 +29,7 @@ Use `get_tool_profile` at runtime to discover canonical tools, compatibility ali
 - `edit_file` — replace exactly one matching text region.
 - `search_files` — search text in workspace files.
 
-All filesystem tools resolve paths inside the configured workspace root. Symlink escapes and denied globs are rejected.
+All filesystem tools resolve paths inside the configured workspace root, or inside `filesystem.host_root` for machine-admin host-scope absolute paths. Symlink escapes are rejected because they cross the configured scope. There is no hidden path, secret, credential, or glob deny layer; adding one requires Calvin's explicit approval.
 
 Path contract:
 
@@ -141,7 +141,6 @@ Write, patch, command, and process-start primitives require workspace capability
 
 - workspace-bound path resolution;
 - symlink escape rejection;
-- denied glob checks;
 - bounded file/request/response/process output sizes;
 - bearer auth for public HTTP ingress;
 - rate limiting and safe HTTP audit logs;
