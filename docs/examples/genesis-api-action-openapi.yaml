@@ -132,10 +132,8 @@ paths:
           application/json:
             schema:
               type: object
-              properties: {}
               additionalProperties: true
-              required:
-              - text
+              required: [text]
               properties:
                 text:
                   type: string
@@ -184,10 +182,8 @@ paths:
           application/json:
             schema:
               type: object
-              properties: {}
               additionalProperties: true
-              required:
-              - text
+              required: [text]
               properties:
                 text:
                   type: string
@@ -222,13 +218,28 @@ paths:
         schema:
           type: string
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
               type: object
-              properties: {}
-              additionalProperties: true
+              additionalProperties: false
+              required: [checkpoint]
+              properties:
+                checkpoint:
+                  type: string
+                  description: What was completed, what remains, and why continuation is safe.
+                reason:
+                  type: string
+                  description: Why continuation is needed, e.g. time_budget or goal_checkpoint.
+                next_prompt:
+                  type: string
+                  description: "Optional prompt for the next turn. Defaults to cont job: <job_id>."
+                max_continuations:
+                  type: integer
+                  minimum: 1
+                  maximum: 99
+                  description: Optional bounded max continuation count.
       responses:
         '200':
           description: Continuation request result.
