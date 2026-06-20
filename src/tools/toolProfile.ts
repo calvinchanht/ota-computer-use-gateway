@@ -10,6 +10,7 @@ export function toolProfile(config?: AppConfig) {
     api_capability_sets: apiCapabilitySets(),
     api_behavior: apiBehavior(),
     command_runtime: commandRuntimeInfo(undefined, config?.command_runtime),
+    github: githubProfile(),
     tool_async: toolAsync(),
     aliases: aliases(),
     deprecated_tools: deprecatedTools(),
@@ -90,6 +91,19 @@ function windowsComputerTools() {
     'windows_type_text', 'windows_key', 'windows_hotkey',
     'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch'
   ];
+}
+
+function githubProfile() {
+  return {
+    enabled_when_allowed_tool: 'github',
+    preferred_surface: 'ota_github_operation',
+    operation: 'github',
+    parameter_model: 'cmd_array is forwarded as gh argv after the executable; OTA does not maintain a GitHub operation allowlist.',
+    permission_model: 'github_pat_scope',
+    auth_lane: 'workspace_configured_token_file',
+    adapter: 'gh_cli',
+    raw_cli_via_run_command: 'discouraged'
+  };
 }
 
 function apiBehavior() {

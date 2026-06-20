@@ -11,6 +11,11 @@ describe('toolProfile', () => {
     expect(result.data?.deprecated_tools).toMatchObject({ exec: 'run_command' });
     expect(result.data?.api_behavior).toMatchObject({ async_polling: { default_poll_after_ms: 5000 } });
     expect(result.data?.command_runtime).toMatchObject({ run_command_mode: 'argv_first_http' });
+    expect(result.data?.github).toMatchObject({
+      preferred_surface: 'ota_github_operation',
+      permission_model: 'github_pat_scope',
+      adapter: 'gh_cli'
+    });
     expect(result.data?.command_runtime?.recommended_cmd_array_for_shell).toContain('<script>');
     expect(result.data?.tool_async).toMatchObject({ browser_cdp_batch: { may_return_running: true, default_async_mode: 'quota_saver' }, search_files: { may_return_running: true, default_async_mode: 'quota_saver' }, run_command: { may_return_running: true, default_async_mode: 'quota_saver' }, read_process: { tail_supported: true, cursor_field: 'cursor' } });
   });

@@ -46,6 +46,18 @@ describe('policy and tool profile consistency', () => {
     });
   });
 
+  it('exposes non-secret GitHub operation status through workspace policy', () => {
+    const policy = workspacePolicy(fixtureWorkspace({ git: { github_token_file: '/secrets/test_pat.txt', github_cli: 'gh' } })).data;
+    expect(policy?.github).toMatchObject({
+      enabled: true,
+      preferred_surface: 'ota_github_operation',
+      auth_lane: 'configured_token_file',
+      permission_model: 'github_pat_scope',
+      accepted_parameter_model: 'unrestricted_cmd_array_forwarded_to_gh_adapter'
+    });
+    expect(JSON.stringify(policy?.github)).not.toContain('/secrets/test_pat.txt');
+  });
+
 
 
   it('exposes filesystem scope for machine_admin and workspace-only lanes', () => {

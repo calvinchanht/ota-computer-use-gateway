@@ -26,6 +26,7 @@ export function workspacePolicy(workspace: Workspace, config?: AppConfig) {
       provider_prompts: 'Provider-side confirmation prompts are intentionally minimized for routine scoped workspace/browser/computer work. OTA policy must not add generic stop-boundary lists; if the real UI blocks progress, report the concrete blocker.'
     },
     command_runtime: commandRuntimeInfo(undefined, config?.command_runtime),
+    github: githubPolicy(workspace),
     allowed_tools: allowedTools(workspace),
     windows_computer_rights: workspace.windows_computer,
     // Provider-side confirmation prompts are harmful for OpenClaw-like chat-thread agents.
@@ -34,6 +35,20 @@ export function workspacePolicy(workspace: Workspace, config?: AppConfig) {
     // without Calvin's explicit approval.
     requires_approval: []
   });
+}
+
+function githubPolicy(workspace: Workspace) {
+  const allowed = allowedTools(workspace).includes('github');
+  return {
+    enabled: allowed,
+    preferred_surface: 'ota_github_operation',
+    operation: 'github',
+    auth_lane: workspace.git?.github_token_file ? 'configured_token_file' : 'default_workspace_token_file',
+    permission_model: 'github_pat_scope',
+    adapter: workspace.git?.github_cli_wrapper ? 'gh_cli_wrapper' : 'gh_cli',
+    raw_cli_via_run_command: 'discouraged',
+    accepted_parameter_model: 'unrestricted_cmd_array_forwarded_to_gh_adapter'
+  };
 }
 
 

@@ -120,7 +120,21 @@ If a stale or out-of-range cursor is provided, the gateway clamps it to the curr
 - `git_diff` — return bounded git diff output.
 - `git_push_current_branch` — push the current branch using configured server-side credentials.
 
-`github` is raw GitHub CLI argv, not raw shell. It never shell-interpolates the request. Configure `git.github_token_file` for the workspace; optionally configure `git.github_cli_wrapper` when the host has a canonical wrapper such as `/home/genesis/workspace/bin/gh-genesis`. Token values, tokenized remotes, and GitHub token patterns are redacted from output.
+`github` is raw GitHub CLI argv behind the OTA `github` operation, not raw shell. It never shell-interpolates the request. Configure `git.github_token_file` for the workspace; optionally configure `git.github_cli_wrapper` when the host has a canonical wrapper such as `/home/genesis/workspace/bin/gh-genesis`. Token values, tokenized remotes, and GitHub token patterns are redacted from output.
+
+OTA does not maintain a GitHub operation allowlist. The `cmd_array` is forwarded to the configured `gh` adapter, and GitHub/PAT scopes decide what is permitted. Agents should call the OTA `github` operation instead of `run_command` with `gh`, `curl`, or ambient `GH_TOKEN`.
+
+`get_tool_profile` and `get_workspace_policy` expose a non-secret GitHub status block:
+
+```json
+{
+  "preferred_surface": "ota_github_operation",
+  "auth_lane": "configured_token_file",
+  "permission_model": "github_pat_scope",
+  "adapter": "gh_cli",
+  "raw_cli_via_run_command": "discouraged"
+}
+```
 
 Git output contract:
 
