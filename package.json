@@ -21,6 +21,8 @@
     "smoke:catalyst-acceptance": "OTA_GATEWAY_SMOKE_WORKSPACE=catalyst OTA_GATEWAY_ACCEPTANCE_SKILL=catalyst-pickup node scripts/smoke-provider-acceptance.mjs",
     "status:catalyst-connector": "node scripts/catalyst-connector-status.mjs",
     "audit:retention": "node scripts/audit-retention.mjs",
+    "retention:runtime-logs": "node scripts/prune-runtime-logs.mjs",
+    "retention:deployments": "node scripts/prune-deployment-backups.mjs",
     "generate:action-schemas": "node scripts/generate-action-schemas.mjs",
     "validate:action-schemas": "node scripts/validate-action-schemas.mjs"
   },
