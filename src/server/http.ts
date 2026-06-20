@@ -1,7 +1,7 @@
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { appendFile, mkdir, readFile, stat } from 'node:fs/promises';
-import path, { dirname } from 'node:path';
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { readFile, stat } from 'node:fs/promises';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { AppConfig } from '../config/schema.js';
 import { buildWorkspaces, getWorkspace, type Workspace } from '../core/workspaces.js';
@@ -56,9 +56,13 @@ import { hasValidArtifactSignature } from './artifactSignatures.js';
 import { auditHttpRequest } from './httpAudit.js';
 import { RateLimiter } from './rateLimit.js';
 import { installShutdownHooks } from './shutdown.js';
-import { brokeredExecutorStore } from '../brokeredExecutor/store.js';
-import { brokeredExecutorEnabled, enabledExecutor } from '../brokeredExecutor/config.js';
-import { completeExecutorJobSchema, executorClaimSchema, executorHeartbeatSchema, submitExecutorJobSchema } from '../brokeredExecutor/types.js';
+import { reportApiShapeMisuse, reportToolMisuse } from './apiMisuse.js';
+import { handleBrokeredExecutorApi, isBrokeredExecutorWorkerRequestAuthorized } from './brokeredExecutorApi.js';
+import { parseApiBatchRequestSafe, parseApiToolRequestSafe } from './apiRequest.js';
+
+export { otaMisuseEventForApiShapeError, otaMisuseEventForToolError } from './apiMisuse.js';
+export { parseApiToolRequest, parseApiToolRequestSafe } from './apiRequest.js';
+export type { ApiShapeErrorBody } from './apiRequest.js';
 
 const MCP_PATH = '/mcp';
 const API_TOOL_PATH = '/api/v1/tool';
@@ -353,112 +357,6 @@ function batchOptionalNumber(steps: Array<{ arguments?: Record<string, unknown> 
 
 
 
-function isBrokeredExecutorWorkerRequestAuthorized(config: AppConfig, req: IncomingMessage): boolean {
-  const path = req.url?.split('?')[0] ?? '';
-  if (!path.startsWith(`${API_EXECUTORS_PREFIX}/`)) return false;
-  const rest = path.slice(`${API_EXECUTORS_PREFIX}/`.length);
-  const parts = rest.split('/').map((part) => decodeURIComponent(part));
-  const executorId = parts[0];
-  if (!executorId) return false;
-  const isWorkerRoute = (parts.length === 2 && (parts[1] === 'heartbeat' || parts[1] === 'claim')) || (parts.length === 4 && parts[1] === 'jobs' && (parts[3] === 'complete' || parts[3] === 'fail'));
-  if (!isWorkerRoute) return false;
-  const executor = enabledExecutor(config, executorId);
-  const envName = executor?.worker_bearer_token_env;
-  const expected = envName ? process.env[envName] : undefined;
-  return Boolean(expected && bearerTokenMatches(req, expected));
-}
-
-async function handleBrokeredExecutorApi(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  if (!brokeredExecutorEnabled(config)) return sendJson(res, 404, { ok: false, error: 'brokered_executors_disabled', summary: 'brokered executor stack is disabled' });
-  const path = req.url?.split('?')[0] ?? '';
-  try {
-    if (path === API_EXECUTOR_JOBS_PREFIX && req.method === 'POST') {
-      const parsed = await readApiJsonBody(req);
-      if (!parsed.ok) return sendJson(res, parsed.status, { ok: false, error: parsed.error });
-      const input = submitExecutorJobSchema.parse(parsed.body);
-      const job = brokeredExecutorStore.submit(config, input);
-      return sendJson(res, 200, { ok: true, summary: 'brokered executor job submitted', job });
-    }
-
-    if (path.startsWith(`${API_EXECUTOR_JOBS_PREFIX}/`) && req.method === 'GET') {
-      const rest = path.slice(`${API_EXECUTOR_JOBS_PREFIX}/`.length);
-      const resultOnly = rest.endsWith('/result');
-      const jobId = decodeURIComponent(resultOnly ? rest.slice(0, -'/result'.length) : rest);
-      const job = brokeredExecutorStore.get(jobId);
-      if (!job) return sendJson(res, 404, { ok: false, error: 'brokered_executor_job_not_found', broker_job_id: jobId });
-      if (resultOnly) return sendJson(res, 200, { ok: true, summary: 'brokered executor job result', broker_job_id: job.broker_job_id, state: job.state, result: job.result, artifacts: job.artifacts, error_code: job.error_code, error_message: job.error_message });
-      return sendJson(res, 200, { ok: true, summary: 'brokered executor job status', job });
-    }
-
-    if (path.startsWith(`${API_EXECUTORS_PREFIX}/`) && req.method === 'POST') return await handleBrokeredExecutorWorkerApi(config, req, res, path);
-    return sendJson(res, 404, { ok: false, error: 'brokered_executor_route_not_found' });
-  } catch (error) {
-    const body = brokeredExecutorErrorBody(error);
-    return sendJson(res, body.status, body.body);
-  }
-}
-
-async function handleBrokeredExecutorWorkerApi(config: AppConfig, req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
-  const rest = path.slice(`${API_EXECUTORS_PREFIX}/`.length);
-  const parts = rest.split('/').map((part) => decodeURIComponent(part));
-  const executorId = parts[0];
-  if (!executorId) return sendJson(res, 400, { ok: false, error: 'executor_id_required' });
-  const auth = brokeredExecutorWorkerAuth(config, executorId, req);
-  if (!auth.ok) return sendJson(res, auth.status, auth.body);
-  const parsed = await readApiJsonBody(req);
-  if (!parsed.ok) return sendJson(res, parsed.status, { ok: false, error: parsed.error });
-  const body = parsed.body && typeof parsed.body === 'object' ? parsed.body as Record<string, unknown> : {};
-  const withExecutorId = { ...body, executor_id: body.executor_id ?? executorId };
-
-  if (parts.length === 2 && parts[1] === 'heartbeat') {
-    const input = executorHeartbeatSchema.parse(withExecutorId);
-    const heartbeat = brokeredExecutorStore.heartbeat(input);
-    return sendJson(res, 200, { ok: true, summary: 'brokered executor heartbeat recorded', heartbeat });
-  }
-
-  if (parts.length === 2 && parts[1] === 'claim') {
-    const input = executorClaimSchema.parse(withExecutorId);
-    const job = brokeredExecutorStore.claim(config, input);
-    return sendJson(res, 200, job ? { ok: true, summary: 'brokered executor job claimed', job } : { ok: true, summary: 'no brokered executor job available', no_job: true });
-  }
-
-  if (parts.length === 4 && parts[1] === 'jobs' && (parts[3] === 'complete' || parts[3] === 'fail')) {
-    const input = completeExecutorJobSchema.parse(withExecutorId);
-    const job = brokeredExecutorStore.complete(parts[2], input);
-    return sendJson(res, 200, { ok: true, summary: `brokered executor job ${input.result.status}`, job });
-  }
-
-  return sendJson(res, 404, { ok: false, error: 'brokered_executor_worker_route_not_found' });
-}
-
-
-function brokeredExecutorWorkerAuth(config: AppConfig, executorId: string, req: IncomingMessage): { ok: true } | { ok: false; status: number; body: Record<string, unknown> } {
-  const executor = enabledExecutor(config, executorId);
-  if (!executor) return { ok: false, status: 404, body: { ok: false, error: 'executor_offline', error_code: 'executor_offline', message: 'brokered executor is disabled or unknown' } };
-  const envName = executor.worker_bearer_token_env;
-  if (!envName) return { ok: true };
-  const expected = process.env[envName];
-  if (!expected) return { ok: false, status: 401, body: { ok: false, error: 'executor_auth_missing', error_code: 'executor_auth_missing', message: `missing ${envName}` } };
-  if (!bearerTokenMatches(req, expected)) return { ok: false, status: 401, body: { ok: false, error: 'executor_unauthorized', error_code: 'executor_unauthorized', message: 'invalid executor bearer token' } };
-  return { ok: true };
-}
-
-function bearerTokenMatches(req: IncomingMessage, expected: string): boolean {
-  const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) return false;
-  const actual = header.slice('Bearer '.length);
-  const actualBuffer = Buffer.from(actual);
-  const expectedBuffer = Buffer.from(expected);
-  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
-}
-
-function brokeredExecutorErrorBody(error: unknown): { status: number; body: Record<string, unknown> } {
-  const message = error instanceof Error ? error.message : String(error);
-  const code = error && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : 'invalid_arguments';
-  const status = code === 'executor_offline' ? 404 : code === 'operation_not_allowed' ? 403 : code === 'lease_expired' ? 409 : 400;
-  return { status, body: { ok: false, error: code, error_code: code, message } };
-}
-
 async function handleApiArtifact(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'GET') return sendJson(res, 405, { error: 'method_not_allowed' });
   const parsed = parseArtifactRequest(req);
@@ -678,6 +576,22 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (!workspace) throw new Error('workspace_id is required');
   if (tool === 'get_workspace_policy') return workspacePolicy(workspace, config);
   if (!allowedTools(workspace).includes(tool)) throw new Error(toolExposureError(tool));
+  const result = callWorkspaceApiTool(config, workspace, tool, args);
+  if (result) return result;
+  throw new Error(`unsupported API tool: ${tool}`);
+}
+
+function callWorkspaceApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
+  return callFileApiTool(config, workspace, tool, args)
+    ?? callGitContextApiTool(config, workspace, tool, args)
+    ?? callBrowserApiTool(workspace, tool, args)
+    ?? callComputerApiTool(workspace, tool, args)
+    ?? callWindowsApiTool(workspace, tool, args)
+    ?? callLargeFileApiTool(config, workspace, tool, args)
+    ?? callProcessApiTool(config, workspace, tool, args);
+}
+
+function callFileApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
   if (tool === 'workspace_inventory') return workspaceInventory(config, workspace, optionalNumber(args.max_entries));
   if (tool === 'list_dir') return listDir(config, workspace, String(args.path ?? '.'), optionalNumber(args.max_entries));
   if (tool === 'stat_path') return statPath(config, workspace, requiredString(args.path, 'path'));
@@ -689,6 +603,10 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'edit_file') return editFileTool(config, workspace, requiredString(args.path, 'path'), requiredTextArg(args.old_text, 'old_text'), requiredTextArg(args.new_text, 'new_text', true));
   if (tool === 'delete_file') return deleteFileTool(config, workspace, requiredString(args.path, 'path'));
   if (tool === 'delete_path') return deletePathTool(config, workspace, requiredString(args.path, 'path'), Boolean(args.recursive));
+  return undefined;
+}
+
+function callGitContextApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
   if (tool === 'git_status') return gitStatus(workspace);
   if (tool === 'git_diff') return gitDiff(workspace, optionalNumber(args.max_bytes) ?? 20000);
   if (tool === 'github') return githubCliTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 60000, optionalNumber(args.max_output_chars) ?? optionalNumber(args.max_stdout_bytes) ?? 20000);
@@ -708,6 +626,10 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'genesis_agent_deep_dive') return genesisAgentDeepDive(requiredString(args.agent, 'agent'));
   if (tool === 'genesis_host_deep_dive') return genesisHostDeepDive(requiredString(args.host, 'host'));
   if (tool === 'genesis_safe_diagnostic') return genesisSafeDiagnostic(optionalString(args.scope) ?? 'estate', optionalString(args.target));
+  return undefined;
+}
+
+function callBrowserApiTool(workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
   if (tool === 'list_browser_profiles') return listBrowserProfiles(workspace);
   if (tool === 'browser_status') return browserStatus(workspace, optionalString(args.profile_label));
   if (tool === 'list_browser_tabs') return listBrowserTabs(workspace, optionalString(args.profile_label), Boolean(args.include_urls), browserTargetFilter(args));
@@ -722,6 +644,10 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'browser_cdp_batch') return browserCdpBatch(workspace, requiredString(args.target_id, 'target_id'), requiredCdpBatchSteps(args.calls) as Parameters<typeof browserCdpBatch>[2], optionalString(args.profile_label));
   if (tool === 'cua_driver_status') return cuaDriverStatus(workspace);
   if (tool === 'cua_driver_call') return cuaDriverCall(workspace, requiredString(args.method, 'method'), recordArg(args.params, 'params') ?? {});
+  return undefined;
+}
+
+function callComputerApiTool(workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
   if (tool === 'computer_screen_click') return computerScreenClick(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left', optionalNumber(args.click_count) ?? 1);
   if (tool === 'computer_window_click') return computerWindowClick(workspace, requiredNumber(args.pid, 'pid'), requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalNumber(args.window_id), optionalString(args.button) ?? 'left', optionalNumber(args.click_count) ?? 1);
   if (tool === 'computer_screen_mouse_move') return computerScreenMouseMove(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'));
@@ -731,6 +657,10 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'computer_screen_scroll') return computerScreenScroll(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), requiredString(args.direction, 'direction'), optionalNumber(args.amount) ?? 3, optionalString(args.by) ?? 'line');
   if (tool === 'computer_window_scroll') return computerWindowScroll(workspace, requiredNumber(args.pid, 'pid'), requiredString(args.direction, 'direction'), optionalNumber(args.window_id), optionalNumber(args.amount) ?? 3, optionalString(args.by) ?? 'line');
   if (tool === 'cua_driver_batch') return cuaDriverBatch(workspace, requiredCuaBatchSteps(args.calls));
+  return undefined;
+}
+
+function callWindowsApiTool(workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
   if (tool === 'windows_computer_status') return windowsComputerStatus(workspace);
   if (tool === 'windows_list_monitors') return windowsListMonitors(workspace);
   if (tool === 'windows_list_windows') return windowsListWindows(workspace);
@@ -754,6 +684,10 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'windows_clipboard_get') return windowsClipboardGet(workspace);
   if (tool === 'windows_clipboard_set') return windowsClipboardSet(workspace, requiredTextArg(args.text, 'text', true));
   if (tool === 'windows_batch') return windowsBatch(workspace, requiredWindowsBatchSteps(args.calls));
+  return undefined;
+}
+
+function callLargeFileApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
   if (tool === 'infer_file_structure') return inferFileStructure(config, workspace, requiredString(args.path, 'path'));
   if (tool === 'sample_file') return sampleFile(config, workspace, requiredString(args.path, 'path'), optionalString(args.mode) ?? 'head_tail_random', optionalNumber(args.head_lines) ?? 20, optionalNumber(args.tail_lines) ?? 20, optionalNumber(args.random_lines) ?? 20, optionalNumber(args.max_bytes) ?? 20000);
   if (tool === 'read_file_chunk') return readFileChunk(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.offset) ?? 0, optionalNumber(args.max_bytes) ?? 50000);
@@ -768,6 +702,10 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'query_json') return queryJson(config, workspace, requiredString(args.path, 'path'), requiredString(args.query, 'query'), optionalNumber(args.max_bytes) ?? 50000);
   if (tool === 'patch_file_lines') return patchFileLines(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.start_line) ?? 1, optionalNumber(args.end_line) ?? optionalNumber(args.start_line) ?? 1, requiredString(args.replacement, 'replacement'), optionalString(args.expected_sha256), args.dry_run !== false);
   if (tool === 'update_table_rows') return updateTableRows(config, workspace, requiredString(args.path, 'path'), recordArg(args.where, 'where') ?? {}, stringRecordArg(args.set, 'set'), args.dry_run !== false, Boolean(args.allow_multiple));
+  return undefined;
+}
+
+function callProcessApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
   if (tool === 'start_process') return startProcessFromArgs(config, workspace, args);
   if (tool === 'list_processes') return processList();
   if (tool === 'read_process') return processLog(requiredString(args.process_id, 'process_id'), optionalNumber(args.max_bytes) ?? 50000, optionalNumber(args.cursor));
@@ -776,7 +714,7 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   if (tool === 'run_command' && Boolean(args.tail)) return runArgvTailTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000);
   if (tool === 'run_command') return runArgvTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000, optionalNumber(args.max_stdout_bytes) ?? 20000, optionalNumber(args.max_stderr_bytes) ?? 8000);
   if (tool === 'run_configured_command') return runConfiguredCommand(config, workspace, requiredString(args.command_id, 'command_id'));
-  throw new Error(`unsupported API tool: ${tool}`);
+  return undefined;
 }
 
 
@@ -785,121 +723,6 @@ function toolExposureError(tool: string): string {
   if (tool === 'deliverJobProgress') return 'tool is not exposed by the OTA capability gateway. Use the Threaddex Job API path on the same agent host, for example /threaddex/v1/job/{job_id}/progress.';
   if (tool === 'getJob') return 'tool is not exposed by the OTA capability gateway. Use the Threaddex Job API path on the same agent host, for example /threaddex/v1/job/{job_id}.';
   return `tool is not exposed by this workspace api_sets profile: ${tool}`;
-}
-
-type ApiToolRequest = { tool: string; arguments?: Record<string, unknown> };
-type ApiShapeErrorBody = { ok: false; error: string; error_code: string; message: string; expected?: unknown; accepted_aliases?: Record<string, string>; received_top_level_keys?: string[]; received_argument_keys?: string[]; hint?: string };
-
-class ApiShapeError extends Error {
-  constructor(readonly body: ApiShapeErrorBody) {
-    super(body.message);
-  }
-}
-
-export function parseApiToolRequestSafe(body: unknown): { ok: true; value: ApiToolRequest } | { ok: false; status: number; body: ApiShapeErrorBody } {
-  try {
-    return { ok: true, value: parseApiToolRequest(body) };
-  } catch (error) {
-    return { ok: false, status: 400, body: apiShapeErrorBody(error) };
-  }
-}
-
-function parseApiBatchRequestSafe(body: unknown): { ok: true; value: { steps: ApiToolRequest[] } } | { ok: false; status: number; body: ApiShapeErrorBody } {
-  try {
-    return { ok: true, value: parseApiBatchRequest(body) };
-  } catch (error) {
-    return { ok: false, status: 400, body: apiShapeErrorBody(error) };
-  }
-}
-
-function apiShapeErrorBody(error: unknown): ApiShapeErrorBody {
-  if (error instanceof ApiShapeError) return error.body;
-  const message = error instanceof Error ? error.message : String(error);
-  return { ok: false, error: 'invalid_gateway_request_shape', error_code: 'invalid_gateway_request_shape', message };
-}
-
-export function parseApiToolRequest(body: unknown): ApiToolRequest {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('JSON object body is required');
-  const source = body as Record<string, unknown>;
-  const topOperation = requestOperation(source.operation, source.tool);
-  const args = requestArguments(source);
-  const nestedOperation = !topOperation && args ? requestOperation(args.operation, args.tool) : undefined;
-  const operation = topOperation ?? nestedOperation;
-  if (!operation) throw expectedRequestError(source, args);
-  const normalizedArgs = nestedOperation && args ? omitOperationKeys(args) : args;
-  return { tool: operation, arguments: normalizedArgs };
-}
-
-function parseApiBatchRequest(body: unknown): { steps: ApiToolRequest[] } {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('JSON object body is required');
-  const steps = (body as Record<string, unknown>).steps;
-  if (!Array.isArray(steps)) throw expectedBatchRequestError(body as Record<string, unknown>);
-  return { steps: steps.map((step) => parseApiToolRequest(step)) };
-}
-
-function requestOperation(operation: unknown, tool: unknown): string | undefined {
-  const op = optionalOperationString(operation, 'operation');
-  const legacy = optionalOperationString(tool, 'tool');
-  if (op && legacy && op !== legacy) throw new Error(`operation/tool conflict: operation=${op}, tool=${legacy}`);
-  return op ?? legacy;
-}
-
-function optionalOperationString(value: unknown, name: string): string | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string' || !value) throw new Error(`${name} must be a non-empty string`);
-  return value;
-}
-
-function requestArguments(source: Record<string, unknown>): Record<string, unknown> | undefined {
-  if (source.arguments !== undefined) return recordArg(source.arguments, 'arguments');
-  const args = omitEnvelopeKeys(source);
-  return Object.keys(args).length > 0 ? args : undefined;
-}
-
-function omitEnvelopeKeys(source: Record<string, unknown>): Record<string, unknown> {
-  const args = { ...source };
-  delete args.operation;
-  delete args.tool;
-  delete args.idempotency_key;
-  delete args.thread;
-  return args;
-}
-
-function omitOperationKeys(source: Record<string, unknown>): Record<string, unknown> {
-  const args = { ...source };
-  delete args.operation;
-  delete args.tool;
-  return args;
-}
-
-function expectedRequestError(source: Record<string, unknown>, args?: Record<string, unknown>): ApiShapeError {
-  const topKeys = Object.keys(source);
-  const argKeys = args ? Object.keys(args) : [];
-  const message = `Missing required operation. Expected { "operation": "genesis_bootstrap", "arguments": { "workspace_id": "genesis" } }. Received top-level keys: [${topKeys.join(', ') || '(none)'}], argument keys: [${args ? argKeys.join(', ') || '(none)' : '(missing)'}]. Legacy alias "tool" is still accepted.`;
-  return new ApiShapeError({
-    ok: false,
-    error: 'invalid_gateway_request_shape',
-    error_code: 'invalid_gateway_request_shape',
-    message,
-    expected: { operation: 'genesis_bootstrap', arguments: { workspace_id: 'genesis' } },
-    accepted_aliases: { tool: 'legacy alias for operation' },
-    received_top_level_keys: topKeys,
-    received_argument_keys: argKeys,
-    hint: 'Put the operation name at top level and workspace_id inside arguments.'
-  });
-}
-
-function expectedBatchRequestError(source: Record<string, unknown>): ApiShapeError {
-  return new ApiShapeError({
-    ok: false,
-    error: 'invalid_gateway_request_shape',
-    error_code: 'invalid_gateway_request_shape',
-    message: 'steps must be an array',
-    expected: { steps: [{ operation: 'heartbeat', arguments: { workspace_id: 'genesis' } }] },
-    accepted_aliases: { tool: 'legacy alias for operation inside each step' },
-    received_top_level_keys: Object.keys(source),
-    hint: 'Send steps as an array of { operation, arguments } objects.'
-  });
 }
 
 function recordArg(value: unknown, name: string): Record<string, unknown> | undefined {
@@ -1079,283 +902,6 @@ function safeBodyThread(body: unknown): unknown {
 
 function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
-}
-
-
-type OtaMisuseEvent = {
-  event_type: 'api_shape_misuse';
-  schema_version: 1;
-  timestamp: string;
-  source: Record<string, unknown>;
-  request_context: Record<string, unknown>;
-  misuse: Record<string, unknown>;
-  sample: { redacted_shape_only: true; value_hashes?: Record<string, string>; value_types?: Record<string, string>; sizes?: Record<string, number> };
-  fingerprint: string;
-};
-
-function reportApiShapeMisuse(config: AppConfig, req: IncomingMessage, body: unknown, error: ApiShapeErrorBody, expectedShapeId: string, hintId: string): void {
-  void sendMisuseReport(config, otaMisuseEventForApiShapeError(req.url?.split('?')[0], body, error, expectedShapeId, hintId)).catch(() => undefined);
-}
-
-export function otaMisuseEventForApiShapeError(httpPath: string | undefined, body: unknown, error: ApiShapeErrorBody, expectedShapeId: string, hintId: string): OtaMisuseEvent {
-  const source = body && typeof body === 'object' ? body as Record<string, unknown> : {};
-  return buildMisuseEvent({
-    workspace_id: workspaceIdFromBody(body), http_path: httpPath, operation: stringField(source.operation) ?? stringField(source.tool),
-    error_code: error.error_code, received_top_level_keys: error.received_top_level_keys, received_argument_keys: error.received_argument_keys,
-    expected_shape_id: expectedShapeId, hint_id: hintId
-  });
-}
-
-async function reportToolMisuse(config: AppConfig, tool: string, args: Record<string, unknown>, summary: string): Promise<void> {
-  const event = otaMisuseEventForToolError(tool, args, summary);
-  if (!event) return;
-  await sendMisuseReport(config, event).catch(() => undefined);
-}
-
-export function otaMisuseEventForToolError(tool: string, args: Record<string, unknown>, summary: string): OtaMisuseEvent | null {
-  const details = toolMisuseDetails(tool, args, summary);
-  return details ? buildMisuseEvent(details) : null;
-}
-
-function toolMisuseDetails(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
-  const exposure = toolExposureMisuse(tool, args, summary);
-  if (exposure) return exposure;
-  const runCommand = runCommandShapeMisuse(tool, args, summary);
-  if (runCommand) return runCommand;
-  const startProcess = startProcessShapeMisuse(tool, args, summary);
-  if (startProcess) return startProcess;
-  const common = commonToolShapeMisuse(tool, args, summary);
-  if (common) return common;
-  if (isJobLifecycleMisuse(tool, summary)) return {
-    workspace_id: stringField(args.workspace_id), operation: tool, error_code: 'blocked_job_lifecycle_via_ota',
-    received_argument_keys: Object.keys(args).sort(), bad_field: 'operation', bad_field_type: 'string',
-    expected_shape_id: 'threaddex.native_job_lifecycle.v1', hint_id: 'use_native_threaddex_job_api_actions'
-  };
-  return null;
-}
-
-function toolExposureMisuse(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
-  if (!summary.startsWith('tool is not exposed by this workspace api_sets profile:') && !summary.startsWith('tool is not exposed by this server:')) return null;
-  const serverScoped = summary.startsWith('tool is not exposed by this server:');
-  return {
-    workspace_id: stringField(args.workspace_id), operation: tool, error_code: serverScoped ? 'tool_not_exposed_by_server' : 'tool_not_exposed_by_profile',
-    received_argument_keys: Object.keys(args).sort(), bad_field: 'operation', bad_field_type: 'string',
-    expected_shape_id: serverScoped ? 'server.exposed_tools.tool_exposure.v1' : 'workspace.api_sets.tool_exposure.v1', hint_id: serverScoped ? 'add_tool_to_server_exposed_tools_or_remove_tool' : 'enable_matching_api_set_or_remove_tool',
-    value_hashes: hashField('operation', tool), value_types: { operation: 'string' }
-  };
-}
-
-function runCommandShapeMisuse(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
-  if (tool !== 'run_command') return null;
-  if (summary.includes('cmd must be an array')) return {
-    ...fieldMisuse(tool, args, 'cmd', 'run_command.argv.v1', 'use_cmd_array'),
-    error_code: 'invalid_run_command_shape'
-  };
-  if (summary === 'cmd_array must be an array') return fieldMisuse(tool, args, 'cmd_array', 'run_command.argv.v1', 'use_cmd_array');
-  if (summary === 'array item is required') return fieldMisuse(tool, args, 'cmd_array', 'run_command.argv_items_string.v1', 'use_cmd_array_of_strings');
-  if (summary.startsWith('cmd_array/cmd conflict')) return fieldMisuse(tool, args, 'cmd_array', 'run_command.single_argv_field.v1', 'remove_legacy_cmd_or_match_cmd_array');
-  return null;
-}
-
-function startProcessShapeMisuse(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
-  if (tool !== 'start_process') return null;
-  if (summary === 'cmd_array must be an array') return fieldMisuse(tool, args, 'cmd_array', 'start_process.argv.v1', 'use_cmd_array');
-  if (summary === 'array item is required') return fieldMisuse(tool, args, 'cmd_array', 'start_process.argv_items_string.v1', 'use_cmd_array_of_strings');
-  if (summary === 'command is required') return fieldMisuse(tool, args, 'command', 'start_process.command_string_legacy.v1', 'prefer_cmd_array_or_use_command_string');
-  if (summary.startsWith('start_process cmd_array/command conflict')) return fieldMisuse(tool, args, 'cmd_array', 'start_process.single_command_field.v1', 'remove_legacy_command_or_use_cmd_array_only');
-  return null;
-}
-
-function commonToolShapeMisuse(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
-  const batch = batchToolShapeMisuse(tool, args, summary);
-  if (batch) return batch;
-  for (const spec of commonToolShapeSpecs(tool)) {
-    if (!matchesFieldError(summary, spec.field)) continue;
-    return fieldMisuse(tool, args, spec.field, spec.expected_shape_id, spec.hint_id);
-  }
-  return null;
-}
-
-type CommonToolShapeSpec = { field: string; expected_shape_id: string; hint_id: string };
-
-function commonToolShapeSpecs(tool: string): CommonToolShapeSpec[] {
-  const specs: CommonToolShapeSpec[] = [];
-  if (pathStringTools().has(tool)) specs.push({ field: 'path', expected_shape_id: 'filesystem.path_string.v1', hint_id: 'use_path_string' });
-  if (queryStringTools().has(tool)) specs.push({ field: 'query', expected_shape_id: `${tool}.query_string.v1`, hint_id: 'use_query_string' });
-  if (targetIdTools().has(tool)) specs.push({ field: 'target_id', expected_shape_id: 'browser.target_id_string.v1', hint_id: 'use_target_id_string' });
-  if (methodStringTools().has(tool)) specs.push({ field: 'method', expected_shape_id: `${tool}.method_string.v1`, hint_id: 'use_method_string' });
-  if (paramsObjectTools().has(tool)) specs.push({ field: 'params', expected_shape_id: `${tool}.params_object.v1`, hint_id: 'use_params_object' });
-  if (commandStringTools().has(tool)) specs.push({ field: 'command', expected_shape_id: `${tool}.command_string.v1`, hint_id: 'use_command_string' });
-  if (processIdStringTools().has(tool)) specs.push({ field: 'process_id', expected_shape_id: 'process.process_id_string.v1', hint_id: 'use_process_id_string' });
-  if (arrayFieldSpec(tool, 'columns')) specs.push(arrayFieldSpec(tool, 'columns')!);
-  if (arrayFieldSpec(tool, 'select')) specs.push(arrayFieldSpec(tool, 'select')!);
-  if (arrayFieldSpec(tool, 'group_by')) specs.push(arrayFieldSpec(tool, 'group_by')!);
-  if (arrayFieldSpec(tool, 'sort')) specs.push(arrayFieldSpec(tool, 'sort')!);
-  if (arrayFieldSpec(tool, 'metrics')) specs.push(arrayFieldSpec(tool, 'metrics')!);
-  if (objectFieldSpec(tool, 'where')) specs.push(objectFieldSpec(tool, 'where')!);
-  if (objectFieldSpec(tool, 'set')) specs.push(objectFieldSpec(tool, 'set')!);
-  if (tool === 'write_process') specs.push({ field: 'input', expected_shape_id: 'write_process.input_string.v1', hint_id: 'use_input_string' });
-  if (tool === 'patch_file_lines') specs.push({ field: 'replacement', expected_shape_id: 'patch_file_lines.replacement_string.v1', hint_id: 'use_replacement_string' });
-  if (tool === 'write_file') specs.push({ field: 'content', expected_shape_id: 'write_file.content_string.v1', hint_id: 'use_content_string' });
-  if (tool === 'write_binary_file') specs.push({ field: 'base64', expected_shape_id: 'write_binary_file.base64_string.v1', hint_id: 'use_base64_string' });
-  if (tool === 'edit_file') specs.push({ field: 'old_text', expected_shape_id: 'edit_file.old_text_string.v1', hint_id: 'use_old_text_string' }, { field: 'new_text', expected_shape_id: 'edit_file.new_text_string.v1', hint_id: 'use_new_text_string' });
-  return specs;
-}
-
-function arrayFieldSpec(tool: string, field: string): CommonToolShapeSpec | null {
-  const arrayFields: Record<string, Set<string>> = {
-    columns: new Set(['table_profile']),
-    select: new Set(['query_table']),
-    group_by: new Set(['query_table_aggregate']),
-    sort: new Set(['query_table']),
-    metrics: new Set(['query_table_aggregate'])
-  };
-  if (!arrayFields[field]?.has(tool)) return null;
-  return { field, expected_shape_id: `${tool}.${field}_array.v1`, hint_id: `use_${field}_array` };
-}
-
-function objectFieldSpec(tool: string, field: string): CommonToolShapeSpec | null {
-  const objectFields: Record<string, Set<string>> = {
-    where: new Set(['query_table', 'query_table_aggregate', 'update_table_rows']),
-    set: new Set(['update_table_rows'])
-  };
-  if (!objectFields[field]?.has(tool)) return null;
-  return { field, expected_shape_id: `${tool}.${field}_object.v1`, hint_id: `use_${field}_object` };
-}
-
-function pathStringTools(): Set<string> {
-  return new Set(['stat_path', 'read_file', 'read_binary_file', 'write_file', 'write_binary_file', 'edit_file', 'delete_file', 'delete_path', 'infer_file_structure', 'sample_file', 'read_file_chunk', 'read_file_lines', 'read_around', 'search_file', 'table_profile', 'query_table', 'query_table_aggregate', 'json_profile', 'patch_file_lines', 'record_artifact']);
-}
-
-function queryStringTools(): Set<string> {
-  return new Set(['search_file', 'search_files', 'query_json']);
-}
-
-function targetIdTools(): Set<string> {
-  return new Set(['browser_visible_state', 'browser_tail', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_call', 'browser_cdp_batch']);
-}
-
-function methodStringTools(): Set<string> {
-  return new Set(['browser_cdp_browser_call', 'browser_cdp_call', 'cua_driver_call']);
-}
-
-function paramsObjectTools(): Set<string> {
-  return new Set(['browser_cdp_browser_call', 'browser_cdp_call', 'cua_driver_call']);
-}
-
-function commandStringTools(): Set<string> {
-  return new Set([]);
-}
-
-function processIdStringTools(): Set<string> {
-  return new Set(['read_process', 'write_process', 'stop_process']);
-}
-
-function batchToolShapeMisuse(tool: string, args: Record<string, unknown>, summary: string): Record<string, unknown> | null {
-  if (!batchCallTools().has(tool)) return null;
-  if (summary === 'calls array is required') return fieldMisuse(tool, args, 'calls', `${tool}.calls_array.v1`, 'use_calls_array');
-  if (summary === 'calls item must be an object') return fieldMisuse(tool, args, 'calls', `${tool}.calls_item_object.v1`, 'use_call_items_as_objects');
-  if (/^calls\[\d+\]\.method is required$/.test(summary)) return fieldMisuse(tool, args, 'calls', `${tool}.calls_method_string.v1`, 'use_call_method_string');
-  if (/^calls\[\d+\]\.params must be an object$/.test(summary)) return fieldMisuse(tool, args, 'calls', `${tool}.calls_params_object.v1`, 'use_call_params_object');
-  return null;
-}
-
-function batchCallTools(): Set<string> {
-  return new Set(['browser_cdp_browser_batch', 'browser_cdp_batch', 'cua_driver_batch']);
-}
-
-function matchesFieldError(summary: string, field: string): boolean {
-  return summary === `${field} is required` || summary.startsWith(`${field} must be `) || matchesGenericArrayError(summary, field);
-}
-
-function matchesGenericArrayError(summary: string, field: string): boolean {
-  if (!['columns', 'select', 'group_by'].includes(field)) return false;
-  return summary === 'string array must be an array' || summary === 'array item is required';
-}
-
-function fieldMisuse(tool: string, args: Record<string, unknown>, field: string, expectedShapeId: string, hintId: string): Record<string, unknown> {
-  const value = args[field];
-  return {
-    workspace_id: stringField(args.workspace_id), operation: tool, error_code: `${tool}_${field}_shape`,
-    received_argument_keys: Object.keys(args).sort(), bad_field: field, bad_field_type: valueType(value),
-    expected_shape_id: expectedShapeId, hint_id: hintId, value_hashes: hashField(`arguments.${field}`, value), value_types: { [`arguments.${field}`]: valueType(value) }
-  };
-}
-
-function isJobLifecycleMisuse(tool: string, summary: string): boolean {
-  return ['getJob', 'deliverJob', 'deliverJobProgress', 'requestJobContinuation'].includes(tool) && summary.includes('Threaddex Job API');
-}
-
-function buildMisuseEvent(input: Record<string, unknown>): OtaMisuseEvent {
-  const event: OtaMisuseEvent = {
-    event_type: 'api_shape_misuse', schema_version: 1, timestamp: new Date().toISOString(),
-    source: compact({ service: 'ota-computer-use-gateway', workspace_id: input.workspace_id }),
-    request_context: compact({ http_path: input.http_path ?? API_TOOL_PATH, operation: input.operation, transport: 'custom_gpt_action', provider_hint: 'chatgpt_custom_gpt' }),
-    misuse: compact({ error_code: input.error_code, received_top_level_keys: input.received_top_level_keys, received_argument_keys: input.received_argument_keys, bad_field: input.bad_field, bad_field_type: input.bad_field_type, expected_shape_id: input.expected_shape_id, hint_id: input.hint_id }),
-    sample: compact({ redacted_shape_only: true, value_hashes: input.value_hashes, value_types: input.value_types, sizes: input.sizes }) as OtaMisuseEvent['sample'],
-    fingerprint: ''
-  };
-  event.fingerprint = misuseFingerprint(event);
-  return event;
-}
-
-async function sendMisuseReport(config: AppConfig, event: OtaMisuseEvent): Promise<void> {
-  const cfg = config.misuse_reporting;
-  if (!cfg || cfg.enabled === false) return;
-  if (cfg.local_jsonl_path) await writeLocalMisuseEvent(cfg.local_jsonl_path, event);
-  if (cfg.central_url) await forwardMisuseEvent(cfg, event);
-}
-
-async function writeLocalMisuseEvent(file: string, event: OtaMisuseEvent): Promise<void> {
-  await mkdir(dirname(file), { recursive: true });
-  await appendFile(file, `${JSON.stringify(event)}
-`, 'utf8');
-}
-
-async function forwardMisuseEvent(config: NonNullable<AppConfig['misuse_reporting']>, event: OtaMisuseEvent): Promise<void> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.timeout_ms ?? 1500);
-  try {
-    const headers: Record<string, string> = { 'content-type': 'application/json' };
-    const token = await misuseBearerToken(config);
-    if (token) headers.authorization = `Bearer ${token}`;
-    await fetch(config.central_url!, { method: 'POST', headers, body: JSON.stringify({ event }), signal: controller.signal });
-  } finally { clearTimeout(timer); }
-}
-
-async function misuseBearerToken(config: NonNullable<AppConfig['misuse_reporting']>): Promise<string | undefined> {
-  if (config.bearer_token_env) return process.env[config.bearer_token_env]?.trim();
-  if (config.bearer_token_file) return (await readFile(config.bearer_token_file, 'utf8')).trim();
-  return undefined;
-}
-
-function misuseFingerprint(event: OtaMisuseEvent): string {
-  return `sha256:${createHash('sha256').update(JSON.stringify({ service: event.source.service, operation: event.request_context.operation, error_code: event.misuse.error_code, bad_field: event.misuse.bad_field, bad_field_type: event.misuse.bad_field_type, expected_shape_id: event.misuse.expected_shape_id, hint_id: event.misuse.hint_id })).digest('hex')}`;
-}
-
-function workspaceIdFromBody(body: unknown): string | undefined {
-  if (!body || typeof body !== 'object') return undefined;
-  const source = body as Record<string, unknown>;
-  const args = source.arguments && typeof source.arguments === 'object' && !Array.isArray(source.arguments) ? source.arguments as Record<string, unknown> : source;
-  return stringField(args.workspace_id);
-}
-
-function hashField(name: string, value: unknown): Record<string, string> | undefined {
-  return value === undefined ? undefined : { [name]: `sha256:${createHash('sha256').update(JSON.stringify(value)).digest('hex')}` };
-}
-
-function valueType(value: unknown): string {
-  if (value === null) return 'null';
-  if (Array.isArray(value)) return 'array';
-  return typeof value;
-}
-
-function stringField(value: unknown): string | undefined {
-  return typeof value === 'string' && value ? value : undefined;
-}
-
-function compact<T extends Record<string, unknown>>(value: T): T {
-  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 }
 
 function sendAuthError(config: AppConfig, res: ServerResponse): void {

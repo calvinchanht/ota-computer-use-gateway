@@ -42,24 +42,28 @@ export async function gitPushCurrentBranch(config: AppConfig, workspace: Workspa
       GIT_ASKPASS: askpass,
       GIT_TERMINAL_PROMPT: '0'
     });
-    const output = truncateText(redactGitOutputForDisplay(result.stdout + result.stderr), 50000);
-    const failed = result.code !== 0 || result.timed_out;
-    return ok('git push finished', {
-      status: failed ? 'failed' : 'pushed',
-      failure_class: failed ? classifyGitPushFailure(output.text, result.timed_out) : null,
-      repo_path: path.relative(workspace.realRoot, cwd) || '.',
-      remote,
-      remote_url: sanitizeGitRemoteForDisplay(remoteUrlRaw),
-      branch: currentBranch,
-      sha,
-      exit_code: result.code,
-      timed_out: result.timed_out,
-      output: output.text,
-      truncated: output.truncated
-    });
+    return ok('git push finished', gitPushResult(workspace, cwd, remote, remoteUrlRaw, currentBranch, sha, result));
   } finally {
     await rm(askpassDir, { recursive: true, force: true });
   }
+}
+
+function gitPushResult(workspace: Workspace, cwd: string, remote: string, remoteUrlRaw: string, branch: string, sha: string, result: { code: number | null; stdout: string; stderr: string; timed_out: boolean }) {
+  const output = truncateText(redactGitOutputForDisplay(result.stdout + result.stderr), 50000);
+  const failed = result.code !== 0 || result.timed_out;
+  return {
+    status: failed ? 'failed' : 'pushed',
+    failure_class: failed ? classifyGitPushFailure(output.text, result.timed_out) : null,
+    repo_path: path.relative(workspace.realRoot, cwd) || '.',
+    remote,
+    remote_url: sanitizeGitRemoteForDisplay(remoteUrlRaw),
+    branch,
+    sha,
+    exit_code: result.code,
+    timed_out: result.timed_out,
+    output: output.text,
+    truncated: output.truncated
+  };
 }
 
 async function gitOutput(args: string[], cwd: string, config: AppConfig, context: string): Promise<string> {
