@@ -13,6 +13,7 @@ const AGENTS = [
   { agentId: 'mickey', displayName: 'Mickey', serverUrl: 'https://mickey-api.unrealize.com' },
   { agentId: 'hkerbot', displayName: 'HKerBot', serverUrl: 'https://hkerbot-api.unrealize.com' },
   { agentId: 'boba', displayName: 'Boba', serverUrl: 'https://boba-api.unrealize.com' },
+  { agentId: 'axiom', displayName: 'Axiom', serverUrl: 'https://axiom-api.unrealize.com' },
   { agentId: 'catalyst', displayName: 'Catalyst', serverUrl: 'https://catalyst-api.unrealize.com' },
   { agentId: 'anna', displayName: 'Anna', serverUrl: 'https://anna-api.unrealize.com' }
 ];
