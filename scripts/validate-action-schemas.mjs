@@ -40,6 +40,8 @@ function validateSchemaText(text, agent) {
   if (!text.includes(`url: ${agent.serverUrl}`)) fail('missing expected server URL');
   if (!text.includes(`/ota/api/v1/tool:`)) fail('missing /ota tool path');
   if (!text.includes(`/threaddex/v1/job/{job_id}:`)) fail('missing /threaddex job path');
+  if (!text.includes(`cmd_array:`)) fail('missing cmd_array Gateway argument');
+  if (!text.includes(`cmd:`)) fail('missing legacy cmd Gateway argument');
   if (!text.includes(`operationId: requestJobContinuation`)) fail('missing continuation operation');
   if (!text.includes(`required: [checkpoint]`)) fail('continuation body must require checkpoint');
   if (!text.includes(`max_continuations:`)) fail('continuation body must expose max_continuations');

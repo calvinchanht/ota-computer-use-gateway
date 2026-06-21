@@ -2,6 +2,14 @@
 import { readFile, writeFile } from 'node:fs/promises';
 
 const AGENTS = [
+  {
+    agentId: 'genesis',
+    displayName: 'Webchat Genesis',
+    serverUrl: 'https://genesis-api.unrealize.com',
+    gatewayRequestOperationId: 'genesis_gateway_request',
+    gatewayBatchOperationId: 'genesis_gateway_batch',
+    getGatewayRunOperationId: 'get_genesis_gateway_run'
+  },
   { agentId: 'mickey', displayName: 'Mickey', serverUrl: 'https://mickey-api.unrealize.com' },
   { agentId: 'hkerbot', displayName: 'HKerBot', serverUrl: 'https://hkerbot-api.unrealize.com' },
   { agentId: 'boba', displayName: 'Boba', serverUrl: 'https://boba-api.unrealize.com' },
@@ -34,19 +42,33 @@ function parseAgentArg(argv) {
 }
 
 function render(templateText, agent) {
+  const gatewayRequestOperationId = agent.gatewayRequestOperationId ?? 'gateway_request';
+  const gatewayBatchOperationId = agent.gatewayBatchOperationId ?? 'gateway_batch';
+  const getGatewayRunOperationId = agent.getGatewayRunOperationId ?? 'get_gateway_run';
   return templateText
     .replaceAll('{{agentId}}', agent.agentId)
     .replaceAll('{{displayName}}', agent.displayName)
-    .replaceAll('{{serverUrl}}', agent.serverUrl);
+    .replaceAll('{{serverUrl}}', agent.serverUrl)
+    .replaceAll('{{gatewayRequestOperationId}}', gatewayRequestOperationId)
+    .replaceAll('{{gatewayBatchOperationId}}', gatewayBatchOperationId)
+    .replaceAll('{{getGatewayRunOperationId}}', getGatewayRunOperationId);
 }
 
 function validateRenderedSchema(text, agent) {
   if (text.includes('{{')) throw new Error(`unrendered template token in ${agent.agentId} schema`);
   if (!text.includes(`url: ${agent.serverUrl}`)) throw new Error(`missing server URL for ${agent.agentId}`);
+  if (!text.includes(operationIdLine(agent.gatewayRequestOperationId ?? 'gateway_request'))) throw new Error(`missing gateway request operation id for ${agent.agentId}`);
+  if (!text.includes(operationIdLine(agent.gatewayBatchOperationId ?? 'gateway_batch'))) throw new Error(`missing gateway batch operation id for ${agent.agentId}`);
+  if (!text.includes(operationIdLine(agent.getGatewayRunOperationId ?? 'get_gateway_run'))) throw new Error(`missing run recovery operation id for ${agent.agentId}`);
+  if (!text.includes(`cmd_array:`)) throw new Error(`missing cmd_array for ${agent.agentId}`);
   if (!text.includes(`enum: [${agent.agentId}]`)) throw new Error(`missing workspace enum for ${agent.agentId}`);
   for (const other of AGENTS) {
     if (other.agentId !== agent.agentId && text.includes(`enum: [${other.agentId}]`)) {
       throw new Error(`${agent.agentId} schema contains stale workspace enum for ${other.agentId}`);
     }
   }
+}
+
+function operationIdLine(operationId) {
+  return `operationId: ${operationId}`;
 }

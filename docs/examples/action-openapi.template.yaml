@@ -8,7 +8,7 @@ servers:
 paths:
   /ota/api/v1/tool:
     post:
-      operationId: gateway_request
+      operationId: {{gatewayRequestOperationId}}
       summary: Run one scoped {{displayName}} gateway tool call.
       description: Runs one scoped OTA capability tool call in workspace_id {{agentId}}. Do not use this operation for Threaddex job retrieval or delivery; use the native /threaddex operations getJob, deliverJobProgress, deliverJob, and requestJobContinuation instead.
       security:
@@ -28,7 +28,7 @@ paths:
                 $ref: '#/components/schemas/GatewayResponse'
   /ota/api/v1/batch:
     post:
-      operationId: gateway_batch
+      operationId: {{gatewayBatchOperationId}}
       summary: Run multiple scoped {{displayName}} gateway tool calls.
       description: Runs up to 20 scoped {{displayName}} OTA capability tool calls in order. Prefer this for multi-step read/write/read-back or checkpoint flows. Do not use batch for Threaddex job retrieval or delivery; use /threaddex operations directly.
       security:
@@ -48,7 +48,7 @@ paths:
                 $ref: '#/components/schemas/GatewayResponse'
   /ota/api/v1/runs/{run_id}:
     get:
-      operationId: get_gateway_run
+      operationId: {{getGatewayRunOperationId}}
       summary: Retrieve a previous Gateway JSON API run.
       description: Use this after a UI/stream interruption or when a previous response included api.run_id.
       security:
@@ -85,7 +85,7 @@ paths:
     get:
       operationId: getJob
       summary: Read a {{displayName}} Threaddex job by id.
-      description: Use the job_id from a Telegram job prompt. This is the correct operation for job retrieval. Do not call gateway_request with tool=getJob. Pass job_token when supplied by the job prompt.
+      description: Use the job_id from a Telegram job prompt. This is the correct operation for job retrieval. Do not call {{gatewayRequestOperationId}} with tool=getJob. Pass job_token when supplied by the job prompt.
       security:
         - bearerAuth: []
       parameters:
@@ -112,7 +112,7 @@ paths:
     post:
       operationId: deliverJobProgress
       summary: Deliver non-final progress for a {{displayName}} Threaddex job.
-      description: Use for Telegram job progress. This is the correct operation for progress delivery. Do not call gateway_request with tool=deliverJobProgress. Pass job_token when supplied by the job prompt.
+      description: Use for Telegram job progress. This is the correct operation for progress delivery. Do not call {{gatewayRequestOperationId}} with tool=deliverJobProgress. Pass job_token when supplied by the job prompt.
       security:
         - bearerAuth: []
       parameters:

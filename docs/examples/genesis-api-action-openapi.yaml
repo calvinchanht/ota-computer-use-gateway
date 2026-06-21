@@ -2,17 +2,17 @@ openapi: 3.1.0
 info:
   title: Webchat Genesis OTA + Threaddex API Action
   version: 0.5.0
-  description: 'Genesis single-host Action with strict path boundary: /ota for Gateway capability tools and /threaddex for native Job API delivery. Use /threaddex getJob/deliverJobProgress/deliverJob/requestJobContinuation for Telegram jobs; do not tunnel job lifecycle through gateway_request or run_command.'
+  description: "Webchat Genesis single-host Action with strict path boundary: /ota for capability tools and /threaddex for native Job API delivery."
 servers:
-- url: https://genesis-api.unrealize.com
+  - url: https://genesis-api.unrealize.com
 paths:
   /ota/api/v1/tool:
     post:
       operationId: genesis_gateway_request
-      summary: Run one scoped Webchat Genesis report call.
-      description: Runs one read-only Webchat Genesis tool call. Always pass workspace_id=genesis.
+      summary: Run one scoped Webchat Genesis gateway tool call.
+      description: Runs one scoped OTA capability tool call in workspace_id genesis. Do not use this operation for Threaddex job retrieval or delivery; use the native /threaddex operations getJob, deliverJobProgress, deliverJob, and requestJobContinuation instead.
       security:
-      - bearerAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -29,10 +29,10 @@ paths:
   /ota/api/v1/batch:
     post:
       operationId: genesis_gateway_batch
-      summary: Run multiple scoped Genesis gateway tool calls.
-      description: Runs multiple /ota Gateway tool calls. Do not use this for Threaddex job retrieval or delivery.
+      summary: Run multiple scoped Webchat Genesis gateway tool calls.
+      description: Runs up to 20 scoped Webchat Genesis OTA capability tool calls in order. Prefer this for multi-step read/write/read-back or checkpoint flows. Do not use batch for Threaddex job retrieval or delivery; use /threaddex operations directly.
       security:
-      - bearerAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -49,16 +49,16 @@ paths:
   /ota/api/v1/runs/{run_id}:
     get:
       operationId: get_genesis_gateway_run
-      summary: Retrieve a previous Webchat Genesis run.
-      description: Use this after a UI interruption or when a previous response included api.run_id.
+      summary: Retrieve a previous Gateway JSON API run.
+      description: Use this after a UI/stream interruption or when a previous response included api.run_id.
       security:
-      - bearerAuth: []
+        - bearerAuth: []
       parameters:
-      - name: run_id
-        in: path
-        required: true
-        schema:
-          type: string
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           description: Stored run record.
@@ -69,9 +69,9 @@ paths:
   /threaddex/v1/schema:
     get:
       operationId: getThreaddexSchema
-      summary: Read Genesis Threaddex Job API schema metadata.
+      summary: Read Webchat Genesis Threaddex Job API schema metadata.
       security:
-      - bearerAuth: []
+        - bearerAuth: []
       responses:
         '200':
           description: Job API schema metadata.
@@ -84,21 +84,21 @@ paths:
   /threaddex/v1/job/{job_id}:
     get:
       operationId: getJob
-      summary: Read a Genesis Threaddex job by id.
-      description: Use this for Telegram job retrieval. Do not call genesis_gateway_request with any threaddex_* tool.
+      summary: Read a Webchat Genesis Threaddex job by id.
+      description: Use the job_id from a Telegram job prompt. This is the correct operation for job retrieval. Do not call genesis_gateway_request with tool=getJob. Pass job_token when supplied by the job prompt.
       security:
-      - bearerAuth: []
+        - bearerAuth: []
       parameters:
-      - name: job_id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: job_token
-        in: query
-        required: false
-        schema:
-          type: string
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: job_token
+          in: query
+          required: false
+          schema:
+            type: string
       responses:
         '200':
           description: Public job payload.
@@ -111,21 +111,21 @@ paths:
   /threaddex/v1/job/{job_id}/progress:
     post:
       operationId: deliverJobProgress
-      summary: Deliver non-final progress for a Genesis Threaddex job.
-      description: Use this for Telegram job progress. Do not call genesis_gateway_request or run_command for progress delivery.
+      summary: Deliver non-final progress for a Webchat Genesis Threaddex job.
+      description: Use for Telegram job progress. This is the correct operation for progress delivery. Do not call genesis_gateway_request with tool=deliverJobProgress. Pass job_token when supplied by the job prompt.
       security:
-      - bearerAuth: []
+        - bearerAuth: []
       parameters:
-      - name: job_id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: job_token
-        in: query
-        required: false
-        schema:
-          type: string
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: job_token
+          in: query
+          required: false
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -139,12 +139,12 @@ paths:
                   type: string
                 seq:
                   oneOf:
-                  - type: integer
-                  - type: string
+                    - type: integer
+                    - type: string
                 progress_seq:
                   oneOf:
-                  - type: integer
-                  - type: string
+                    - type: integer
+                    - type: string
                 protocol_version:
                   type: string
                 schema_version:
@@ -161,21 +161,21 @@ paths:
   /threaddex/v1/job/{job_id}/deliver:
     post:
       operationId: deliverJob
-      summary: Deliver the final result for a Genesis Threaddex job.
-      description: Use this for the substantive final answer. Do not call genesis_gateway_request or run_command for final delivery. If this API call fails, report the full visible error details in chat with secrets-type information redacted instead of replying ok.
+      summary: Deliver the final result for a Webchat Genesis Threaddex job.
+      description: Use for the substantive final answer. Pass job_token when supplied by the job prompt. If this API call fails, report the full visible error details in chat with secrets-type information redacted instead of replying ok.
       security:
-      - bearerAuth: []
+        - bearerAuth: []
       parameters:
-      - name: job_id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: job_token
-        in: query
-        required: false
-        schema:
-          type: string
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: job_token
+          in: query
+          required: false
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -203,20 +203,20 @@ paths:
   /threaddex/v1/job/{job_id}/continuation:
     post:
       operationId: requestJobContinuation
-      summary: Request a continuation for a Genesis Threaddex job instead of final delivery.
+      summary: Request a continuation for a Webchat Genesis Threaddex job instead of final delivery.
       security:
-      - bearerAuth: []
+        - bearerAuth: []
       parameters:
-      - name: job_id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: job_token
-        in: query
-        required: false
-        schema:
-          type: string
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: job_token
+          in: query
+          required: false
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -249,6 +249,7 @@ paths:
                 type: object
                 properties: {}
                 additionalProperties: true
+
 components:
   securitySchemes:
     bearerAuth:
@@ -258,12 +259,11 @@ components:
     GatewayBatchRequest:
       type: object
       additionalProperties: false
-      required:
-      - steps
+      required: [steps]
       properties:
         idempotency_key:
           type: string
-          description: Optional stable retry key.
+          description: Optional stable retry key. Use a unique key for batch writes/checkpoints.
         thread:
           type: object
           additionalProperties: true
@@ -277,9 +277,7 @@ components:
     GatewayStep:
       type: object
       additionalProperties: false
-      required:
-      - operation
-      - arguments
+      required: [operation, arguments]
       properties:
         operation:
           $ref: '#/components/schemas/GatewayOperationName'
@@ -291,13 +289,11 @@ components:
     GatewayRequest:
       type: object
       additionalProperties: false
-      required:
-      - operation
-      - arguments
+      required: [operation, arguments]
       properties:
         idempotency_key:
           type: string
-          description: Optional stable retry key.
+          description: Optional stable retry key. Use a unique key for writes/checkpoints.
         thread:
           type: object
           additionalProperties: true
@@ -313,137 +309,452 @@ components:
     GatewayOperationName:
       type: string
       enum:
-      - heartbeat
-      - workspace_status
-      - get_workspace_policy
-      - get_tool_profile
-      - genesis_bootstrap
-      - genesis_estate_overview
-      - genesis_agent_deep_dive
-      - genesis_host_deep_dive
-      - genesis_safe_diagnostic
-      - workspace_inventory
-      - list_dir
-      - stat_path
-      - tree
-      - read_file
-      - read_file_chunk
-      - read_file_lines
-      - read_binary_file
-      - search_files
-      - git_status
-      - git_diff
-      - github
-      - git_push_current_branch
-      - get_project_context
-      - get_context_snapshot
-      - get_agent_bootstrap
-      - memory_search
-      - list_skills
-      - read_skill
-      - approval_status
-      - list_artifacts
-      - write_file
-      - write_binary_file
-      - edit_file
-      - delete_file
-      - delete_path
-      - memory_write
-      - record_artifact
-      - record_progress
-      - record_decision
-      - record_handoff
-      - update_current_task
-      - checkpoint_thread
-      - propose_patch
-      - apply_patch
-      - run_command
-      - start_process
-      - list_processes
-      - read_process
-      - write_process
-      - stop_process
-      - list_browser_profiles
-      - browser_status
-      - list_browser_tabs
-      - browser_visible_state
-      - browser_manage_tabs
-      - browser_click_and_wait
-      - browser_upload_file_and_verify
-      - browser_cdp_browser_call
-      - browser_cdp_browser_batch
-      - browser_cdp_call
-      - browser_cdp_batch
-      - cua_driver_status
-      - cua_driver_call
-      - cua_driver_batch
-      - run_configured_command
+        - heartbeat
+        - workspace_status
+        - get_workspace_policy
+        - get_tool_profile
+        - list_dir
+        - stat_path
+        - tree
+        - read_file
+        - read_file_chunk
+        - read_file_lines
+        - read_binary_file
+        - write_file
+        - write_binary_file
+        - edit_file
+        - search_files
+        - git_status
+        - git_diff
+        - github
+        - run_command
+        - start_process
+        - list_processes
+        - read_process
+        - write_process
+        - stop_process
+        - list_browser_profiles
+        - browser_status
+        - list_browser_tabs
+        - browser_visible_state
+        - browser_tail
+        - browser_manage_tabs
+        - browser_click_and_wait
+        - browser_upload_file_and_verify
+        - browser_cdp_browser_call
+        - browser_cdp_browser_batch
+        - browser_cdp_call
+        - browser_cdp_batch
+        - cua_driver_status
+        - cua_driver_call
+        - cua_driver_batch
+        - windows_computer_status
+        - windows_list_monitors
+        - windows_screenshot
+        - windows_uia_tree
+        - windows_list_windows
+        - windows_focus_window
+        - windows_launch_app
+        - windows_mouse_move
+        - windows_click
+        - windows_double_click
+        - windows_drag
+        - windows_scroll
+        - windows_window_mouse_move
+        - windows_window_click
+        - windows_window_double_click
+        - windows_window_drag
+        - windows_window_scroll
+        - windows_type_text
+        - windows_key
+        - windows_hotkey
+        - windows_clipboard_get
+        - windows_clipboard_set
+        - windows_batch
+        - run_configured_command
     GatewayArguments:
       type: object
       additionalProperties: true
-      required:
-      - workspace_id
+      required: [workspace_id]
       properties:
         workspace_id:
           type: string
-          enum:
-          - genesis
-        agent:
+          enum: [genesis]
+      description: |
+        Tool-specific arguments. For browser work, direct CDP is the primary browser access path:
+        use browser_cdp_browser_* and browser_cdp_* for full scoped CDP execution. Browser_visible_state returns human-visible text/buttons/forms/required-missing/file upload/error state;
+        browser_manage_tabs lists/focuses/closes real page tabs; browser_click_and_wait clicks by selector/text and
+        waits for visible text, selector, URL substring, or page stability; browser_upload_file_and_verify sets a
+        workspace-relative file input and confirms expected filename/text appears in human-visible page text. For
+        browser tab listing, list_browser_tabs defaults to real page targets only; pass type=all and
+        include_iframes/include_workers/include_browser_ui only for raw CDP cleanup/debugging. For file tools include
+        path; for browser/CDP include method/params/target_id/calls; for large-file tools include query, where,
+        select, group_by, metrics, offsets, and dry_run fields as needed.
+    WorkspaceStatusArguments:
+      type: object
+      additionalProperties: false
+      properties:
+        workspace_id:
           type: string
-          description: Agent id/name for genesis_agent_deep_dive, e.g. catalyst, cortex, boba, hexa.
-        host:
+          enum: [genesis]
+    ListDirArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, path]
+      properties:
+        workspace_id:
           type: string
-          description: Host/machine-profile id/name for genesis_host_deep_dive.
-        scope:
+          enum: [genesis]
+        path:
           type: string
-          enum:
-          - estate
-          - agent
-          - host
-          description: Scope for genesis_safe_diagnostic.
-        target:
+        max_entries:
+          type: integer
+          minimum: 1
+          maximum: 100
+    ReadFileArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, path]
+      properties:
+        workspace_id:
           type: string
-          description: Agent or host target for scoped genesis_safe_diagnostic.
+          enum: [genesis]
+        path:
+          type: string
+        start_line:
+          type: integer
+          minimum: 1
+        max_lines:
+          type: integer
+          minimum: 1
+          maximum: 120
+    WriteFileArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, path, content]
+      properties:
+        workspace_id:
+          type: string
+          enum: [genesis]
         path:
           type: string
         content:
           type: string
+          maxLength: 4000
         overwrite:
           type: boolean
-        command:
+          default: false
+    GitStatusArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [genesis]
+    GitDiffArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [genesis]
+        max_bytes:
+          type: integer
+          minimum: 1
+          maximum: 20000
+    CheckpointThreadArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, title, summary]
+      properties:
+        workspace_id:
+          type: string
+          enum: [genesis]
+        title:
+          type: string
+          maxLength: 120
+        summary:
+          type: string
+          maxLength: 4000
+        next_steps:
           type: array
+          maxItems: 10
           items:
             type: string
+            maxLength: 300
+    MemoryWriteArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, type, title, body]
+      properties:
+        workspace_id:
+          type: string
+          enum: [genesis]
+        type:
+          type: string
+          enum: [note, decision, progress, handoff]
+        title:
+          type: string
+          maxLength: 120
+        body:
+          type: string
+          maxLength: 4000
+        tags:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            maxLength: 60
+
+    ListBrowserProfilesArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [genesis]
+    BrowserStatusArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [genesis]
+        profile_label:
+          type: string
+    ListBrowserTabsArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [genesis]
+        profile_label:
+          type: string
+        include_urls:
+          type: boolean
+          description: Include full target URLs when true. Default false returns redacted origin-only URL metadata.
+          default: false
+    BrowserCdpBrowserCallArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, method]
+      properties:
+        workspace_id:
+          type: string
+          enum: [genesis]
+        profile_label:
+          type: string
+        method:
+          type: string
+          description: Raw Chrome DevTools Protocol browser-level method name.
+        params:
+          type: object
+          additionalProperties: true
+          default: {}
+    BrowserCdpBrowserBatchArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, calls]
+      properties:
+        workspace_id:
+          type: string
+          enum: [genesis]
+        profile_label:
+          type: string
+        calls:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/CdpBatchStep'
+    BrowserCdpCallArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, target_id, method]
+      properties:
+        workspace_id:
+          type: string
+          enum: [genesis]
         profile_label:
           type: string
         target_id:
           type: string
-        selector:
-          type: string
-        text:
-          type: string
         method:
           type: string
+          description: Raw Chrome DevTools Protocol page-target method name.
         params:
           type: object
           additionalProperties: true
-        steps:
+          default: {}
+    BrowserCdpBatchArguments:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, target_id, calls]
+      properties:
+        workspace_id:
+          type: string
+          enum: [genesis]
+        profile_label:
+          type: string
+        target_id:
+          type: string
+        calls:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/CdpBatchStep'
+    CdpBatchStep:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [method]
+          properties:
+            method:
+              type: string
+            params:
+              type: object
+              additionalProperties: true
+              default: {}
+            wait_for:
+              type: string
+              enum: [page_load, dom_content_loaded]
+            timeout_ms:
+              type: integer
+              minimum: 1
+              maximum: 60000
+        - type: object
+          additionalProperties: false
+          required: [delay_ms]
+          properties:
+            delay_ms:
+              type: integer
+              minimum: 0
+              maximum: 60000
+    LargeFileArguments:
+      type: object
+      additionalProperties: true
+      required: [workspace_id]
+      properties:
+        workspace_id:
+          type: string
+          enum: [genesis]
+        path:
+          type: string
+        root:
+          type: string
+        query:
+          type: string
+        glob:
+          type: string
+        max_bytes:
+          type: integer
+          minimum: 1
+          maximum: 250000
+        max_matches:
+          type: integer
+          minimum: 1
+          maximum: 200
+        context_lines:
+          type: integer
+          minimum: 0
+          maximum: 20
+        start_line:
+          type: integer
+          minimum: 1
+        max_lines:
+          type: integer
+          minimum: 1
+          maximum: 2000
+        line:
+          type: integer
+          minimum: 1
+        before:
+          type: integer
+          minimum: 0
+          maximum: 200
+        after:
+          type: integer
+          minimum: 0
+          maximum: 200
+        select:
+          type: array
+          items:
+            type: string
+        columns:
+          type: array
+          items:
+            type: string
+        where:
+          type: object
+          additionalProperties: true
+        sort:
           type: array
           items:
             type: object
             additionalProperties: true
-        max_entries:
+        group_by:
+          type: array
+          items:
+            type: string
+        metrics:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        replacement:
+          type: string
+        expected_sha256:
+          type: string
+        dry_run:
+          type: boolean
+          default: true
+        set:
+          type: object
+          additionalProperties: true
+        allow_multiple:
+          type: boolean
+          default: false
+        cmd_array:
+          type: array
+          description: Preferred argv-style command, for example ["node", "-e", "console.log(1)"]. For shell behavior, call get_tool_profile or get_workspace_policy and use command_runtime.recommended_cmd_array_for_shell.
+          minItems: 1
+          items:
+            type: string
+        cmd:
+          type: array
+          deprecated: true
+          description: Legacy alias for cmd_array; prefer cmd_array in new webchat calls.
+          minItems: 1
+          items:
+            type: string
+        cwd:
+          type: string
+          description: Working directory relative to workspace root.
+          default: .
+        timeout_ms:
           type: integer
-        max_lines:
+          minimum: 1
+          maximum: 120000
+          default: 30000
+        max_stdout_bytes:
           type: integer
-        max_bytes:
+          minimum: 1
+          maximum: 50000
+          default: 20000
+        max_stderr_bytes:
           type: integer
-      description: Tool-specific arguments. Always include workspace_id=genesis. Use get_tool_profile and get_workspace_policy
-        early. This broad private schema intentionally exposes Genesis workspace/browser/computer/machine/estate tools while
-        relying on server-side auth, workspace policy, and Calvin-approved workflow boundaries. There is no hidden path/secret/glob deny layer.
+          minimum: 1
+          maximum: 50000
+          default: 8000
     GatewayResponse:
       type: object
-      additionalProperties: true
       properties:
         ok:
           type: boolean
@@ -452,6 +763,10 @@ components:
         data:
           type: object
           additionalProperties: true
+        run:
+          type: object
+          additionalProperties: true
         api:
           type: object
           additionalProperties: true
+      additionalProperties: true
