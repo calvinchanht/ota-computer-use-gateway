@@ -7,7 +7,7 @@ Boba is the MacBook Air / CUADriver computer-use lane. It is more powerful than 
 Current target from Genesis continuity:
 
 ```text
-host: calvinc@calvins-air
+host: calvinc@100.71.254.63 over Tailscale
 workspace: /Users/calvinc/.openclaw/workspace
 OpenClaw session lane: agent:boba:family
 CUA binary: /Users/calvinc/.local/bin/cua-driver
@@ -15,6 +15,16 @@ CUA app: /Applications/CuaDriverRs.app
 ```
 
 Do not expose Mac services publicly by default. Prefer Tailscale/SSH and local-only MCP until the scoped gateway path is boring and audited.
+
+VPS Genesis must not use the generic Linux host wrapper path for Boba. Boba is not a `molt@<vps>` password lane. The working SSH lane is:
+
+```text
+ssh -i /home/genesis/secrets/ssh/genesis_calvin_mac_ed25519 \
+  -o IdentitiesOnly=yes \
+  calvinc@100.71.254.63
+```
+
+`IdentitiesOnly=yes` is mandatory. Without it, SSH may offer unrelated keys first and the Mac can fail with `Too many authentication failures` before the correct key is tried.
 
 ## Tool Gateway config
 
@@ -69,7 +79,8 @@ On 2026-05-30, Genesis verified:
 - Boba family routing audit passed for `agent:boba:family`.
 - Mac OpenClaw/CUA audit passed: Accessibility and Screen Recording were true; CUA `list_windows` worked; Roblox/Roblox Studio/CUA app were installed.
 - Direct CUA Terminal mutation proof succeeded by typing a command into Terminal and reading back `/Users/calvinc/Desktop/boba-cua-terminal-proof.txt`.
-- Local Boba Tool Gateway was cloned/built on the Mac and run on `127.0.0.1:8768` with `config/boba.local.yaml`.
+- Managed Boba Tool Gateway runs on the Mac as LaunchAgent `ai.boba.api`, listening on `127.0.0.1:8769` with `config/boba.api.local.yaml`.
+- The old unmanaged `127.0.0.1:8768` gateway was stopped on 2026-06-22 because it was an unauthenticated, stale API-shape ghost process using a missing `config/boba.local.yaml`.
 - Public-style local MCP tool discovery originally exposed the old computer wrapper tools; the current direction is the Cua Driver proxy surface above.
 - Added direct Cua Driver proxy direction so Boba can use the real scoped Cua Driver surface rather than being trapped behind toy wrappers.
 - Old `computer_status` reported CUA ready for screen and mouse/keyboard.
