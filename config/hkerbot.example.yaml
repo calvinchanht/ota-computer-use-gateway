@@ -22,7 +22,7 @@ workspaces:
       workspace: true
       browser: true
       computer: false
-      machine_admin: false
+      machine_admin: true
       estate_admin: false
     allow_read: true
     allow_write: true
@@ -55,6 +55,8 @@ workspaces:
     commands:
       check: "python3 -m py_compile scripts/hkerschedule_daily_publish_all.py scripts/hkerschedule_daily_images.py"
       patreon_preflight: "python3 scripts/patreon_preflight.py"
+      start_hker_browser_20223: "DISPLAY=:20 bash scripts/start_hker_browser_20223_direct.sh"
+      start_patreon_browser_21223: "DISPLAY=:20 bash scripts/start_patreon_browser_21223.sh"
 
 security:
   # Calvin policy: no hidden path/secret deny lists in OTA/Threaddex configs.
