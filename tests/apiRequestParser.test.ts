@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { otaMisuseEventForApiShapeError, otaMisuseEventForToolError, parseApiToolRequest, parseApiToolRequestSafe } from '../src/server/http.js';
+import { invalidJsonResponse, validateApiToolArguments } from '../src/server/apiContract.js';
 
 describe('HTTP API request normalizer', () => {
   it('accepts operation as the canonical public field', () => {
@@ -57,6 +58,32 @@ describe('HTTP API request normalizer', () => {
         accepted_aliases: { tool: 'legacy alias for operation' },
         received_argument_keys: ['workspace_id'],
         hint: 'Put the operation name at top level and workspace_id inside arguments.'
+      }
+    });
+  });
+
+  it('returns a unified invalid JSON correction contract', () => {
+    expect(invalidJsonResponse()).toMatchObject({
+      ok: false,
+      error_code: 'invalid_json',
+      contract: { operation: 'gateway_request' },
+      recovery: { kind: 'fix_request_and_retry' }
+    });
+  });
+
+  it('rejects unsupported parameters before browser execution', () => {
+    const result = validateApiToolArguments('browser_click_and_wait', {
+      workspace_id: 'anna',
+      target_id: 'tab-1',
+      url: 'https://example.com'
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      body: {
+        error_code: 'unsupported_parameters',
+        unsupported_parameters: [{ path: 'arguments.url', supported_alternatives: ['wait_for_url_contains'] }],
+        recovery: { kind: 'fix_request_and_retry' }
       }
     });
   });

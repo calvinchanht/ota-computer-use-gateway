@@ -59,6 +59,7 @@ import { installShutdownHooks } from './shutdown.js';
 import { reportApiShapeMisuse, reportToolMisuse } from './apiMisuse.js';
 import { handleBrokeredExecutorApi, isBrokeredExecutorWorkerRequestAuthorized } from './brokeredExecutorApi.js';
 import { parseApiBatchRequestSafe, parseApiToolRequestSafe } from './apiRequest.js';
+import { apiShapeErrorResponse, apiToolContract, invalidJsonResponse, validateApiToolArguments } from './apiContract.js';
 
 export { otaMisuseEventForApiShapeError, otaMisuseEventForToolError } from './apiMisuse.js';
 export { parseApiToolRequest, parseApiToolRequestSafe } from './apiRequest.js';
@@ -225,11 +226,11 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return JSON.parse(raw);
 }
 
-async function readApiJsonBody(req: IncomingMessage): Promise<{ ok: true; body: unknown } | { ok: false; status: number; error: string }> {
+async function readApiJsonBody(req: IncomingMessage): Promise<{ ok: true; body: unknown } | { ok: false; status: number; body: Record<string, unknown> }> {
   try {
     return { ok: true, body: await readJsonBody(req) };
   } catch {
-    return { ok: false, status: 400, error: 'invalid_json' };
+    return { ok: false, status: 400, body: invalidJsonResponse() };
   }
 }
 
@@ -255,17 +256,19 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 async function handleApiTool(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
   const parsed = await readApiJsonBody(req);
-  if (!parsed.ok) return sendJson(res, parsed.status, { ok: false, error: parsed.error });
+  if (!parsed.ok) return sendJson(res, parsed.status, parsed.body);
   const parsedBody = parsed.body;
   const idempotencyKey = idempotencyKeyFor(req, parsedBody);
   const existing = existingRun(idempotencyKey);
   if (existing) return sendJson(res, 200, existing.response);
   const request = parseApiToolRequestSafe(parsedBody);
-  if (!request.ok) { reportApiShapeMisuse(config, req, parsedBody, request.body, 'ota.api_tool_request.v1', 'use_operation_arguments_shape'); return sendJson(res, request.status, request.body); }
+  if (!request.ok) { reportApiShapeMisuse(config, req, parsedBody, request.body, 'ota.api_tool_request.v1', 'use_operation_arguments_shape'); return sendJson(res, request.status, apiShapeErrorResponse(request.body)); }
   const args = request.value.arguments ?? {};
+  const validation = validateApiToolArguments(request.value.tool, args);
+  if (!validation.ok) return sendJson(res, validation.status, validation.body);
   if (shouldUseQuotaSaver(request.value.tool, args)) return handleQuotaSaverApiTool(config, res, request.value.tool, args, idempotencyKey, safeBodyThread(parsedBody));
   const result = await runApiTool(config, request.value.tool, args);
-  const response = { ...result, api: { transport: 'http-json', tool: request.value.tool, thread: safeBodyThread(parsedBody) } };
+  const response = { ...result, contract: validation.contract, api: { transport: 'http-json', tool: request.value.tool, thread: safeBodyThread(parsedBody) } };
   const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool: request.value.tool, thread: safeBodyThread(parsedBody) } });
   return sendJson(res, 200, attachRun(response, record));
 }
@@ -273,7 +276,7 @@ async function handleApiTool(config: AppConfig, req: IncomingMessage, res: Serve
 async function handleApiGithub(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
   const parsed = await readApiJsonBody(req);
-  if (!parsed.ok) return sendJson(res, parsed.status, { ok: false, error: parsed.error });
+  if (!parsed.ok) return sendJson(res, parsed.status, parsed.body);
   const args = recordArg(parsed.body, 'github request') ?? {};
   const idempotencyKey = idempotencyKeyFor(req, parsed.body);
   const existing = existingRun(idempotencyKey);
@@ -288,18 +291,20 @@ async function handleApiGithub(config: AppConfig, req: IncomingMessage, res: Ser
 async function handleApiBatch(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
   const parsed = await readApiJsonBody(req);
-  if (!parsed.ok) return sendJson(res, parsed.status, { ok: false, error: parsed.error });
+  if (!parsed.ok) return sendJson(res, parsed.status, parsed.body);
   const parsedBody = parsed.body;
   const idempotencyKey = idempotencyKeyFor(req, parsedBody);
   const existing = existingRun(idempotencyKey);
   if (existing) return sendJson(res, 200, existing.response);
   const parsedBatch = parseApiBatchRequestSafe(parsedBody);
-  if (!parsedBatch.ok) { reportApiShapeMisuse(config, req, parsedBody, parsedBatch.body, 'ota.api_batch_request.v1', 'use_steps_array'); return sendJson(res, parsedBatch.status, parsedBatch.body); }
+  if (!parsedBatch.ok) { reportApiShapeMisuse(config, req, parsedBody, parsedBatch.body, 'ota.api_batch_request.v1', 'use_steps_array'); return sendJson(res, parsedBatch.status, apiShapeErrorResponse(parsedBatch.body)); }
   const steps = parsedBatch.value.steps.slice(0, 20);
+  const validation = validateApiBatchSteps(steps);
+  if (!validation.ok) return sendJson(res, validation.status, validation.body);
   const thread = safeBodyThread(parsedBody);
   if (shouldUseQuotaSaverBatch(steps)) return handleQuotaSaverApiBatch(config, res, steps, idempotencyKey, thread, parsedBody);
   const result = await runApiBatchSteps(config, steps);
-  const response = { ...result, api: { transport: 'http-json', thread } };
+  const response = { ...result, contracts: steps.map((step) => apiToolContract(step.tool)), api: { transport: 'http-json', thread } };
   const record = storeApiRun({ kind: 'batch', ok: result.ok, summary: response.summary, response, idempotency_key: idempotencyKey, request: { steps: steps.map((step) => ({ tool: step.tool })), thread } });
   return sendJson(res, 200, attachRun(response, record));
 }
@@ -312,7 +317,7 @@ async function handleQuotaSaverApiBatch(config: AppConfig, res: ServerResponse, 
   const promise = runApiBatchSteps(config, steps);
   const result = await promiseWithTimeout(promise, initialWaitMs);
   if (result) {
-    const response = { ...result, api: { transport: 'http-json', thread, async_mode: 'quota_saver', completed_within_initial_wait_ms: initialWaitMs } };
+    const response = { ...result, contracts: steps.map((step) => apiToolContract(step.tool)), api: { transport: 'http-json', thread, async_mode: 'quota_saver', completed_within_initial_wait_ms: initialWaitMs } };
     const record = storeApiRun({ kind: 'batch', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { steps: steps.map((step) => ({ tool: step.tool })), thread } });
     return sendJson(res, 200, attachRun(response, record));
   }
@@ -325,6 +330,7 @@ async function handleQuotaSaverApiBatch(config: AppConfig, res: ServerResponse, 
       ok: true,
       summary: `running batch; poll get_gateway_run after ${pollAfterMs}ms`,
       data: { status: 'running', operation_status: 'running', next_poll_after_ms: pollAfterMs, poll_after_ms: pollAfterMs, instruction: 'Call get_gateway_run after poll_after_ms. Do not retry the original batch.' },
+      contracts: steps.map((step) => apiToolContract(step.tool)),
       api: { transport: 'http-json', thread: safeBodyThread(body), async_mode: 'quota_saver', status: 'running', operation_status: 'running', wait_reason: 'running_batch', poll_after_ms: pollAfterMs, next_poll_after_ms: pollAfterMs }
     },
     idempotency_key: idempotencyKey,
@@ -338,9 +344,17 @@ async function runApiBatchSteps(config: AppConfig, steps: Array<{ tool: string; 
   const results = [];
   for (let index = 0; index < steps.length; index++) {
     const step = steps[index];
-    results.push({ index, tool: step.tool, result: await runApiTool(config, step.tool, step.arguments ?? {}) });
+    results.push({ index, tool: step.tool, contract: apiToolContract(step.tool), result: await runApiTool(config, step.tool, step.arguments ?? {}) });
   }
   return { ok: results.every((step) => step.result.ok), summary: `completed ${results.length} API batch steps`, data: { results }, truncated: false, warnings: [] };
+}
+
+function validateApiBatchSteps(steps: Array<{ tool: string; arguments?: Record<string, unknown> }>) {
+  for (let index = 0; index < steps.length; index++) {
+    const validation = validateApiToolArguments(steps[index].tool, steps[index].arguments ?? {});
+    if (!validation.ok) return { ...validation, body: { ...validation.body, batch_step_index: index } };
+  }
+  return { ok: true as const };
 }
 
 function shouldUseQuotaSaverBatch(steps: Array<{ tool: string; arguments?: Record<string, unknown> }>): boolean {
@@ -443,7 +457,7 @@ async function handleQuotaSaverApiTool(config: AppConfig, res: ServerResponse, t
   const promise = runApiTool(config, tool, args);
   const result = await promiseWithTimeout(promise, initialWaitMs);
   if (result) {
-    const response = { ...result, api: { transport: 'http-json', tool, thread, async_mode: 'quota_saver', completed_within_initial_wait_ms: initialWaitMs } };
+    const response = { ...result, contract: apiToolContract(tool), api: { transport: 'http-json', tool, thread, async_mode: 'quota_saver', completed_within_initial_wait_ms: initialWaitMs } };
     const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool, thread } });
     return sendJson(res, 200, attachRun(response, record));
   }
@@ -456,6 +470,7 @@ async function handleQuotaSaverApiTool(config: AppConfig, res: ServerResponse, t
       ok: true,
       summary: `running ${tool}; poll get_gateway_run after ${pollAfterMs}ms`,
       data: { status: 'running', operation_status: 'running', next_poll_after_ms: pollAfterMs, poll_after_ms: pollAfterMs, instruction: 'Call get_gateway_run after poll_after_ms. Do not retry the original command.' },
+      contract: apiToolContract(tool),
       api: { transport: 'http-json', tool, thread, async_mode: 'quota_saver', status: 'running', operation_status: 'running', wait_reason: initialWaitReason(tool), poll_after_ms: pollAfterMs, next_poll_after_ms: pollAfterMs }
     },
     idempotency_key: idempotencyKey,
