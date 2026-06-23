@@ -31,6 +31,16 @@ describe('process tools', () => {
     await expect(waitForOutput(processId, 'background-ok')).resolves.toContain('background-ok');
   });
 
+  it('records missing executable spawn errors without crashing the gateway', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const started = await processStartArgv(config, workspace, [`missing-executable-${Date.now()}`]);
+    const processId = String(started.data?.process_id);
+    const data = await waitForSpawnError(processId);
+    expect(data.running).toBe(false);
+    expect(data.spawn_error_code).toBe('ENOENT');
+    expect(data.output).toContain('spawn_error');
+  });
+
   it('writes stdin to running processes', async () => {
     const workspace = await fixtureWorkspace(true);
     const started = await processStart(config, workspace, 'node stdin.cjs');
@@ -111,4 +121,14 @@ async function waitForOutput(processId: string, expected: string, cursor?: numbe
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   return (processLog(processId, 50000, cursor).data as { output: string }).output;
+}
+
+async function waitForSpawnError(processId: string): Promise<{ running: boolean; spawn_error_code?: string; output: string }> {
+  const deadline = Date.now() + 2500;
+  while (Date.now() < deadline) {
+    const data = processLog(processId).data as { running: boolean; spawn_error_code?: string; output: string };
+    if (data.spawn_error_code) return data;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return processLog(processId).data as { running: boolean; spawn_error_code?: string; output: string };
 }

@@ -14,6 +14,8 @@ export type ManagedProcess = {
   child: ChildProcessWithoutNullStreams;
   stdout: string;
   stderr: string;
+  spawn_error?: string;
+  spawn_error_code?: string;
 };
 
 const processes = new Map<string, ManagedProcess>();
@@ -29,6 +31,7 @@ export function startManagedArgvProcess(command: string, args: string[], cwd: st
   const item = newProcess(displayCommand ?? [command, ...args].join(' '), cwd, child);
   processes.set(item.id, item);
   attachOutput(item);
+  attachError(item);
   attachClose(item);
   setTimeout(() => killManagedProcess(item.id), timeoutMs).unref();
   return item;
@@ -101,7 +104,9 @@ export function describeManagedProcess(item: ManagedProcess) {
     running: item.exit_code === null && !item.killed,
     stopping: item.exit_code === null && item.killed,
     exit_code: item.exit_code,
-    killed: item.killed
+    killed: item.killed,
+    spawn_error: item.spawn_error,
+    spawn_error_code: item.spawn_error_code
   };
 }
 
@@ -141,7 +146,18 @@ function attachOutput(item: ManagedProcess): void {
 }
 
 function attachClose(item: ManagedProcess): void {
-  item.child.on('close', (code) => { item.exit_code = code; });
+  item.child.on('close', (code) => {
+    if (item.exit_code === null) item.exit_code = code;
+  });
+}
+
+function attachError(item: ManagedProcess): void {
+  item.child.on('error', (error: NodeJS.ErrnoException) => {
+    item.spawn_error = error.message;
+    item.spawn_error_code = error.code;
+    item.stderr = appendBounded(item.stderr, Buffer.from(`spawn_error: ${error.message}\n`));
+    if (item.exit_code === null) item.exit_code = -1;
+  });
 }
 
 function appendBounded(existing: string, data: Buffer): string {
