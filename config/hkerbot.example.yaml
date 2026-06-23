@@ -55,8 +55,8 @@ workspaces:
     commands:
       check: "python3 -m py_compile scripts/hkerschedule_daily_publish_all.py scripts/hkerschedule_daily_images.py"
       patreon_preflight: "python3 scripts/patreon_preflight.py"
-      start_hker_browser_20223: "DISPLAY=:20 bash scripts/start_hker_browser_20223_direct.sh"
-      starthkerbrowser_20223: "DISPLAY=:20 bash scripts/start_hker_browser_20223_direct.sh"
+      start_hker_browser_20223: "DISPLAY=:20 bash /home/molt/hkerbot/workspace/scripts/start_hker_browser_20223_direct.sh"
+      starthkerbrowser_20223: "DISPLAY=:20 bash /home/molt/hkerbot/workspace/scripts/start_hker_browser_20223_direct.sh"
       start_patreon_browser_21223: "DISPLAY=:20 bash scripts/start_patreon_browser_21223.sh"
       startpatreonbrowser_21223: "DISPLAY=:20 bash scripts/start_patreon_browser_21223.sh"
 
