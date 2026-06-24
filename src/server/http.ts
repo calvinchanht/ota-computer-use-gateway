@@ -150,16 +150,22 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
 
 async function handleMcpRequest(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   applyCors(res);
-  pruneMcpSessions();
-  const parsedBody = req.method === 'POST' ? await readJsonBody(req) : undefined;
-  if (parsedBody) logMcpMethods(parsedBody);
+  try {
+    pruneMcpSessions();
+    const parsedBody = req.method === 'POST' ? await readJsonBody(req) : undefined;
+    if (parsedBody) logMcpMethods(parsedBody);
 
-  const sessionId = headerValue(req.headers['mcp-session-id']);
-  const session = sessionId ? mcpSessions.get(sessionId) : undefined;
-  if (session) return handleExistingMcpSession(session, req, res, parsedBody);
-  if (sessionId) return sendMcpError(res, 404, 'Session not found');
-  if (!isMcpInitialize(req, parsedBody)) return sendMcpError(res, 400, 'Bad Request: No valid session ID provided');
-  return handleNewMcpSession(config, req, res, parsedBody);
+    const sessionId = headerValue(req.headers['mcp-session-id']);
+    const session = sessionId ? mcpSessions.get(sessionId) : undefined;
+    if (session) return handleExistingMcpSession(session, req, res, parsedBody);
+    if (sessionId) return sendMcpError(res, 404, 'Session not found');
+    if (!isMcpInitialize(req, parsedBody)) return sendMcpError(res, 400, 'Bad Request: No valid session ID provided');
+    return handleNewMcpSession(config, req, res, parsedBody);
+  } catch (error) {
+    console.error('compatibility transport request failed', error);
+    if (!res.headersSent) return sendMcpError(res, 500, 'Internal server error');
+    res.end();
+  }
 }
 
 async function handleExistingMcpSession(session: McpSession, req: IncomingMessage, res: ServerResponse, parsedBody: unknown): Promise<void> {
