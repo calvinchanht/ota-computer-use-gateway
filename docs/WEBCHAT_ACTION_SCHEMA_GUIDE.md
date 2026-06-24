@@ -36,7 +36,7 @@ Examples:
 - workspace-only: file/context/git/checkpoint/run_command/process tools.
 - workspace+browser: workspace tools plus browser profiles/tabs/CDP helpers.
 - computer/Cua: workspace tools plus Cua status/call/batch.
-- Genesis control-plane: read-heavy estate/control-plane report tools.
+- estate control-plane: read-heavy estate/control-plane report tools.
 
 ## Description limits
 

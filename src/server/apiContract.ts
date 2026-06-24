@@ -25,6 +25,11 @@ const CONTRACTS: Record<string, ContractSpec> = {
   workspace_status: spec({}),
   get_tool_profile: spec({}),
   get_workspace_policy: spec({ workspace_id: 'string required' }),
+  estate_bootstrap: spec({ workspace_id: 'string required' }),
+  estate_overview: spec({ workspace_id: 'string required' }),
+  estate_agent_deep_dive: spec({ workspace_id: 'string required', agent: 'string required' }),
+  estate_host_deep_dive: spec({ workspace_id: 'string required', host: 'string required' }),
+  estate_safe_diagnostic: spec({ workspace_id: 'string required', scope: 'estate|agent|host optional', target: 'string optional' }),
   browser_click_and_wait: spec({
     workspace_id: 'string required',
     profile_label: 'string optional',

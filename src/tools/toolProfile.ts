@@ -1,6 +1,7 @@
 import { ok } from '../core/result.js';
 import { commandRuntimeInfo } from '../core/commandAdapter.js';
 import type { AppConfig } from '../config/schema.js';
+import { ESTATE_TOOL_NAMES, LEGACY_GENESIS_TOOL_ALIASES } from './genesis.js';
 
 export function toolProfile(config?: AppConfig) {
   return ok('tool profile', {
@@ -21,7 +22,7 @@ export function toolProfile(config?: AppConfig) {
 
 function canonicalTools(): string[] {
   return [
-    'genesis_bootstrap', 'genesis_estate_overview', 'genesis_agent_deep_dive', 'genesis_host_deep_dive', 'genesis_safe_diagnostic',
+    ...ESTATE_TOOL_NAMES,
     'list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify',
     'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch',
     'cua_driver_status', 'computer_screen_click', 'computer_window_click', 'computer_screen_mouse_move', 'computer_window_mouse_move', 'computer_screen_drag', 'computer_window_drag', 'computer_screen_scroll', 'computer_window_scroll', 'cua_driver_call', 'cua_driver_batch',
@@ -57,7 +58,7 @@ function capabilitySetDefinitions() {
     computer: capabilitySet('Local GUI/computer use; independent from machine administration.', ['cua_driver_status', 'computer_screen_click', 'computer_window_click', 'computer_screen_mouse_move', 'computer_window_mouse_move', 'computer_screen_drag', 'computer_window_drag', 'computer_screen_scroll', 'computer_window_scroll', 'cua_driver_call', 'cua_driver_batch']),
     computer_windows: windowsCapabilitySet(),
     machine_admin: capabilitySet('Own-machine/lane management through configured commands/processes and scoped service/config/runbook work.', ['run_configured_command', 'run_command', 'github', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process']),
-    estate_admin: capabilitySet('Cross-agent/cross-host Genesis control-plane reporting and approved estate operations.', ['genesis_bootstrap', 'genesis_estate_overview', 'genesis_agent_deep_dive', 'genesis_host_deep_dive', 'genesis_safe_diagnostic'])
+    estate_admin: capabilitySet('Cross-agent/cross-host estate reporting and approved estate operations.', [...ESTATE_TOOL_NAMES])
   };
 }
 
@@ -109,7 +110,7 @@ function githubProfile() {
 
 function apiBehavior() {
   return {
-    webchat_genesis: { tools: ['genesis_bootstrap', 'genesis_estate_overview', 'genesis_agent_deep_dive', 'genesis_host_deep_dive', 'genesis_safe_diagnostic'], posture: 'read-heavy coarse control-plane reports with hard no-secrets/no-mutation boundaries' },
+    estate_admin: { tools: [...ESTATE_TOOL_NAMES], posture: 'read-heavy coarse estate reports with no secret return' },
     run_recovery: 'Every HTTP JSON API tool/batch response includes api.run_id. Use get_gateway_run / GET /api/v1/runs/{run_id} to recover status/results instead of blindly retrying.',
     idempotency: 'For writes, browser actions, commands, checkpoints, and other non-idempotent operations, send a stable idempotency_key so retries do not duplicate work.',
     async_polling: {
@@ -180,6 +181,7 @@ function quotaSaverAsync(surface = 'browser/CDP') {
 
 function aliases(): Record<string, string> {
   return {
+    ...LEGACY_GENESIS_TOOL_ALIASES,
     Read: 'read_file',
     Write: 'write_file',
     Edit: 'edit_file',
@@ -195,6 +197,7 @@ function aliases(): Record<string, string> {
 
 function deprecatedTools(): Record<string, string> {
   return {
+    ...LEGACY_GENESIS_TOOL_ALIASES,
     exec: 'run_command',
     process_start: 'start_process',
     process_list: 'list_processes',

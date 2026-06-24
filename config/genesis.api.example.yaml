@@ -10,11 +10,11 @@ server:
   - workspace_status
   - get_workspace_policy
   - get_tool_profile
-  - genesis_bootstrap
-  - genesis_estate_overview
-  - genesis_agent_deep_dive
-  - genesis_host_deep_dive
-  - genesis_safe_diagnostic
+  - estate_bootstrap
+  - estate_overview
+  - estate_agent_deep_dive
+  - estate_host_deep_dive
+  - estate_safe_diagnostic
   - workspace_inventory
   - list_dir
   - stat_path

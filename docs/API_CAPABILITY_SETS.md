@@ -82,7 +82,7 @@ This posture intentionally matches OpenClaw-style machine control. Do not downsc
 
 ### Estate Admin API
 
-Cross-agent/cross-host Genesis control-plane power:
+Cross-agent/cross-host estate control-plane power:
 
 - estate overview;
 - agent and host deep dives;

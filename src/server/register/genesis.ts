@@ -1,37 +1,78 @@
 import { z } from 'zod';
 import { asText, fail } from '../../core/result.js';
-import { genesisAgentDeepDive, genesisBootstrap, genesisEstateOverview, genesisHostDeepDive, genesisSafeDiagnostic } from '../../tools/genesis.js';
+import {
+  genesisAgentDeepDive,
+  genesisBootstrap,
+  genesisEstateOverview,
+  genesisHostDeepDive,
+  genesisSafeDiagnostic
+} from '../../tools/genesis.js';
 import { READ_ONLY, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
 export function registerGenesisTools({ server }: RegisterContext): void {
+  server.registerTool('estate_bootstrap', {
+    title: 'Estate bootstrap',
+    description: 'Read-only estate-control bootstrap with cross-agent and cross-host orientation.',
+    inputSchema: {}, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
+  }, async () => safe(genesisBootstrap()));
+
+  server.registerTool('estate_overview', {
+    title: 'Estate overview',
+    description: 'Read-only bounded overview of the control-plane estate from continuity docs.',
+    inputSchema: {}, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
+  }, async () => safe(genesisEstateOverview()));
+
+  server.registerTool('estate_agent_deep_dive', {
+    title: 'Estate agent deep dive',
+    description: 'Read one canonical estate agent card by agent id/name.',
+    inputSchema: { agent: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
+  }, async ({ agent }) => safe(genesisAgentDeepDive(agent)));
+
+  server.registerTool('estate_host_deep_dive', {
+    title: 'Estate host deep dive',
+    description: 'Read one canonical estate host/machine profile by host id/name.',
+    inputSchema: { host: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
+  }, async ({ host }) => safe(genesisHostDeepDive(host)));
+
+  server.registerTool('estate_safe_diagnostic', {
+    title: 'Estate safe diagnostic',
+    description: 'Read-only safe diagnostic summary for estate, agent, or host scope; no live commands or mutations.',
+    inputSchema: { scope: z.enum(['estate', 'agent', 'host']).default('estate'), target: z.string().optional() },
+    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
+  }, async ({ scope, target }) => safe(genesisSafeDiagnostic(scope, target)));
+
+  registerLegacyGenesisAliases(server);
+}
+
+function registerLegacyGenesisAliases(server: RegisterContext['server']): void {
   server.registerTool('genesis_bootstrap', {
-    title: 'Genesis bootstrap',
-    description: 'Read-only Webchat Genesis bootstrap with control-plane orientation and safety boundaries.',
+    title: 'Legacy Genesis bootstrap',
+    description: 'Deprecated alias for estate_bootstrap.',
     inputSchema: {}, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   }, async () => safe(genesisBootstrap()));
 
   server.registerTool('genesis_estate_overview', {
-    title: 'Genesis estate overview',
-    description: 'Read-only bounded overview of the Genesis control-plane estate from continuity docs.',
+    title: 'Legacy Genesis estate overview',
+    description: 'Deprecated alias for estate_overview.',
     inputSchema: {}, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   }, async () => safe(genesisEstateOverview()));
 
   server.registerTool('genesis_agent_deep_dive', {
-    title: 'Genesis agent deep dive',
-    description: 'Read one canonical Genesis agent card by agent id/name.',
+    title: 'Legacy Genesis agent deep dive',
+    description: 'Deprecated alias for estate_agent_deep_dive.',
     inputSchema: { agent: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   }, async ({ agent }) => safe(genesisAgentDeepDive(agent)));
 
   server.registerTool('genesis_host_deep_dive', {
-    title: 'Genesis host deep dive',
-    description: 'Read one canonical Genesis host/machine profile by host id/name.',
+    title: 'Legacy Genesis host deep dive',
+    description: 'Deprecated alias for estate_host_deep_dive.',
     inputSchema: { host: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   }, async ({ host }) => safe(genesisHostDeepDive(host)));
 
   server.registerTool('genesis_safe_diagnostic', {
-    title: 'Genesis safe diagnostic',
-    description: 'Read-only safe diagnostic summary for estate, agent, or host scope; no live commands or mutations.',
+    title: 'Legacy Genesis safe diagnostic',
+    description: 'Deprecated alias for estate_safe_diagnostic.',
     inputSchema: { scope: z.enum(['estate', 'agent', 'host']).default('estate'), target: z.string().optional() },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   }, async ({ scope, target }) => safe(genesisSafeDiagnostic(scope, target)));

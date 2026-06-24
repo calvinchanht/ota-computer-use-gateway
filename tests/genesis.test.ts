@@ -4,12 +4,12 @@ import { genesisAgentDeepDive, genesisBootstrap, genesisEstateOverview, genesisH
 
 process.env.OTA_GENESIS_CONTINUITY_ROOT ??= path.resolve('..', 'infunity-agents', 'genesis', 'continuity');
 
-describe('webchat genesis report tools', () => {
+describe('estate report tools', () => {
   it('returns a bounded bootstrap without secrets', async () => {
     const result = await genesisBootstrap();
     expect(result.ok).toBe(true);
     const text = JSON.stringify(result);
-    expect(text).toContain('Webchat Genesis');
+    expect(text).toContain('estate control plane');
     expect(text).not.toMatch(/Authorization: Bearer\s+[A-Za-z0-9._-]+/);
   });
 

@@ -47,7 +47,7 @@ From list_windows, pick one clearly relevant on-screen app window. Call get_wind
 ## Genesis/control-plane smoke
 
 ```text
-Run a read-only Genesis control-plane smoke. Call genesis_bootstrap, genesis_estate_overview, and get_tool_profile. Summarize available control-plane report tools and safety posture. Do not run commands, mutate files, restart services, or expose secrets.
+Run a read-only estate control-plane smoke. Call estate_bootstrap, estate_overview, and get_tool_profile. Summarize available control-plane report tools and safety posture. Do not run commands, mutate files, restart services, or expose secrets.
 ```
 
 ## Resume/checkpoint prompt

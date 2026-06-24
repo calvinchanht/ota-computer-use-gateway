@@ -2,6 +2,7 @@ import { ok } from '../core/result.js';
 import { commandRuntimeInfo } from '../core/commandAdapter.js';
 import type { Workspace } from '../core/workspaces.js';
 import type { AppConfig } from '../config/schema.js';
+import { ESTATE_TOOL_NAMES } from './genesis.js';
 
 export function workspacePolicy(workspace: Workspace, config?: AppConfig) {
   return ok('workspace policy', {
@@ -16,7 +17,7 @@ export function workspacePolicy(workspace: Workspace, config?: AppConfig) {
       computer: 'Local GUI/computer-use via Cua Driver: screenshots, windows, accessibility tree, mouse, keyboard, and local app control.',
       computer_windows: 'Windows desktop computer-use via native APIs. The api_sets.computer_windows macro grants full Windows rights; partial lanes should set windows_computer.enabled plus individual rights.',
       machine_admin: 'Host/lane administration and configured operations such as run_configured_command, services, config, tunnels, and deployment workflows. When filesystem.machine_admin_host_scope is enabled, existing file tools may resolve explicit absolute host paths inside host_root; no host_* duplicate tools are used.',
-      estate_admin: 'Cross-agent/cross-host Genesis control-plane reports/diagnostics and approved estate runbook operations.'
+      estate_admin: 'Cross-agent/cross-host estate reports/diagnostics and approved estate runbook operations.'
     },
     policy_model: {
       principle: 'Webchat agents should not be weaker than OpenClaw agents when a capability set is enabled; safety wraps powerful primitives instead of replacing them with toy actions.',
@@ -85,7 +86,7 @@ export function allowedTools(workspace: Workspace): string[] {
   const sets = resolvedApiSets(workspace);
   const base = ['heartbeat', 'workspace_status', 'get_workspace_policy', 'get_tool_profile'];
 
-  if (sets.estate_admin) base.push('genesis_bootstrap', 'genesis_estate_overview', 'genesis_agent_deep_dive', 'genesis_host_deep_dive', 'genesis_safe_diagnostic');
+  if (sets.estate_admin) base.push(...ESTATE_TOOL_NAMES);
 
 
   if (sets.workspace || workspace.allow_read) base.push('workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'read_file_chunk', 'read_file_lines', 'read_binary_file', 'infer_file_structure', 'sample_file', 'read_around', 'search_file', 'search_files', 'table_profile', 'query_table', 'query_table_aggregate', 'json_profile', 'query_json', 'git_status', 'git_diff', 'git_push_current_branch', 'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'memory_search', 'list_skills', 'read_skill', 'approval_status', 'list_artifacts');

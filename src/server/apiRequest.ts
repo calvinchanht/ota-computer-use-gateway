@@ -87,13 +87,13 @@ function omitOperationKeys(source: Record<string, unknown>): Record<string, unkn
 function expectedRequestError(source: Record<string, unknown>, args?: Record<string, unknown>): ApiShapeError {
   const topKeys = Object.keys(source);
   const argKeys = args ? Object.keys(args) : [];
-  const message = `Missing required operation. Expected { "operation": "genesis_bootstrap", "arguments": { "workspace_id": "genesis" } }. Received top-level keys: [${topKeys.join(', ') || '(none)'}], argument keys: [${args ? argKeys.join(', ') || '(none)' : '(missing)'}]. Legacy alias "tool" is still accepted.`;
+  const message = `Missing required operation. Expected { "operation": "estate_bootstrap", "arguments": { "workspace_id": "genesis" } }. Received top-level keys: [${topKeys.join(', ') || '(none)'}], argument keys: [${args ? argKeys.join(', ') || '(none)' : '(missing)'}]. Legacy alias "tool" is still accepted.`;
   return new ApiShapeError({
     ok: false,
     error: 'invalid_gateway_request_shape',
     error_code: 'invalid_gateway_request_shape',
     message,
-    expected: { operation: 'genesis_bootstrap', arguments: { workspace_id: 'genesis' } },
+    expected: { operation: 'estate_bootstrap', arguments: { workspace_id: 'genesis' } },
     accepted_aliases: { tool: 'legacy alias for operation' },
     received_top_level_keys: topKeys,
     received_argument_keys: argKeys,

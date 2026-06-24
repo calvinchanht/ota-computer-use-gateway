@@ -16,7 +16,14 @@ import { allowedTools, workspacePolicy } from '../tools/policy.js';
 import { deleteFileTool, deletePathTool, editFileTool, listDir, readBinaryFileTool, readFileTool, statPath, treeTool, workspaceInventory, writeBinaryFileTool, writeFileTool } from '../tools/files.js';
 import { gitDiff, gitStatus } from '../tools/git.js';
 import { githubCliTool } from '../tools/github.js';
-import { genesisAgentDeepDive, genesisBootstrap, genesisEstateOverview, genesisHostDeepDive, genesisSafeDiagnostic } from '../tools/genesis.js';
+import {
+  genesisAgentDeepDive,
+  genesisBootstrap,
+  genesisEstateOverview,
+  genesisHostDeepDive,
+  genesisSafeDiagnostic,
+  normalizeEstateToolName
+} from '../tools/genesis.js';
 import { agentBootstrap, checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../tools/context.js';
 import { getProjectContext, memoryWrite } from '../tools/memory.js';
 import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
@@ -324,12 +331,13 @@ async function handleApiTool(config: AppConfig, req: IncomingMessage, res: Serve
   const request = parseApiToolRequestSafe(parsedBody);
   if (!request.ok) { reportApiShapeMisuse(config, req, parsedBody, request.body, 'ota.api_tool_request.v1', 'use_operation_arguments_shape'); return sendJson(res, request.status, apiShapeErrorResponse(request.body)); }
   const args = request.value.arguments ?? {};
-  const validation = validateApiToolArguments(request.value.tool, args);
+  const tool = normalizeEstateToolName(request.value.tool);
+  const validation = validateApiToolArguments(tool, args);
   if (!validation.ok) return sendJson(res, validation.status, validation.body);
-  if (shouldUseQuotaSaver(request.value.tool, args)) return handleQuotaSaverApiTool(config, res, request.value.tool, args, idempotencyKey, safeBodyThread(parsedBody));
-  const result = await runApiTool(config, request.value.tool, args);
-  const response = { ...result, contract: validation.contract, api: { transport: 'http-json', tool: request.value.tool, thread: safeBodyThread(parsedBody) } };
-  const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool: request.value.tool, thread: safeBodyThread(parsedBody) } });
+  if (shouldUseQuotaSaver(tool, args)) return handleQuotaSaverApiTool(config, res, tool, args, idempotencyKey, safeBodyThread(parsedBody));
+  const result = await runApiTool(config, tool, args);
+  const response = { ...result, contract: validation.contract, api: { transport: 'http-json', tool, thread: safeBodyThread(parsedBody) } };
+  const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool, thread: safeBodyThread(parsedBody) } });
   return sendJson(res, 200, attachRun(response, record));
 }
 
@@ -358,7 +366,7 @@ async function handleApiBatch(config: AppConfig, req: IncomingMessage, res: Serv
   if (existing) return sendJson(res, 200, existing.response);
   const parsedBatch = parseApiBatchRequestSafe(parsedBody);
   if (!parsedBatch.ok) { reportApiShapeMisuse(config, req, parsedBody, parsedBatch.body, 'ota.api_batch_request.v1', 'use_steps_array'); return sendJson(res, parsedBatch.status, apiShapeErrorResponse(parsedBatch.body)); }
-  const steps = parsedBatch.value.steps.slice(0, 20);
+  const steps = parsedBatch.value.steps.slice(0, 20).map((step) => ({ ...step, tool: normalizeEstateToolName(step.tool) }));
   const validation = validateApiBatchSteps(steps);
   if (!validation.ok) return sendJson(res, validation.status, validation.body);
   const thread = safeBodyThread(parsedBody);
@@ -625,6 +633,7 @@ function attachRun<T>(response: T, record: Pick<ApiRunRecord, 'run_id' | 'status
 }
 
 async function runApiTool(config: AppConfig, tool: string, args: Record<string, unknown>): Promise<ToolResult> {
+  tool = normalizeEstateToolName(tool);
   const started = Date.now();
   let workspace: Workspace | null = null;
   try {
@@ -632,7 +641,7 @@ async function runApiTool(config: AppConfig, tool: string, args: Record<string, 
     const workspaceId = String(args.workspace_id ?? (workspaces.size === 1 ? [...workspaces.keys()][0] : ''));
     workspace = workspaceId ? getWorkspace(workspaces, workspaceId) : null;
     const exposed = config.server.exposed_tools ?? [];
-    if (exposed.length > 0 && !exposed.includes(tool)) throw new Error(`tool is not exposed by this server: ${tool}`);
+    if (exposed.length > 0 && !serverExposesTool(exposed, tool)) throw new Error(`tool is not exposed by this server: ${tool}`);
     const result = await callApiTool(config, workspaces, workspace, tool, args);
     await audit(workspace, { timestamp: new Date().toISOString(), tool: `api:${tool}`, ok: result.ok, summary: result.summary, duration_ms: Date.now() - started });
     return result;
@@ -654,6 +663,10 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
   const result = callWorkspaceApiTool(config, workspace, tool, args);
   if (result) return result;
   throw new Error(`unsupported API tool: ${tool}`);
+}
+
+function serverExposesTool(exposed: string[], tool: string): boolean {
+  return exposed.map(normalizeEstateToolName).includes(normalizeEstateToolName(tool));
 }
 
 function callWorkspaceApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
@@ -696,11 +709,11 @@ function callGitContextApiTool(config: AppConfig, workspace: Workspace, tool: st
   if (tool === 'memory_write') return memoryWrite(workspace, requiredString(args.type, 'type'), requiredString(args.title, 'title'), requiredString(args.body, 'body'), optionalStringArray(args.tags));
   if (tool === 'list_artifacts') return listArtifacts(workspace);
   if (tool === 'record_artifact') return recordArtifact(workspace, requiredString(args.path, 'path'), requiredString(args.title, 'title'), optionalString(args.kind) ?? 'file', optionalString(args.description) ?? '');
-  if (tool === 'genesis_bootstrap') return genesisBootstrap();
-  if (tool === 'genesis_estate_overview') return genesisEstateOverview();
-  if (tool === 'genesis_agent_deep_dive') return genesisAgentDeepDive(requiredString(args.agent, 'agent'));
-  if (tool === 'genesis_host_deep_dive') return genesisHostDeepDive(requiredString(args.host, 'host'));
-  if (tool === 'genesis_safe_diagnostic') return genesisSafeDiagnostic(optionalString(args.scope) ?? 'estate', optionalString(args.target));
+  if (tool === 'estate_bootstrap') return genesisBootstrap();
+  if (tool === 'estate_overview') return genesisEstateOverview();
+  if (tool === 'estate_agent_deep_dive') return genesisAgentDeepDive(requiredString(args.agent, 'agent'));
+  if (tool === 'estate_host_deep_dive') return genesisHostDeepDive(requiredString(args.host, 'host'));
+  if (tool === 'estate_safe_diagnostic') return genesisSafeDiagnostic(optionalString(args.scope) ?? 'estate', optionalString(args.target));
   return undefined;
 }
 

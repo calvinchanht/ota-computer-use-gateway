@@ -5,9 +5,9 @@ import { invalidJsonResponse, validateApiToolArguments } from '../src/server/api
 describe('HTTP API request normalizer', () => {
   it('accepts operation as the canonical public field', () => {
     expect(parseApiToolRequest({
-      operation: 'genesis_bootstrap',
+      operation: 'estate_bootstrap',
       arguments: { workspace_id: 'genesis' }
-    })).toEqual({ tool: 'genesis_bootstrap', arguments: { workspace_id: 'genesis' } });
+    })).toEqual({ tool: 'estate_bootstrap', arguments: { workspace_id: 'genesis' } });
   });
 
   it('keeps legacy tool as a compatibility alias', () => {
@@ -23,14 +23,21 @@ describe('HTTP API request normalizer', () => {
 
   it('hoists top-level business arguments when intent is clear', () => {
     expect(parseApiToolRequest({
-      tool: 'genesis_bootstrap',
+      tool: 'estate_bootstrap',
       workspace_id: 'genesis'
-    })).toEqual({ tool: 'genesis_bootstrap', arguments: { workspace_id: 'genesis' } });
+    })).toEqual({ tool: 'estate_bootstrap', arguments: { workspace_id: 'genesis' } });
   });
 
   it('hoists a misplaced nested tool from arguments', () => {
     expect(parseApiToolRequest({
-      arguments: { tool: 'genesis_bootstrap', workspace_id: 'genesis' }
+      arguments: { tool: 'estate_bootstrap', workspace_id: 'genesis' }
+    })).toEqual({ tool: 'estate_bootstrap', arguments: { workspace_id: 'genesis' } });
+  });
+
+  it('keeps legacy genesis operation names as accepted aliases', () => {
+    expect(parseApiToolRequest({
+      tool: 'genesis_bootstrap',
+      arguments: { workspace_id: 'genesis' }
     })).toEqual({ tool: 'genesis_bootstrap', arguments: { workspace_id: 'genesis' } });
   });
 
@@ -44,7 +51,7 @@ describe('HTTP API request normalizer', () => {
 
   it('returns an instructional missing-operation error', () => {
     expect(() => parseApiToolRequest({ arguments: { workspace_id: 'genesis' } }))
-      .toThrow(/Expected \{ "operation": "genesis_bootstrap"/);
+      .toThrow(/Expected \{ "operation": "estate_bootstrap"/);
   });
 
   it('returns compact structured correction fields for missing operation', () => {
@@ -54,7 +61,7 @@ describe('HTTP API request normalizer', () => {
       body: {
         ok: false,
         error_code: 'invalid_gateway_request_shape',
-        expected: { operation: 'genesis_bootstrap', arguments: { workspace_id: 'genesis' } },
+        expected: { operation: 'estate_bootstrap', arguments: { workspace_id: 'genesis' } },
         accepted_aliases: { tool: 'legacy alias for operation' },
         received_argument_keys: ['workspace_id'],
         hint: 'Put the operation name at top level and workspace_id inside arguments.'

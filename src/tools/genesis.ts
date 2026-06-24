@@ -5,6 +5,28 @@ import { ok } from '../core/result.js';
 const DEFAULT_CONTINUITY_ROOT = '/home/genesis/infunity/infunity-agents/genesis/continuity';
 const MAX_EXCERPT_CHARS = 12000;
 
+export const ESTATE_TOOL_NAMES = [
+  'estate_bootstrap',
+  'estate_overview',
+  'estate_agent_deep_dive',
+  'estate_host_deep_dive',
+  'estate_safe_diagnostic'
+] as const;
+
+export const LEGACY_GENESIS_TOOL_ALIASES: Record<string, EstateToolName> = {
+  genesis_bootstrap: 'estate_bootstrap',
+  genesis_estate_overview: 'estate_overview',
+  genesis_agent_deep_dive: 'estate_agent_deep_dive',
+  genesis_host_deep_dive: 'estate_host_deep_dive',
+  genesis_safe_diagnostic: 'estate_safe_diagnostic'
+};
+
+export type EstateToolName = typeof ESTATE_TOOL_NAMES[number];
+
+export function normalizeEstateToolName(tool: string): string {
+  return LEGACY_GENESIS_TOOL_ALIASES[tool] ?? tool;
+}
+
 const CORE_DOCS = [
   'CONTROL_PLANE_INDEX.md',
   'ESTATE_RUNTIME_TABLE.md',
@@ -16,14 +38,14 @@ const CORE_DOCS = [
 export async function genesisBootstrap() {
   const root = continuityRoot();
   const docs = await readDocs(CORE_DOCS, 2500);
-  return ok('genesis bootstrap', {
-    lane: 'Webchat Genesis',
+  return ok('estate bootstrap', {
+    lane: 'estate control plane',
     posture: 'read-heavy coarse control-plane reports; no secrets, destructive ops, external messages, account/security changes, or service restarts',
     workflow_guidance: [
-      'Use genesis_estate_overview first for broad orientation.',
-      'Use genesis_agent_deep_dive for one named agent.',
-      'Use genesis_host_deep_dive for one host/machine profile.',
-      'Use genesis_safe_diagnostic for bounded non-mutating diagnostic summaries.',
+      'Use estate_overview first for broad orientation.',
+      'Use estate_agent_deep_dive for one named agent.',
+      'Use estate_host_deep_dive for one host/machine profile.',
+      'Use estate_safe_diagnostic for bounded non-mutating diagnostic summaries.',
       'Do not ask for raw secrets or bearer tokens; these tools intentionally do not return them.'
     ],
     continuity_root: root,
@@ -35,7 +57,7 @@ export async function genesisEstateOverview() {
   const docs = await readDocs(['CONTROL_PLANE_INDEX.md', 'ESTATE_RUNTIME_TABLE.md', 'HOST_RUNTIME_TABLE.md', 'AGENT_DIRECTORY.md'], 6000);
   const agents = await listCardNames(agentCardDirs());
   const hosts = await listCardNames(hostCardDirs());
-  return ok('genesis estate overview', {
+  return ok('estate overview', {
     continuity_root: continuityRoot(),
     agents,
     hosts,
@@ -51,7 +73,7 @@ export async function genesisAgentDeepDive(agent: string) {
     path.join(dir, `${name.toLowerCase()}.md`)
   ]), MAX_EXCERPT_CHARS);
   if (!card) throw new Error(`unknown or undocumented agent card: ${name}`);
-  return ok('genesis agent deep dive', {
+  return ok('estate agent deep dive', {
     agent: name,
     card,
     note: 'Agent deep dives are continuity-backed and intentionally omit secret values.'
@@ -63,7 +85,7 @@ export async function genesisHostDeepDive(host: string) {
   const candidates = await hostCandidates(name);
   const card = await readFirstExisting(candidates, MAX_EXCERPT_CHARS);
   if (!card) throw new Error(`unknown or undocumented host card: ${name}`);
-  return ok('genesis host deep dive', {
+  return ok('estate host deep dive', {
     host: name,
     card,
     note: 'Host deep dives are continuity-backed and intentionally omit secret values.'
@@ -75,12 +97,12 @@ export async function genesisSafeDiagnostic(scope = 'estate', target?: string) {
   if (normalizedScope === 'agent') return genesisAgentDeepDive(requiredTarget(target, 'agent'));
   if (normalizedScope === 'host') return genesisHostDeepDive(requiredTarget(target, 'host'));
   const docs = await readDocs(['CURRENT_STATE.md', 'CONTROL_PLANE_INDEX.md', 'ESTATE_RUNTIME_TABLE.md'], 5000);
-  return ok('genesis safe diagnostic', {
+  return ok('estate safe diagnostic', {
     scope: normalizedScope,
     target: target ?? null,
     docs,
     boundaries: ['read-only continuity summary', 'no secrets', 'no SSH/live command execution', 'no service mutation'],
-    recommended_next_calls: ['genesis_agent_deep_dive', 'genesis_host_deep_dive']
+    recommended_next_calls: ['estate_agent_deep_dive', 'estate_host_deep_dive']
   });
 }
 
