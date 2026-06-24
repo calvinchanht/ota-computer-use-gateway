@@ -41,41 +41,6 @@ export function registerGenesisTools({ server }: RegisterContext): void {
     inputSchema: { scope: z.enum(['estate', 'agent', 'host']).default('estate'), target: z.string().optional() },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
   }, async ({ scope, target }) => safe(genesisSafeDiagnostic(scope, target)));
-
-  registerLegacyGenesisAliases(server);
-}
-
-function registerLegacyGenesisAliases(server: RegisterContext['server']): void {
-  server.registerTool('genesis_bootstrap', {
-    title: 'Legacy Genesis bootstrap',
-    description: 'Deprecated alias for estate_bootstrap.',
-    inputSchema: {}, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
-  }, async () => safe(genesisBootstrap()));
-
-  server.registerTool('genesis_estate_overview', {
-    title: 'Legacy Genesis estate overview',
-    description: 'Deprecated alias for estate_overview.',
-    inputSchema: {}, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
-  }, async () => safe(genesisEstateOverview()));
-
-  server.registerTool('genesis_agent_deep_dive', {
-    title: 'Legacy Genesis agent deep dive',
-    description: 'Deprecated alias for estate_agent_deep_dive.',
-    inputSchema: { agent: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
-  }, async ({ agent }) => safe(genesisAgentDeepDive(agent)));
-
-  server.registerTool('genesis_host_deep_dive', {
-    title: 'Legacy Genesis host deep dive',
-    description: 'Deprecated alias for estate_host_deep_dive.',
-    inputSchema: { host: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
-  }, async ({ host }) => safe(genesisHostDeepDive(host)));
-
-  server.registerTool('genesis_safe_diagnostic', {
-    title: 'Legacy Genesis safe diagnostic',
-    description: 'Deprecated alias for estate_safe_diagnostic.',
-    inputSchema: { scope: z.enum(['estate', 'agent', 'host']).default('estate'), target: z.string().optional() },
-    outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY
-  }, async ({ scope, target }) => safe(genesisSafeDiagnostic(scope, target)));
 }
 
 async function safe(promise: Promise<ReturnType<typeof fail> | Awaited<ReturnType<typeof genesisBootstrap>>>) {
