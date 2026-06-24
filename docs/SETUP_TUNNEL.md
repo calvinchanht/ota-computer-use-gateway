@@ -2,7 +2,7 @@
 
 This project supports OpenAI Secure MCP Tunnel via stdio MCP and can also run a Streamable HTTP MCP endpoint for non-OpenAI public ingress such as Cloudflare Tunnel, Tailscale Funnel, or ngrok.
 
-The preferred private path is still Secure MCP Tunnel when OpenAI Platform provisioning works. The HTTP mode keeps Mickey development moving while tunnel creation is blocked by account/org enablement.
+Use Secure MCP Tunnel only when OpenAI Platform provisioning is already available and worth the extra dependency. The simpler proven path is HTTP Streamable MCP behind existing HTTPS ingress plus bearer auth; this avoids creating an OpenAI Platform project/app when that account lane is unreliable.
 
 ## Current verified version
 
@@ -100,7 +100,7 @@ Keep `tunnel-client run` healthy while creating or testing the ChatGPT connector
 
 ## Public HTTPS fallback
 
-If Secure MCP Tunnel remains unavailable, expose the HTTP MCP endpoint through a public HTTPS ingress. Keep the local server bound to `127.0.0.1` unless the tunnel product explicitly requires otherwise. The gateway refuses non-loopback HTTP binds unless bearer auth is enabled.
+If Secure MCP Tunnel remains unavailable or should be avoided, expose the HTTP MCP endpoint through a public HTTPS ingress. Keep the local server bound to `127.0.0.1` unless the tunnel product explicitly requires otherwise. The gateway refuses non-loopback HTTP binds unless bearer auth is enabled.
 
 Recommended order for MVP testing:
 
@@ -123,7 +123,17 @@ export OTA_GATEWAY_BEARER_TOKEN="use-a-long-random-secret"
 node dist/index.js --config config/mickey.local.yaml --transport http
 ```
 
-Use No Auth only for a short-lived controlled connector test. Do not leave a public endpoint running unattended without bearer auth or stronger OAuth in front of it.
+Use No Auth only for a short-lived controlled connector test on loopback or a private test tunnel. Do not leave a public endpoint running unattended without bearer auth or stronger OAuth in front of it.
+
+## Streamable HTTP MCP session check
+
+The HTTP endpoint is stateful Streamable MCP. Test clients must send:
+
+```text
+Accept: application/json, text/event-stream
+```
+
+The first `initialize` response returns `mcp-session-id`. Reuse that exact header for later `tools/list` and `tools/call` requests. Some local HTTP clients return header values as arrays; pass only the first string value back as the session header.
 
 Keep `security.max_request_bytes` small enough for expected MCP calls. The server rejects oversized `Content-Length` values before MCP handling. Keep `server.rate_limit` enabled as a local backstop even when the public tunnel provider also has rate limits.
 
@@ -139,15 +149,33 @@ Stop the gateway with `SIGINT`/`SIGTERM` so the HTTP listener and MCP transport 
 
 In ChatGPT:
 
-1. Open `https://chatgpt.com/#settings/Connectors`.
-2. Enable Developer mode under Apps → Advanced settings if needed.
+1. Open Settings → Apps & Connectors.
+2. Enable Developer mode under Advanced settings if the workspace allows it.
 3. Create an app/connector.
-4. Name it `Mickey`.
-5. Choose Connection → Tunnel.
-6. Select the available tunnel, or paste the tunnel id if the UI supports it.
-7. Use No Auth for the MVP connector unless a future MCP-side auth layer is added.
-8. Accept the unreviewed-connector warning only for this controlled local test.
-9. Create the connector and test low-risk read-only tools first.
+4. Name it for the agent/workspace, for example `Anna OTA MCP`.
+5. Use the public HTTPS MCP endpoint, for example:
+
+```text
+https://anna-api.unrealize.com/ota/mcp
+```
+
+6. Use API key / bearer-token authorization and paste only the relevant bearer token into the connector secret field.
+7. Click Create / Scan Tools and verify the advertised tool list appears.
+8. Start a fresh ChatGPT thread, enable the connector from the tools menu, and test low-risk read-only tools first.
+
+This public HTTPS + bearer-token route does not require an OpenAI Platform project, API key, or Secure MCP Tunnel. It still requires ChatGPT developer mode access in the ChatGPT workspace.
+
+## Anna proof snapshot
+
+On 2026-06-24, Anna was verified on the non-OpenAI-Platform path:
+
+```text
+Endpoint: https://anna-api.unrealize.com/ota/mcp
+Auth: bearer token
+MCP initialize: returned mcp-session-id
+MCP tools/list: returned 103 tools
+MCP tools/call workspace_status: passed for workspace_id=anna
+```
 
 ## MVP policy note
 

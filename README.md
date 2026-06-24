@@ -18,7 +18,7 @@ node dist/index.js --config config/mickey.local.yaml
 node dist/index.js --config config/mickey.local.yaml --transport http
 ```
 
-The HTTP mode also exposes `GET /healthz` for local/tunnel health checks with safe readiness metadata only: service, transport, MCP path, uptime, auth-required, rate-limit-enabled, and max request bytes. Requests with `Content-Length` above `security.max_request_bytes` are rejected before reaching MCP handling, `/mcp` requests are rate-limited by `server.rate_limit`, and safe HTTP metadata is appended to `.agent/audit/http_requests.jsonl`. Proxy client IP headers are ignored unless `server.rate_limit.trust_proxy_headers` is explicitly enabled. `SIGINT`/`SIGTERM` close the HTTP listener and MCP transport cleanly.
+The HTTP mode uses stateful Streamable HTTP sessions. MCP clients should send `Accept: application/json, text/event-stream`, keep the returned `mcp-session-id`, and reuse it for follow-up `/mcp` calls. The HTTP mode also exposes `GET /healthz` for local/tunnel health checks with safe readiness metadata only: service, transport, MCP path, uptime, auth-required, rate-limit-enabled, and max request bytes. Requests with `Content-Length` above `security.max_request_bytes` are rejected before reaching MCP handling, `/mcp` requests are rate-limited by `server.rate_limit`, and safe HTTP metadata is appended to `.agent/audit/http_requests.jsonl`. Proxy client IP headers are ignored unless `server.rate_limit.trust_proxy_headers` is explicitly enabled. `SIGINT`/`SIGTERM` close the HTTP listener and MCP transport cleanly.
 
 For public HTTPS ingress, enable bearer auth and set the token only in the process environment. HTTP mode refuses to bind a non-loopback host without auth enabled:
 
@@ -32,6 +32,8 @@ server:
 ```bash
 export OTA_GATEWAY_BEARER_TOKEN="use-a-long-random-secret"
 ```
+
+ChatGPT Business developer-mode connectors can use a public HTTPS endpoint directly, for example `https://<agent-api-host>/ota/mcp`, with API key / bearer-token authorization. This route does not require creating an OpenAI Platform project or Secure MCP Tunnel, as long as the HTTPS ingress and bearer token are already managed outside OpenAI Platform.
 
 See GitHub issue #1 for the source-of-truth implementation plan.
 
