@@ -3,6 +3,8 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AppConfig } from '../config/schema.js';
 import { buildWorkspaces, getWorkspace, type Workspace } from '../core/workspaces.js';
 import { audit } from '../core/audit.js';
@@ -76,6 +78,13 @@ const API_EXECUTOR_JOBS_PREFIX = '/api/v1/executor-jobs';
 const API_EXECUTORS_PREFIX = '/api/v1/executors';
 const OTA_PATH_PREFIX = '/ota';
 const MAX_RUN_RECORDS = 200;
+const MCP_SESSION_TTL_MS = 6 * 60 * 60 * 1000;
+
+type McpSession = {
+  transport: StreamableHTTPServerTransport;
+  server: McpServer;
+  lastSeen: number;
+};
 
 type ApiRunRecord = {
   run_id: string;
@@ -92,6 +101,7 @@ type ApiRunRecord = {
 
 const apiRunRecords = new Map<string, ApiRunRecord>();
 const apiRunByIdempotency = new Map<string, string>();
+const mcpSessions = new Map<string, McpSession>();
 
 export async function listenHttp(config: AppConfig): Promise<void> {
   assertSafeHttpBind(config);
@@ -135,21 +145,61 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
   if (isApiTool(req)) return handleApiTool(config, req, res);
   if (isApiBatch(req)) return handleApiBatch(config, req, res);
 
-  applyCors(res);
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  const mcpServer = await createServer(config);
-  await mcpServer.connect(transport);
+  return handleMcpRequest(config, req, res);
+}
 
-  try {
-    const parsedBody = req.method === 'POST' ? await readJsonBody(req) : undefined;
-    if (parsedBody) logMcpMethods(parsedBody);
-    await transport.handleRequest(req, res, parsedBody);
-  } catch (error) {
-    console.error('compatibility transport request failed', error);
-    if (!res.headersSent) sendJson(res, 500, { error: 'mcp_request_failed' });
-    else res.end();
-  } finally {
-    await transport.close().catch(() => undefined);
+async function handleMcpRequest(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  applyCors(res);
+  pruneMcpSessions();
+  const parsedBody = req.method === 'POST' ? await readJsonBody(req) : undefined;
+  if (parsedBody) logMcpMethods(parsedBody);
+
+  const sessionId = headerValue(req.headers['mcp-session-id']);
+  const session = sessionId ? mcpSessions.get(sessionId) : undefined;
+  if (session) return handleExistingMcpSession(session, req, res, parsedBody);
+  if (sessionId) return sendMcpError(res, 404, 'Session not found');
+  if (!isMcpInitialize(req, parsedBody)) return sendMcpError(res, 400, 'Bad Request: No valid session ID provided');
+  return handleNewMcpSession(config, req, res, parsedBody);
+}
+
+async function handleExistingMcpSession(session: McpSession, req: IncomingMessage, res: ServerResponse, parsedBody: unknown): Promise<void> {
+  session.lastSeen = Date.now();
+  await session.transport.handleRequest(req, res, parsedBody);
+}
+
+async function handleNewMcpSession(config: AppConfig, req: IncomingMessage, res: ServerResponse, parsedBody: unknown): Promise<void> {
+  let sessionId: string | undefined;
+  const server = await createServer(config);
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
+    onsessioninitialized: (id) => {
+      sessionId = id;
+      mcpSessions.set(id, { transport, server, lastSeen: Date.now() });
+    }
+  });
+
+  transport.onclose = () => cleanupMcpSession(transport.sessionId ?? sessionId);
+  await server.connect(transport);
+  await transport.handleRequest(req, res, parsedBody);
+  const id = transport.sessionId ?? sessionId;
+  if (id && !mcpSessions.has(id)) mcpSessions.set(id, { transport, server, lastSeen: Date.now() });
+}
+
+function isMcpInitialize(req: IncomingMessage, parsedBody: unknown): boolean {
+  return req.method === 'POST' && isInitializeRequest(parsedBody);
+}
+
+function cleanupMcpSession(sessionId: string | undefined): void {
+  if (!sessionId) return;
+  const session = mcpSessions.get(sessionId);
+  mcpSessions.delete(sessionId);
+  void session?.server.close().catch(() => undefined);
+}
+
+function pruneMcpSessions(): void {
+  const expiresBefore = Date.now() - MCP_SESSION_TTL_MS;
+  for (const [sessionId, session] of mcpSessions) {
+    if (session.lastSeen < expiresBefore) void session.transport.close().catch(() => cleanupMcpSession(sessionId));
   }
 }
 
@@ -250,6 +300,10 @@ function sendCors(res: ServerResponse): void {
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   applyCors(res);
   res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
+}
+
+function sendMcpError(res: ServerResponse, status: number, message: string): void {
+  sendJson(res, status, { jsonrpc: '2.0', error: { code: -32000, message }, id: null });
 }
 
 
