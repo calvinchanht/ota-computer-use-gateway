@@ -1,8 +1,18 @@
-# Webchat Action schema guide
+# Legacy Webchat Action schema guide
 
-Use compact OpenAPI schemas for ChatGPT Custom GPT Actions.
+Use compact OpenAPI schemas only for legacy ChatGPT Custom GPT Action fallback lanes.
 
-## Recommended shape
+The canonical current setup for Threaddex webchat agents is provider-native root MCP, not OpenAPI Action. Start from:
+
+```text
+D:\Projects\Genesis\webchat-provider-orchestrator\docs\WEBAGENT_DEFAULT_SETUP.md
+D:\Projects\Genesis\webchat-provider-orchestrator\docs\WEBAGENT_CUSTOM_GPT_TEMPLATE.md
+D:\Projects\Genesis\webchat-provider-orchestrator\docs\CUSTOM_GPT_ACTION_CONTRACT.md
+```
+
+This document remains useful only when MCP/App connectors are unavailable and Calvin explicitly chooses the OpenAPI Action fallback.
+
+## Legacy fallback shape
 
 Expose one Action with three operations:
 

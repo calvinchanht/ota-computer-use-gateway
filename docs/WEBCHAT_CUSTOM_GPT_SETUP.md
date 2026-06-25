@@ -1,17 +1,25 @@
-# Webchat Custom GPT setup
+# Legacy Webchat Custom GPT Action setup
 
-This is the safe-to-share setup guide for creating a private ChatGPT Custom GPT on top of the OTA Gateway JSON API.
+This guide is retained only for legacy OpenAPI Action fallback lanes on top of the OTA Gateway JSON API.
 
-The preferred provider runtime is:
+The canonical setup for Threaddex webchat agents now lives in the Threaddex repo:
 
 ```text
-ChatGPT Custom GPT
-  -> one compact API Action schema
-  -> scoped Gateway JSON API
-  -> workspace/browser/computer/machine capabilities enabled for that agent
+D:\Projects\Genesis\webchat-provider-orchestrator\docs\WEBAGENT_DEFAULT_SETUP.md
+D:\Projects\Genesis\webchat-provider-orchestrator\docs\WEBAGENT_CUSTOM_GPT_TEMPLATE.md
+D:\Projects\Genesis\webchat-provider-orchestrator\docs\CUSTOM_GPT_ACTION_CONTRACT.md
 ```
 
-MCP/App connectors may remain useful for compatibility or discovery, but the Custom GPT Action path is the proven runtime for Catalyst, Boba, Genesis, and HKerBot.
+Preferred current runtime:
+
+```text
+ChatGPT Project or Custom GPT
+  -> provider-native root MCP at https://{agent}-mcp.unrealize.com
+  -> flat Threaddex job lifecycle tools
+  -> flat assigned OTA capability tools
+```
+
+Do not use this document as the primary template for new or repaired Threaddex agents. Use it only when MCP/App connectors are unavailable and Calvin explicitly chooses the legacy OpenAPI Action fallback.
 
 ## What to paste into the GPT editor
 
@@ -57,12 +65,12 @@ Safety:
 - Keep changes small, recoverable, and checkpoint important progress.
 ```
 
-### Action setup
+### Legacy Action setup
 
 - Authentication: `API Key` / `Bearer`.
 - Store the bearer token only in the private GPT Action authentication field.
 - Do not paste the bearer token into instructions, chat, docs, GitHub issues, or comments.
-- Use the compact OpenAPI schema for the lane under `docs/examples/*-api-action-openapi.yaml`.
+- Use the compact OpenAPI schema for the lane under `docs/examples/*-api-action-openapi.yaml` only for legacy fallback.
 
 The reliable Action shape is:
 
