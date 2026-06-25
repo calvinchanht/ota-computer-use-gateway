@@ -6,6 +6,14 @@ server:
     bearer_token_env: GENESIS_API_BEARER_TOKEN
     allow_loopback_without_auth: true
   exposed_tools:
+  - get_job
+  - getJob
+  - deliver_job_progress
+  - deliverJobProgress
+  - deliver_job
+  - deliverJob
+  - request_job_continuation
+  - requestJobContinuation
   - heartbeat
   - workspace_status
   - get_workspace_policy
