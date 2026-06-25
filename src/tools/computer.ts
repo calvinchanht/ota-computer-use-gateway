@@ -8,6 +8,7 @@ import { ok } from '../core/result.js';
 import { signedArtifactUrl } from '../server/artifactSignatures.js';
 import { platformInfo } from '../core/platform.js';
 import type { Workspace } from '../core/workspaces.js';
+import { callThreaddexLifecycle, isThreaddexLifecycleMethod } from './threaddexLifecycle.js';
 
 const execFileAsync = promisify(execFile);
 const CUA_DRIVER = process.env.CUA_DRIVER_BIN || 'cua-driver';
@@ -72,6 +73,7 @@ export async function cuaDriverStatus(workspace: Workspace) {
 }
 
 export async function cuaDriverCall(workspace: Workspace, method: string, params: Record<string, unknown> = {}) {
+  if (isThreaddexLifecycleMethod(method)) return callThreaddexLifecycle(method, params);
   const readOnly = authorizeCuaMethod(workspace, method);
   const sanitizedParams = sanitizeCuaArgs(params);
   if (requiresNativePid(method) && !hasPid(sanitizedParams)) throw new Error(`${method} is a native Cua window/process mouse command and requires params.pid. Use computer_screen_* for global screen coordinates, or call list_windows/get_window_state and then use computer_window_* with the target pid/window_id.`);
