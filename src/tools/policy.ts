@@ -97,7 +97,7 @@ export function allowedTools(workspace: Workspace): string[] {
   if (sets.browser) base.push('list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch');
   if (sets.computer) base.push('cua_driver_status', 'computer_screen_click', 'computer_window_click', 'computer_screen_mouse_move', 'computer_window_mouse_move', 'computer_screen_drag', 'computer_window_drag', 'computer_screen_scroll', 'computer_window_scroll', 'cua_driver_call', 'cua_driver_batch');
   if (sets.computer_windows) base.push(...windowsComputerTools(workspace));
-  if (sets.machine_admin) base.push('run_configured_command');
+  if (sets.machine_admin) base.push('run_configured_command', 'workspace_helper_list', 'workspace_helper_status', 'workspace_helper_upsert', 'workspace_helper_run');
 
   return [...new Set(base)];
 }
