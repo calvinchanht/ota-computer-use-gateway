@@ -12,6 +12,7 @@ export function toolProfile(config?: AppConfig) {
     api_behavior: apiBehavior(),
     command_runtime: commandRuntimeInfo(undefined, config?.command_runtime),
     github: githubProfile(),
+    workspace_helpers: workspaceHelperProfile(),
     tool_async: toolAsync(),
     aliases: aliases(),
     deprecated_tools: deprecatedTools(),
@@ -33,7 +34,7 @@ function canonicalTools(): string[] {
     'windows_type_text', 'windows_key', 'windows_hotkey',
     'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch',
     'workspace_inventory', 'read_file', 'read_file_chunk', 'read_file_lines', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
-    'run_command', 'run_configured_command', 'list_dir', 'stat_path', 'tree', 'search_files',
+    'run_command', 'run_configured_command', 'workspace_helper_list', 'workspace_helper_status', 'workspace_helper_upsert', 'workspace_helper_run', 'list_dir', 'stat_path', 'tree', 'search_files',
     'github', 'git_status', 'git_diff', 'git_push_current_branch', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',
     'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'memory_search', 'memory_write',
     'list_skills', 'read_skill', 'approval_status', 'list_artifacts', 'record_artifact',
@@ -57,7 +58,7 @@ function capabilitySetDefinitions() {
     browser: capabilitySet('Direct full CDP browser automation using preassigned profiles and ports.', ['list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch']),
     computer: capabilitySet('Local GUI/computer use; independent from machine administration.', ['cua_driver_status', 'computer_screen_click', 'computer_window_click', 'computer_screen_mouse_move', 'computer_window_mouse_move', 'computer_screen_drag', 'computer_window_drag', 'computer_screen_scroll', 'computer_window_scroll', 'cua_driver_call', 'cua_driver_batch']),
     computer_windows: windowsCapabilitySet(),
-    machine_admin: capabilitySet('Own-machine/lane management through configured commands/processes and scoped service/config/runbook work.', ['run_configured_command', 'run_command', 'github', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process']),
+    machine_admin: capabilitySet('Own-machine/lane management through configured commands/processes and scoped service/config/runbook work.', ['run_configured_command', 'run_command', 'workspace_helper_list', 'workspace_helper_status', 'workspace_helper_upsert', 'workspace_helper_run', 'github', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process']),
     estate_admin: capabilitySet('Cross-agent/cross-host estate reporting and approved estate operations.', [...ESTATE_TOOL_NAMES])
   };
 }
@@ -93,6 +94,16 @@ function windowsComputerTools() {
     'windows_type_text', 'windows_key', 'windows_hotkey',
     'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch'
   ];
+}
+
+function workspaceHelperProfile() {
+  return {
+    purpose: 'typed allowlisted helper registry for bounded workspace and host maintenance without arbitrary command text in model tool payloads',
+    tools: ['workspace_helper_list', 'workspace_helper_status', 'workspace_helper_upsert', 'workspace_helper_run'],
+    registry_path: '.agent/workspace-helpers.json',
+    helper_run_contract: 'helper_id plus mode selects a constrained server-approved helper definition; arbitrary shell text and arbitrary paths are not accepted',
+    template_kinds: ['repo_build_test', 'host_health_check', 'ssh_systemd_user_service', 'repo_deploy_to_host', 'threaddex_agent_smoke']
+  };
 }
 
 function githubProfile() {

@@ -15,6 +15,7 @@ import { registerPatchTools } from './register/patch.js';
 import { registerProcessTools } from './register/processes.js';
 import { registerSkillTools } from './register/skills.js';
 import { registerWorkspaceTools } from './register/workspace.js';
+import { registerWorkspaceHelperTools } from './register/workspaceHelpers.js';
 import { setToolAnnotationMode } from './register/annotations.js';
 import type { RegisterContext } from './register/types.js';
 
@@ -27,6 +28,7 @@ export function registerTools(server: McpServer, config: AppConfig, workspaces: 
   registerJobLifecycleTools(context);
   registerGenesisTools(context);
   registerWorkspaceTools(context);
+  registerWorkspaceHelperTools(context);
   registerArtifactTools(context);
   registerBrowserTools(context);
   registerComputerTools(context);
