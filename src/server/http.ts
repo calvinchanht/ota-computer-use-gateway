@@ -58,6 +58,7 @@ import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable,
 import { runArgvTailTool, runArgvTool, runConfiguredCommand } from '../tools/runCommand.js';
 import { processKill, processList, processLog, processStart, processStartArgv, processWrite } from '../tools/processes.js';
 import { listArtifacts, recordArtifact } from '../tools/artifacts.js';
+import { workspaceHelperList, workspaceHelperRun, workspaceHelperStatus, workspaceHelperUpsert } from '../tools/workspaceHelpers.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
 import { healthPayload } from './health.js';
@@ -676,7 +677,8 @@ function callWorkspaceApiTool(config: AppConfig, workspace: Workspace, tool: str
     ?? callComputerApiTool(workspace, tool, args)
     ?? callWindowsApiTool(workspace, tool, args)
     ?? callLargeFileApiTool(config, workspace, tool, args)
-    ?? callProcessApiTool(config, workspace, tool, args);
+    ?? callProcessApiTool(config, workspace, tool, args)
+    ?? callWorkspaceHelperApiTool(config, workspace, tool, args);
 }
 
 function callFileApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
@@ -802,6 +804,14 @@ function callProcessApiTool(config: AppConfig, workspace: Workspace, tool: strin
   if (tool === 'run_command' && Boolean(args.tail)) return runArgvTailTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000);
   if (tool === 'run_command') return runArgvTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000, optionalNumber(args.max_stdout_bytes) ?? 20000, optionalNumber(args.max_stderr_bytes) ?? 8000);
   if (tool === 'run_configured_command') return runConfiguredCommand(config, workspace, requiredString(args.command_id, 'command_id'));
+  return undefined;
+}
+
+function callWorkspaceHelperApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
+  if (tool === 'workspace_helper_list') return workspaceHelperList(config, workspace);
+  if (tool === 'workspace_helper_status') return workspaceHelperStatus(config, workspace, requiredString(args.helper_id, 'helper_id'), optionalString(args.mode));
+  if (tool === 'workspace_helper_upsert') return workspaceHelperUpsert(config, workspace, args.definition);
+  if (tool === 'workspace_helper_run') return workspaceHelperRun(config, workspace, requiredString(args.helper_id, 'helper_id'), requiredString(args.mode, 'mode'), recordArg(args.args, 'args') ?? {});
   return undefined;
 }
 
