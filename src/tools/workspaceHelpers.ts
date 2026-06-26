@@ -78,6 +78,7 @@ export async function workspaceHelperRun(config: AppConfig, workspace: Workspace
   const helper = findHelper(registry, helperId, mode);
   if (!helper) throw new Error(`unknown workspace helper: ${helperId}/${mode}`);
   if (helper.kind === 'repo_build_test') return runRepoBuildTest(config, workspace, helper, args);
+  if (helper.kind === 'ssh_systemd_user_service') return runSystemdUserService(config, workspace, helper);
   return ok('workspace helper plan ready', {
     helper: publicHelper(helper),
     executed: false,
@@ -124,6 +125,69 @@ async function runRepoBuildTest(config: AppConfig, workspace: Workspace, helper:
     repo: repo.relative,
     results
   });
+}
+
+async function runSystemdUserService(config: AppConfig, workspace: Workspace, helper: HelperDefinition) {
+  if (!isLocalHelperTarget(helper)) throw new Error('systemd helper execution is currently local-user only');
+  const action = systemdAction(helper.mode);
+  const unit = helper.service_unit ?? '';
+  const run = await runCommand('systemctl', ['--user', action, unit], workspace.realRoot, Math.min(config.security.max_exec_ms, 120000), systemdEnv());
+  const active = await runCommand('systemctl', ['--user', 'is-active', unit], workspace.realRoot, 15000, systemdEnv());
+  const postChecks = await runPostChecks(helper.post_checks);
+  const failed = run.code !== 0 || run.timed_out || postChecks.some((check) => !check.ok);
+  return ok(failed ? 'workspace helper finished with failures' : 'workspace helper finished', {
+    helper: publicHelper(helper),
+    executed: true,
+    action,
+    command: commandSummary(run),
+    service: { unit, active: active.stdout.trim(), exit_code: active.code },
+    post_checks: postChecks
+  });
+}
+
+function isLocalHelperTarget(helper: HelperDefinition): boolean {
+  const localTargets = new Set(['local', 'localhost', 'cortex', 'cortex-gateway']);
+  const currentUser = process.env.USER || process.env.USERNAME || '';
+  return localTargets.has(helper.target_host_id ?? '') && helper.target_user === currentUser;
+}
+
+function systemdAction(mode: string): 'start' | 'stop' | 'restart' {
+  if (mode === 'start' || mode === 'stop' || mode === 'restart') return mode;
+  throw new Error('systemd helper mode must be start, stop, or restart');
+}
+
+function systemdEnv(): NodeJS.ProcessEnv {
+  const uid = typeof process.getuid === 'function' ? process.getuid() : undefined;
+  return {
+    ...(uid === undefined ? {} : { XDG_RUNTIME_DIR: `/run/user/${uid}` }),
+    ...(process.env.DBUS_SESSION_BUS_ADDRESS ? { DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS } : {})
+  };
+}
+
+async function runPostChecks(checks: HelperDefinition['post_checks']) {
+  const results = [];
+  for (const check of checks) {
+    if (check.kind !== 'http_json') results.push({ ...check, ok: false, error: 'unsupported post_check kind' });
+    else results.push(await runHttpPostCheck(check));
+  }
+  return results;
+}
+
+async function runHttpPostCheck(check: HelperDefinition['post_checks'][number]) {
+  if (!check.url || !isLocalUrl(check.url)) return { ...check, ok: false, error: 'http_json requires local loopback url' };
+  try {
+    const response = await fetch(check.url, { signal: AbortSignal.timeout(10000) });
+    const expect = check.expect_status ?? 200;
+    return { ...check, ok: response.status === expect, status: response.status };
+  } catch (error) {
+    return { ...check, ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function commandSummary(result: Awaited<ReturnType<typeof runCommand>>) {
+  const stdout = truncateText(result.stdout, MAX_OUTPUT_BYTES);
+  const stderr = truncateText(result.stderr, MAX_OUTPUT_BYTES);
+  return { exit_code: result.code, timed_out: result.timed_out, stdout: stdout.text, stderr: stderr.text, stdout_truncated: stdout.truncated, stderr_truncated: stderr.truncated };
 }
 
 async function readRegistry(config: AppConfig, workspace: Workspace): Promise<HelperRegistry> {

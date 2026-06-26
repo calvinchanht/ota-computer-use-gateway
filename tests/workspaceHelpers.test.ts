@@ -65,7 +65,7 @@ describe('workspace helpers', () => {
     await expect(workspaceHelperRun(config, noRun, 'repo_checks', 'build')).rejects.toThrow(/does not allow/);
   });
 
-  it('returns a bounded plan for validated host maintenance templates before executor wiring', async () => {
+  it('rejects systemd helper execution outside the current local user', async () => {
     const workspace = await fixtureWorkspace({ allow_write: true, allow_tests: true });
     await workspaceHelperUpsert(config, workspace, {
       helper_id: 'mickey_chrome',
@@ -75,8 +75,7 @@ describe('workspace helpers', () => {
       target_user: 'molt',
       service_unit: 'threaddex-mickey-browser.service'
     });
-    const result = await workspaceHelperRun(config, workspace, 'mickey_chrome', 'start');
-    expect(result.data).toMatchObject({ executed: false, plan: { target_host_id: 'cortex' } });
+    await expect(workspaceHelperRun(config, workspace, 'mickey_chrome', 'start')).rejects.toThrow(/local-user only/);
   });
 });
 
