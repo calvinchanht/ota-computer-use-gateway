@@ -3,7 +3,7 @@ import { asText } from '../../core/result.js';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
 import { READ_ONLY, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import { processKill, processList, processLog, processStart, processStartArgv, processWrite } from '../../tools/processes.js';
-import { runConfiguredCommand, runShellTool } from '../../tools/runCommand.js';
+import { runArgvTailTool, runArgvTool, runConfiguredCommand, runShellTool } from '../../tools/runCommand.js';
 import type { RegisterContext } from './types.js';
 
 export function registerProcessTools(context: RegisterContext): void {
@@ -16,7 +16,7 @@ function registerCommandTools(context: RegisterContext): void {
   const { server, config, workspaces } = context;
   server.registerTool('run_command', commandTool(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'run_command',
-    (workspace) => runShellTool(config, workspace, args.command)
+    (workspace) => runCommandFromArgs(config, workspace, args)
   ));
   server.registerTool('run_configured_command', configuredTool(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'run_configured_command',
@@ -54,8 +54,16 @@ function registerDeprecatedProcessTools(context: RegisterContext): void {
 function commandTool() {
   return {
     title: 'Run command',
-    description: 'Run a scoped local shell command in the workspace root.',
-    inputSchema: { workspace_id: z.string(), command: z.string() },
+    description: 'Run a scoped argv command in the workspace. Prefer cmd_array with executable and arguments as separate strings.',
+    inputSchema: {
+      workspace_id: z.string(),
+      cmd_array: z.array(z.string()).min(1),
+      cwd: z.string().optional(),
+      timeout_ms: z.number().optional(),
+      max_stdout_bytes: z.number().optional(),
+      max_stderr_bytes: z.number().optional(),
+      tail: z.boolean().optional()
+    },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
   };
 }
@@ -107,6 +115,13 @@ function startProcessFromArgs(config: RegisterContext['config'], workspace: Para
   if (args.cmd_array !== undefined) return processStartArgv(config, workspace, args.cmd_array, args.cwd ?? '.', args.timeout_ms ?? 30000);
   if (args.command !== undefined) return processStart(config, workspace, args.command);
   throw new Error('cmd_array must be an array');
+}
+
+function runCommandFromArgs(config: RegisterContext['config'], workspace: Parameters<typeof runArgvTool>[1], args: { cmd_array: string[]; cwd?: string; timeout_ms?: number; max_stdout_bytes?: number; max_stderr_bytes?: number; tail?: boolean }) {
+  const cwd = args.cwd ?? '.';
+  const timeoutMs = args.timeout_ms ?? 30000;
+  if (args.tail) return runArgvTailTool(config, workspace, args.cmd_array, cwd, timeoutMs);
+  return runArgvTool(config, workspace, args.cmd_array, cwd, timeoutMs, args.max_stdout_bytes ?? 20000, args.max_stderr_bytes ?? 8000);
 }
 
 function listProcessTool(deprecated: boolean) {

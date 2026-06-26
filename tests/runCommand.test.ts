@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runArgvTool, runConfiguredCommand, runShellTool } from '../src/tools/runCommand.js';
 import { runCommandCmdArray } from '../src/server/http.js';
+import { createServer } from '../src/server/create.js';
 import type { AppConfig } from '../src/config/schema.js';
 import type { Workspace } from '../src/core/workspaces.js';
 
@@ -101,7 +102,28 @@ describe('HTTP run_command argv shape', () => {
   it('rejects conflicting cmd_array and cmd values', () => {
     expect(() => runCommandCmdArray({ cmd_array: ['git', 'status'], cmd: ['git', 'diff'] })).toThrow(/cmd_array\/cmd conflict/);
   });
+
+  it('exposes cmd_array in the MCP run_command schema', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'gtp-mcp-command-'));
+    const server = await createServer({
+      ...config,
+      server: { ...config.server, tool_annotations: { mode: 'honest' } },
+      workspaces: [{ id: 'test', name: 'Test', root, allow_tests: true }]
+    } as AppConfig);
+    const tools = (server as unknown as { _registeredTools: Record<string, { inputSchema: unknown }> })._registeredTools;
+    const schema = zodShape(tools.run_command.inputSchema);
+
+    expect(Object.keys(schema)).toContain('cmd_array');
+    expect(Object.keys(schema)).not.toContain('command');
+  });
 });
+
+function zodShape(schema: unknown): Record<string, unknown> {
+  const def = (schema as { def?: { shape?: unknown }; _def?: { shape?: unknown } }).def ?? (schema as { _def?: { shape?: unknown } })._def;
+  const shape = def?.shape;
+  if (typeof shape === 'function') return shape() as Record<string, unknown>;
+  return shape && typeof shape === 'object' ? shape as Record<string, unknown> : {};
+}
 
 async function fixtureWorkspace(allowTests: boolean): Promise<Workspace> {
   const root = await mkdtemp(path.join(tmpdir(), 'gtp-command-'));
