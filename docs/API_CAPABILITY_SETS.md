@@ -141,3 +141,22 @@ A webchat agent with Computer API should use the enabled computer tools directly
 - HTTP JSON calls are denied if the requested tool is not exposed by `server.exposed_tools` when that list is configured.
 - HTTP JSON calls are denied if the requested tool is not in the selected workspace's resolved API-set policy.
 - Existing `allow_*` fields remain backward-compatible; `api_sets` is the preferred new control-plane vocabulary.
+
+## Syncing `server.exposed_tools`
+
+When `server.exposed_tools` is configured, keep it generated from
+`workspaces[].api_sets` rather than hand-copying a stale allowlist. After a
+host config change, build the repo and run:
+
+```bash
+npm run build
+npm run config:sync-exposed-tools -- \
+  --config config/<agent>.local.yaml \
+  --workspace-id <agent> \
+  --enable-api-sets workspace,browser,computer,machine_admin,estate_admin
+```
+
+The helper parses the target YAML through OTA's own schema, resolves the
+workspace policy via `allowedTools()`, and replaces `server.exposed_tools` with
+the canonical sorted tool list. Restart the OTA service and the Threaddex host
+API after the sync so the MCP facade can rediscover the updated action surface.
