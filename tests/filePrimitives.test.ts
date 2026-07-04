@@ -42,6 +42,22 @@ describe('file primitive tools', () => {
     await expect(readFile(path.join(workspace.realRoot, 'data.json'), 'utf8')).resolves.toBe(content);
   });
 
+  it('appends UTF-8 chunks without resending the whole file', async () => {
+    const workspace = await fixtureWorkspace(true);
+    await writeFileTool(config, workspace, 'chunked.txt', 'alpha\n', false);
+    const result = await writeFileTool(config, workspace, 'chunked.txt', 'beta\n', false, 'append');
+    await expect(readFile(path.join(workspace.realRoot, 'chunked.txt'), 'utf8')).resolves.toBe('alpha\nbeta\n');
+    expect(result.data).toMatchObject({ path: 'chunked.txt', mode: 'append', bytes: 5 });
+  });
+
+  it('patches UTF-8 content at a byte offset', async () => {
+    const workspace = await fixtureWorkspace(true);
+    await writeFileTool(config, workspace, 'patch.txt', 'abcXYZghi', false);
+    const result = await writeFileTool(config, workspace, 'patch.txt', 'def', false, 'patch', 3);
+    await expect(readFile(path.join(workspace.realRoot, 'patch.txt'), 'utf8')).resolves.toBe('abcdefghi');
+    expect(result.data).toMatchObject({ path: 'patch.txt', mode: 'patch', offset: 3, bytes: 3 });
+  });
+
   it('allows empty text writes and empty edit replacements', async () => {
     const workspace = await fixtureWorkspace(true);
     await writeFileTool(config, workspace, 'empty.txt', '', true);
@@ -82,6 +98,14 @@ describe('file primitive tools', () => {
     expect(wrote.data).toMatchObject({ path: outside.replaceAll('\\', '/'), scope: 'host', bytes: 14 });
     const deleted = await import('../src/tools/files.js').then((tools) => tools.deletePathTool(config, workspace, path.join(outsideRoot, 'tmp'), true));
     expect(deleted.data).toMatchObject({ path: path.join(outsideRoot, 'tmp').replaceAll('\\', '/'), scope: 'host', type: 'dir', recursive: true });
+  });
+
+  it('appends and patches binary chunks', async () => {
+    const workspace = await fixtureWorkspace(true);
+    await writeBinaryFileTool(config, workspace, 'blob.bin', Buffer.from([1, 2, 3]).toString('base64'));
+    await writeBinaryFileTool(config, workspace, 'blob.bin', Buffer.from([4, 5]).toString('base64'), false, 'append');
+    await writeBinaryFileTool(config, workspace, 'blob.bin', Buffer.from([9]).toString('base64'), false, 'patch', 1);
+    await expect(readFile(path.join(workspace.realRoot, 'blob.bin'))).resolves.toEqual(Buffer.from([1, 9, 3, 4, 5]));
   });
 
   it('returns a bounded recursive tree', async () => {

@@ -40,12 +40,12 @@ function registerReadTools({ server, config, workspaces }: RegisterContext): voi
 
 function registerWriteTools({ server, config, workspaces }: RegisterContext): void {
   server.registerTool('write_file', writeFileSpec(), async (args) => runWorkspaceTool(
-    workspaces, args.workspace_id, 'write_file',
-    (workspace) => writeFileTool(config, workspace, args.path, args.content, args.overwrite)
+    workspaces, args.workspace_id as string, 'write_file',
+    (workspace) => writeFileTool(config, workspace, args.path as string, args.content as string, args.overwrite as boolean | undefined, args.mode as any, args.offset as number | undefined)
   ));
   server.registerTool('write_binary_file', writeBinaryFileSpec(), async (args) => runWorkspaceTool(
-    workspaces, args.workspace_id, 'write_binary_file',
-    (workspace) => writeBinaryFileTool(config, workspace, args.path, args.base64, args.overwrite)
+    workspaces, args.workspace_id as string, 'write_binary_file',
+    (workspace) => writeBinaryFileTool(config, workspace, args.path as string, args.base64 as string, args.overwrite as boolean | undefined, args.mode as any, args.offset as number | undefined)
   ));
   server.registerTool('edit_file', editFileSpec(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'edit_file',
@@ -125,8 +125,8 @@ function readBinaryFileSpec() {
 function writeFileSpec() {
   return {
     title: 'Write file',
-    description: 'Create or overwrite a UTF-8 text file inside a workspace.',
-    inputSchema: { workspace_id: z.string(), path: z.string(), content: z.string(), overwrite: z.boolean().default(false) },
+    description: 'Create, overwrite, append to, or patch a UTF-8 text file inside a workspace. For long content, write the first chunk then mode=append subsequent chunks.',
+    inputSchema: writeBaseSpec({ content: z.string() }),
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: WRITE_FILE
   };
 }
@@ -134,9 +134,20 @@ function writeFileSpec() {
 function writeBinaryFileSpec() {
   return {
     title: 'Write binary file',
-    description: 'Create or overwrite a bounded binary file from base64 content inside a workspace.',
-    inputSchema: { workspace_id: z.string(), path: z.string(), base64: z.string(), overwrite: z.boolean().default(false) },
+    description: 'Create, overwrite, append to, or patch a bounded binary file from base64 content inside a workspace. Use mode=append for chunked uploads.',
+    inputSchema: writeBaseSpec({ base64: z.string() }),
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: WRITE_FILE
+  };
+}
+
+function writeBaseSpec(extra: z.ZodRawShape): z.ZodRawShape {
+  return {
+    workspace_id: z.string(),
+    path: z.string(),
+    overwrite: z.boolean().default(false),
+    mode: z.enum(['create', 'overwrite', 'append', 'patch']).optional(),
+    offset: z.number().int().nonnegative().optional(),
+    ...extra
   };
 }
 

@@ -23,9 +23,9 @@ Use `get_tool_profile` at runtime to discover canonical tools, compatibility ali
 - `stat_path` — return metadata for a workspace path.
 - `tree` — return a bounded recursive directory tree.
 - `read_file` — read a bounded UTF-8 text range.
-- `write_file` — create or overwrite a UTF-8 file.
+- `write_file` — create, overwrite, append to, or patch a UTF-8 file.
 - `read_binary_file` — read a bounded binary file as base64 with metadata.
-- `write_binary_file` — create or overwrite a bounded binary file from base64 content.
+- `write_binary_file` — create, overwrite, append to, or patch a bounded binary file from base64 content.
 - `edit_file` — replace exactly one matching text region.
 - `search_files` — search text in workspace files.
 
@@ -50,6 +50,12 @@ Text payload contract:
 - For JSON files, serialize the JSON exactly once and send that serialized text as `content`.
 - Do not send raw objects or arrays in text fields. The gateway rejects them with a corrective diagnostic instead of guessing.
 - For exact bytes or escaping-sensitive payloads, use `write_binary_file` with base64 rather than inventing a text encoding wrapper.
+- For long files or MCP clients that fail on large payloads, split content into chunks:
+  - first chunk: `write_file(path, content, mode="overwrite")` or `mode="create"`;
+  - next chunks: `write_file(path, content, mode="append")`;
+  - binary chunks use the same `mode` values with `write_binary_file(base64=...)`.
+- For fixed-position repair, use `mode="patch"` with a byte `offset`. Patch writes bytes at that position without truncating the rest of the file. If the offset is beyond end-of-file, use `mode="append"` instead.
+- Legacy `overwrite=true` remains supported and maps to `mode="overwrite"` when `mode` is omitted. With no `mode` and no `overwrite`, the write remains create-only and rejects existing files.
 
 ## Patch primitives
 

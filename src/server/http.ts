@@ -70,9 +70,11 @@ import { reportApiShapeMisuse, reportToolMisuse } from './apiMisuse.js';
 import { handleBrokeredExecutorApi, isBrokeredExecutorWorkerRequestAuthorized } from './brokeredExecutorApi.js';
 import { parseApiBatchRequestSafe, parseApiToolRequestSafe } from './apiRequest.js';
 import { apiShapeErrorResponse, apiToolContract, invalidJsonResponse, validateApiToolArguments } from './apiContract.js';
+import { arrayRecordArg, optionalBoolean, optionalNumber, optionalString, optionalStringArray, optionalWriteMode, recordArg, requiredNumber, requiredString, requiredStringArray, requiredTextArg, runCommandCmdArray, stringRecordArg } from './httpArgs.js';
 
 export { otaMisuseEventForApiShapeError, otaMisuseEventForToolError } from './apiMisuse.js';
 export { parseApiToolRequest, parseApiToolRequestSafe } from './apiRequest.js';
+export { requiredTextArg, runCommandCmdArray } from './httpArgs.js';
 export type { ApiShapeErrorBody } from './apiRequest.js';
 
 const MCP_PATH = '/mcp';
@@ -688,8 +690,8 @@ function callFileApiTool(config: AppConfig, workspace: Workspace, tool: string, 
   if (tool === 'tree') return treeTool(config, workspace, optionalString(args.path) ?? '.', optionalNumber(args.max_entries));
   if (tool === 'read_file') return readFileTool(config, workspace, requiredString(args.path, 'path'), optionalNumber(args.start_line), optionalNumber(args.max_lines));
   if (tool === 'read_binary_file') return readBinaryFileTool(config, workspace, requiredString(args.path, 'path'));
-  if (tool === 'write_file') return writeFileTool(config, workspace, requiredString(args.path, 'path'), requiredTextArg(args.content, 'content', true), Boolean(args.overwrite));
-  if (tool === 'write_binary_file') return writeBinaryFileTool(config, workspace, requiredString(args.path, 'path'), requiredString(args.base64, 'base64'), Boolean(args.overwrite));
+  if (tool === 'write_file') return writeFileTool(config, workspace, requiredString(args.path, 'path'), requiredTextArg(args.content, 'content', true), Boolean(args.overwrite), optionalWriteMode(args.mode), optionalNumber(args.offset));
+  if (tool === 'write_binary_file') return writeBinaryFileTool(config, workspace, requiredString(args.path, 'path'), requiredString(args.base64, 'base64'), Boolean(args.overwrite), optionalWriteMode(args.mode), optionalNumber(args.offset));
   if (tool === 'edit_file') return editFileTool(config, workspace, requiredString(args.path, 'path'), requiredTextArg(args.old_text, 'old_text'), requiredTextArg(args.new_text, 'new_text', true));
   if (tool === 'delete_file') return deleteFileTool(config, workspace, requiredString(args.path, 'path'));
   if (tool === 'delete_path') return deletePathTool(config, workspace, requiredString(args.path, 'path'), Boolean(args.recursive));
@@ -823,12 +825,6 @@ function toolExposureError(tool: string): string {
   return `tool is not exposed by this workspace api_sets profile: ${tool}`;
 }
 
-function recordArg(value: unknown, name: string): Record<string, unknown> | undefined {
-  if (value === undefined) return undefined;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${name} must be an object`);
-  return value as Record<string, unknown>;
-}
-
 function windowsScreenshotParams(args: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (args.visual_followup !== undefined) out.visual_followup = recordArg(args.visual_followup, 'visual_followup');
@@ -836,42 +832,6 @@ function windowsScreenshotParams(args: Record<string, unknown>): Record<string, 
     if (typeof args[key] === 'string') out[key] = args[key];
   }
   return out;
-}
-
-function requiredString(value: unknown, name: string): string {
-  if (typeof value !== 'string' || !value) throw new Error(`${name} is required`);
-  return value;
-}
-
-export function requiredTextArg(value: unknown, name: string, allowEmpty = false): string {
-  if (typeof value === 'string' && (allowEmpty || value.length > 0)) return value;
-  throw new Error(textArgError(value, name, allowEmpty));
-}
-
-function textArgError(value: unknown, name: string, allowEmpty: boolean): string {
-  const type = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value;
-  const empty = value === '' && !allowEmpty ? ' Empty string is not allowed for this field.' : '';
-  const hint = ' If this is structured JSON, serialize it once into a string before sending. Use write_binary_file with base64 for escaping-sensitive exact bytes.';
-  return `${name} must be ${allowEmpty ? 'a string' : 'a non-empty string'}; received ${type}.${empty}${hint}`;
-}
-
-function requiredNumber(value: unknown, name: string): number {
-  const number = optionalNumber(value);
-  if (number === undefined) throw new Error(`${name} is required`);
-  return number;
-}
-
-function optionalNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function optionalBoolean(value: unknown): boolean | undefined {
-  return typeof value === 'boolean' ? value : undefined;
-}
-
-function optionalString(value: unknown): string | undefined {
-  if (value === undefined) return undefined;
-  return requiredString(value, 'string value');
 }
 
 function requiredCdpBatchSteps(value: unknown): Array<Record<string, unknown>> {
@@ -902,16 +862,6 @@ function browserTargetFilter(args: Record<string, unknown>) {
   };
 }
 
-function optionalStringArray(value: unknown): string[] {
-  if (value === undefined) return [];
-  return requiredStringArray(value, 'string array');
-}
-
-function requiredStringArray(value: unknown, name: string): string[] {
-  if (!Array.isArray(value)) throw new Error(`${name} must be an array`);
-  return value.map((item) => requiredString(item, 'array item'));
-}
-
 async function startProcessFromArgs(config: AppConfig, workspace: Workspace, args: Record<string, unknown>): Promise<ToolResult> {
   const preferred = args.cmd_array;
   const legacyCommand = args.command;
@@ -919,34 +869,6 @@ async function startProcessFromArgs(config: AppConfig, workspace: Workspace, arg
   if (preferred !== undefined) return processStartArgv(config, workspace, requiredStringArray(preferred, 'cmd_array'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000);
   if (legacyCommand !== undefined) return processStart(config, workspace, requiredString(legacyCommand, 'command'));
   throw new Error('cmd_array must be an array');
-}
-
-export function runCommandCmdArray(args: Record<string, unknown>): string[] {
-  const preferred = args.cmd_array;
-  const legacy = args.cmd;
-  if (typeof legacy === 'string') throw new Error('cmd must be an array. Use cmd_array: ["git", "status", "--short"]. If shell behavior is intentional, call get_tool_profile or get_workspace_policy and use command_runtime.recommended_cmd_array_for_shell.');
-  if (preferred !== undefined && legacy !== undefined) {
-    const preferredArray = requiredStringArray(preferred, 'cmd_array');
-    const legacyArray = requiredStringArray(legacy, 'cmd');
-    if (JSON.stringify(preferredArray) !== JSON.stringify(legacyArray)) throw new Error('cmd_array/cmd conflict: prefer cmd_array and remove legacy cmd, or send identical arrays for compatibility.');
-    return preferredArray;
-  }
-  if (preferred !== undefined) return requiredStringArray(preferred, 'cmd_array');
-  return requiredStringArray(legacy, 'cmd_array');
-}
-
-function arrayRecordArg(value: unknown, name: string): Array<Record<string, string>> | undefined {
-  if (value === undefined) return undefined;
-  if (!Array.isArray(value)) throw new Error(`${name} must be an array`);
-  return value.map((item) => {
-    const record = recordArg(item, name) ?? {};
-    return Object.fromEntries(Object.entries(record).map(([key, val]) => [key, String(val)]));
-  });
-}
-
-function stringRecordArg(value: unknown, name: string): Record<string, string> {
-  const record = recordArg(value, name) ?? {};
-  return Object.fromEntries(Object.entries(record).map(([key, val]) => [key, String(val)]));
 }
 
 async function handleApiDebugRequestContext(req: IncomingMessage, res: ServerResponse): Promise<void> {
