@@ -454,7 +454,7 @@ async function boundedScreenshot(workspace: Workspace, data: unknown, params: Re
     }
   }
   copy.retention_note = 'Screenshot artifacts are transient working files: default preview is half-size WebP quality 85, full source is PNG, and transient screenshots should be zipped/pruned by retention jobs unless copied to durable task/project artifacts.';
-  copy.visual_followup = await screenshotVisualFollowup(copy, params);
+  copy.visual_followup = await screenshotVisualFollowup(copy, { workspace_id: workspace.id, agent_id: workspace.id, ...params });
   return copy;
 }
 
@@ -463,15 +463,7 @@ export async function screenshotVisualFollowup(screenshot: Record<string, unknow
   const readableUrl = screenshotReadableUrl(screenshot);
   if (!readableUrl) return { state: 'not_available', sent_to_provider: false, provider_visible: false, reason: 'readable_url_missing', instruction: 'Screenshot was captured, but no readable URL was available to send as a visible follow-up.' };
   const input = visualFollowupInput(params, readableUrl);
-  if (!input.job_id) {
-    return {
-      state: 'not_requested',
-      sent_to_provider: false,
-      provider_visible: false,
-      reason: 'threaddex_job_id_required',
-      instruction: 'To make this screenshot visible to the model, call screenshot with params.visual_followup.job_id set to the active Threaddex job id, then poll visual_followup.status_url until sent_to_provider is true.'
-    };
-  }
+  if (!input.job_id) return await directVisualFollowup(input, readableUrl);
   try {
     const response = await fetch(`${input.base_url}/v1/job/${encodeURIComponent(input.job_id)}/visual-followup`, {
       method: 'POST',
@@ -495,6 +487,41 @@ export async function screenshotVisualFollowup(screenshot: Record<string, unknow
   }
 }
 
+async function directVisualFollowup(input: ReturnType<typeof visualFollowupInput>, readableUrl: string) {
+  if (!input.agent_id) {
+    return {
+      state: 'not_requested',
+      sent_to_provider: false,
+      provider_visible: false,
+      reason: 'direct_visual_followup_agent_id_required',
+      instruction: 'Screenshot was captured, but no job_id or agent_id/workspace_id was available for visible direct prompt delivery.'
+    };
+  }
+  try {
+    const response = await fetch(`${input.base_url}/v1/agents/${encodeURIComponent(input.agent_id)}/direct-visual-followup`, {
+      method: 'POST',
+      headers: visualFollowupHeaders(),
+      body: JSON.stringify({
+        idempotency_key: input.idempotency_key,
+        kind: 'screenshot',
+        source: input.source,
+        readable_url: readableUrl,
+        mime: input.mime,
+        prompt_text: input.prompt_text
+      })
+    });
+    const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok || body.ok !== true || !isRecord(body.visual_followup)) return directVisualFollowupFailure(response.status, body.error);
+    return normalizeVisualFollowupContract(body.visual_followup, input.public_base_url);
+  } catch (error) {
+    return { state: 'failed', sent_to_provider: false, provider_visible: false, reason: `direct_visual_followup_request_exception:${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
+function directVisualFollowupFailure(status: number, error: unknown) {
+  return { state: 'failed', sent_to_provider: false, provider_visible: false, reason: `direct_visual_followup_request_failed:${status}:${String(error ?? 'bad_response')}` };
+}
+
 function screenshotReadableUrl(screenshot: Record<string, unknown>): string | undefined {
   const candidates = [
     nestedString(screenshot, ['preview', 'readable_url']),
@@ -510,13 +537,18 @@ function screenshotReadableUrl(screenshot: Record<string, unknown>): string | un
 function visualFollowupInput(params: Record<string, unknown>, readableUrl: string) {
   const visual = isRecord(params.visual_followup) ? params.visual_followup : {};
   const job_id = stringValue(visual.job_id) ?? stringValue(params.threaddex_job_id) ?? stringValue(params.job_id);
+  const agent_id = stringValue(visual.agent_id) ?? stringValue(params.agent_id) ?? stringValue(params.workspace_id);
   const base_url = stripTrailingSlash(stringValue(visual.base_url) ?? stringValue(params.threaddex_base_url) ?? process.env.THREADEX_VISUAL_FOLLOWUP_BASE_URL ?? process.env.THREADEX_JOB_API_BASE_URL ?? 'http://127.0.0.1:33988');
   const public_base_url = stripTrailingSlash(stringValue(visual.public_base_url) ?? process.env.THREADEX_VISUAL_FOLLOWUP_PUBLIC_BASE_URL ?? '');
-  const idempotency_key = stringValue(visual.idempotency_key) ?? `cua-screenshot:${job_id ?? 'unknown'}:${createHash('sha256').update(readableUrl).digest('hex').slice(0, 16)}`;
+  const idempotency_key = stringValue(visual.idempotency_key) ?? `cua-screenshot:${job_id ?? agent_id ?? 'unknown'}:${createHash('sha256').update(readableUrl).digest('hex').slice(0, 16)}`;
   const source = stringValue(visual.source) ?? stringValue(params.source) ?? 'cua_driver';
   const mime = stringValue(visual.mime) ?? stringValue(params.mime) ?? 'image/webp';
-  const prompt_text = stringValue(visual.prompt_text) ?? stringValue(params.prompt_text) ?? `Parse this job image NOW: ${readableUrl}`;
-  return { job_id, base_url, public_base_url, idempotency_key, source, mime, prompt_text };
+  const prompt_text = stringValue(visual.prompt_text) ?? stringValue(params.prompt_text) ?? defaultVisualPrompt(job_id, readableUrl);
+  return { job_id, agent_id, base_url, public_base_url, idempotency_key, source, mime, prompt_text };
+}
+
+function defaultVisualPrompt(jobId: string | undefined, readableUrl: string): string {
+  return jobId ? `Parse this job image NOW: ${readableUrl}` : `Parse this screenshot image NOW: ${readableUrl}`;
 }
 
 function normalizeVisualFollowupContract(contract: Record<string, unknown>, publicBaseUrl: string) {
@@ -524,9 +556,12 @@ function normalizeVisualFollowupContract(contract: Record<string, unknown>, publ
   out.sent_to_provider = contract.sent_to_provider === true;
   out.provider_visible = contract.provider_visible === true;
   if (publicBaseUrl && typeof contract.status_path === 'string') out.status_url = `${publicBaseUrl}${contract.status_path}`;
+  const directMode = typeof contract.status_path === 'string' && contract.status_path.includes('/direct-visual-followup/');
   out.instruction = out.sent_to_provider === true
-    ? 'The screenshot URL has been sent as a visible follow-up prompt. Continue using the visible screenshot follow-up.'
-    : 'Do not claim visual inspection yet. Poll visual_followup.status_url until sent_to_provider is true.';
+    ? 'The screenshot URL has been sent as a visible prompt. Continue using the visible screenshot follow-up.'
+    : directMode
+      ? 'The screenshot URL is queued for direct-mode visible prompt delivery. Do not claim visual inspection until sent_to_provider is true.'
+      : 'Do not claim visual inspection yet. Poll visual_followup.status_url until sent_to_provider is true.';
   return out;
 }
 

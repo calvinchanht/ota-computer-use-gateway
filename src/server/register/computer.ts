@@ -38,6 +38,7 @@ const mouseButtonSchema = z.enum(['left', 'right']).default('left');
 const coordinateSpaceSchema = z.enum(['client', 'window']).default('client');
 const visualFollowupSchema = z.object({
   job_id: z.string().optional(),
+  agent_id: z.string().optional(),
   base_url: z.string().optional(),
   public_base_url: z.string().optional(),
   idempotency_key: z.string().optional(),
@@ -73,7 +74,7 @@ function registerCuaDriverStatus({ server, workspaces }: RegisterContext): void 
 function registerCuaDriverCall({ server, workspaces }: RegisterContext): void {
   server.registerTool('cua_driver_call', {
     title: 'Cua Driver call',
-    description: 'Call one raw Cua Driver command for Mac computer use. For method=screenshot, optional params.visual_followup.job_id asks OTA to create a Threaddex visual-followup event and return a pollable sent_to_provider contract.',
+    description: 'Call one raw Cua Driver command for Mac computer use. For method=screenshot, OTA can create either a job-bound visual-followup when job_id is supplied, or a direct-mode visible screenshot prompt when agent_id/workspace_id is available.',
     inputSchema: { workspace_id: z.string(), method: z.string().min(1).max(80), params: z.record(z.string(), z.unknown()).default({}) },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
   }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'cua_driver_call', (workspace) => cuaDriverCall(workspace, args.method, args.params)));
@@ -164,7 +165,7 @@ function registerCuaDriverBatch({ server, workspaces }: RegisterContext): void {
 function registerWindowsTools({ server, workspaces }: RegisterContext): void {
   server.registerTool('windows_computer_status', { title: 'Windows computer status', description: 'Return Windows computer-use capability and adapter status.', inputSchema: { workspace_id: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_computer_status', windowsComputerStatus));
   server.registerTool('windows_list_monitors', { title: 'Windows list monitors', description: 'List Windows monitor bounds and primary flags.', inputSchema: { workspace_id: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_list_monitors', windowsListMonitors));
-  server.registerTool('windows_screenshot', { title: 'Windows screenshot', description: 'Capture one monitor or all monitors and store screenshot artifacts.', inputSchema: { workspace_id: z.string(), monitor: z.string().default('primary'), visual_followup: visualFollowupSchema, job_id: z.string().optional(), threaddex_job_id: z.string().optional(), threaddex_base_url: z.string().optional() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_screenshot', (workspace) => windowsScreenshot(workspace, args.monitor, args)));
+  server.registerTool('windows_screenshot', { title: 'Windows screenshot', description: 'Capture one monitor or all monitors and store screenshot artifacts. If no job_id is supplied, OTA uses workspace_id as agent_id and queues a direct-mode visible screenshot prompt.', inputSchema: { workspace_id: z.string(), monitor: z.string().default('primary'), visual_followup: visualFollowupSchema, job_id: z.string().optional(), threaddex_job_id: z.string().optional(), threaddex_base_url: z.string().optional() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_screenshot', (workspace) => windowsScreenshot(workspace, args.monitor, args)));
   server.registerTool('windows_uia_tree', { title: 'Windows UIA tree', description: 'Return a bounded Microsoft UI Automation tree snapshot.', inputSchema: { workspace_id: z.string(), max_nodes: z.number().int().min(1).max(1000).default(120) }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_uia_tree', (workspace) => windowsUiaTree(workspace, args.max_nodes)));
   server.registerTool('windows_list_windows', { title: 'Windows list windows', description: 'List visible top-level Windows desktop windows.', inputSchema: { workspace_id: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_list_windows', windowsListWindows));
   server.registerTool('windows_focus_window', { title: 'Windows focus window', description: 'Focus a top-level window by hwnd.', inputSchema: { workspace_id: z.string(), hwnd: z.number().int().finite() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_focus_window', (workspace) => windowsFocusWindow(workspace, args.hwnd)));

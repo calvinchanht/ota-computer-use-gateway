@@ -59,7 +59,7 @@ const CONTRACTS: Record<string, ContractSpec> = {
   read_process: spec({ workspace_id: 'string required', process_id: 'string required', max_bytes: 'number optional', cursor: 'number optional' }),
   write_process: spec({ workspace_id: 'string required', process_id: 'string required', input: 'string required', close_stdin: 'boolean optional' }),
   stop_process: spec({ workspace_id: 'string required', process_id: 'string required' }),
-  windows_screenshot: spec({ workspace_id: 'string required', monitor: 'string optional', visual_followup: 'object optional', job_id: 'string optional', threaddex_job_id: 'string optional', threaddex_base_url: 'string optional' })
+  windows_screenshot: spec({ workspace_id: 'string required', monitor: 'string optional', visual_followup: 'object optional; may include job_id or agent_id', job_id: 'string optional', threaddex_job_id: 'string optional', threaddex_base_url: 'string optional' })
 };
 
 export function apiEnvelopeContract(): ApiContract {
