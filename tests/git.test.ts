@@ -100,6 +100,28 @@ describe('git display hygiene', () => {
       await rm(repo.root, { recursive: true, force: true });
     }
   });
+
+  it('dispatches git_push_current_branch through the HTTP tool facade', async () => {
+    const repo = await fixtureRepo();
+    const server: Server = createServer(createHttpRequestHandler(configForGithub(repo.root, repo.tokenFile)));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('expected TCP address');
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/v1/tool`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ tool: 'git_push_current_branch', arguments: { workspace_id: 'anna', repo_path: '.' } })
+      });
+      const body = await response.json() as { ok: boolean; summary: string };
+      expect(body.ok).toBe(false);
+      expect(body.summary).toContain('git remote diagnostic');
+      expect(body.summary).not.toContain('unsupported API tool');
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      await rm(repo.root, { recursive: true, force: true });
+    }
+  });
 });
 
 async function fixtureRepo() {

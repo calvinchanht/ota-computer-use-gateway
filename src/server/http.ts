@@ -14,7 +14,7 @@ import { workspaceStatus } from '../tools/workspace.js';
 import { toolProfile } from '../tools/toolProfile.js';
 import { allowedTools, workspacePolicy } from '../tools/policy.js';
 import { deleteFileTool, deletePathTool, editFileTool, listDir, readBinaryFileTool, readFileTool, statPath, treeTool, workspaceInventory, writeBinaryFileTool, writeFileTool } from '../tools/files.js';
-import { gitDiff, gitStatus } from '../tools/git.js';
+import { gitDiff, gitPushCurrentBranch, gitStatus } from '../tools/git.js';
 import { githubCliTool } from '../tools/github.js';
 import {
   genesisAgentDeepDive,
@@ -701,6 +701,7 @@ function callFileApiTool(config: AppConfig, workspace: Workspace, tool: string, 
 function callGitContextApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
   if (tool === 'git_status') return gitStatus(workspace);
   if (tool === 'git_diff') return gitDiff(workspace, optionalNumber(args.max_bytes) ?? 20000);
+  if (tool === 'git_push_current_branch') return gitPushCurrentBranch(config, workspace, optionalString(args.repo_path) ?? '.', optionalString(args.remote) ?? 'origin', optionalString(args.branch));
   if (tool === 'github') return githubCliTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 60000, optionalNumber(args.max_output_chars) ?? optionalNumber(args.max_stdout_bytes) ?? 20000);
   if (tool === 'get_agent_bootstrap') return agentBootstrap(workspace);
   if (tool === 'get_context_snapshot') return contextSnapshot(workspace);
