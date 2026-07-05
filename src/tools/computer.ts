@@ -506,6 +506,7 @@ async function directVisualFollowup(input: ReturnType<typeof visualFollowupInput
         kind: 'screenshot',
         source: input.source,
         readable_url: readableUrl,
+        attachment_path: input.attachment_path,
         mime: input.mime,
         prompt_text: input.prompt_text
       })
@@ -544,7 +545,8 @@ function visualFollowupInput(params: Record<string, unknown>, readableUrl: strin
   const source = stringValue(visual.source) ?? stringValue(params.source) ?? 'cua_driver';
   const mime = stringValue(visual.mime) ?? stringValue(params.mime) ?? 'image/webp';
   const prompt_text = stringValue(visual.prompt_text) ?? stringValue(params.prompt_text) ?? defaultVisualPrompt(job_id, readableUrl);
-  return { job_id, agent_id, base_url, public_base_url, idempotency_key, source, mime, prompt_text };
+  const attachment_path = stringValue(visual.attachment_path) ?? stringValue(params.attachment_path);
+  return { job_id, agent_id, base_url, public_base_url, idempotency_key, source, mime, prompt_text, attachment_path };
 }
 
 function defaultVisualPrompt(jobId: string | undefined, readableUrl: string): string {

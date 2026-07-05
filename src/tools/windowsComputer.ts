@@ -50,7 +50,7 @@ export async function windowsScreenshot(workspace: Workspace, monitor = 'primary
     preview: artifact.preview,
     full: artifact.full
   };
-  const visualFollowup = await screenshotVisualFollowup(payload, { ...params, source: 'windows_computer' });
+  const visualFollowup = await screenshotVisualFollowup(payload, { ...params, source: 'windows_computer', attachment_path: paths.preview });
   return ok('windows screenshot', windowsScreenshotResponse(data, visualFollowup));
 }
 
