@@ -61,7 +61,7 @@ import { listArtifacts, recordArtifact } from '../tools/artifacts.js';
 import { workspaceHelperList, workspaceHelperRun, workspaceHelperStatus, workspaceHelperUpsert } from '../tools/workspaceHelpers.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
-import { healthPayload } from './health.js';
+import { healthPayload, mcpTransportMode } from './health.js';
 import { hasValidArtifactSignature } from './artifactSignatures.js';
 import { auditHttpRequest } from './httpAudit.js';
 import { RateLimiter } from './rateLimit.js';
@@ -161,10 +161,11 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
 async function handleMcpRequest(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   applyCors(res);
   try {
-    pruneMcpSessions();
     const parsedBody = req.method === 'POST' ? await readJsonBody(req) : undefined;
     if (parsedBody) logMcpMethods(parsedBody);
+    if (mcpTransportMode() === 'stateless') return handleStatelessMcpRequest(config, req, res, parsedBody);
 
+    pruneMcpSessions();
     const sessionId = headerValue(req.headers['mcp-session-id']);
     const session = sessionId ? mcpSessions.get(sessionId) : undefined;
     if (session) return handleExistingMcpSession(session, req, res, parsedBody);
@@ -176,6 +177,22 @@ async function handleMcpRequest(config: AppConfig, req: IncomingMessage, res: Se
     if (!res.headersSent) return sendMcpError(res, 500, 'Internal server error');
     res.end();
   }
+}
+
+async function handleStatelessMcpRequest(config: AppConfig, req: IncomingMessage, res: ServerResponse, parsedBody: unknown): Promise<void> {
+  if (req.method !== 'POST') return sendMcpError(res, 405, 'Method not allowed');
+  const server = await createServer(config);
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    void transport.close().catch(() => undefined);
+    void server.close().catch(() => undefined);
+  };
+  res.once('close', close);
+  await server.connect(transport);
+  await transport.handleRequest(req, res, parsedBody);
 }
 
 async function handleExistingMcpSession(session: McpSession, req: IncomingMessage, res: ServerResponse, parsedBody: unknown): Promise<void> {

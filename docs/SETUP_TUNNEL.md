@@ -125,15 +125,24 @@ node dist/index.js --config config/mickey.local.yaml --transport http
 
 Use No Auth only for a short-lived controlled connector test on loopback or a private test tunnel. Do not leave a public endpoint running unattended without bearer auth or stronger OAuth in front of it.
 
-## Streamable HTTP MCP session check
+## Streamable HTTP MCP transport check
 
-The HTTP endpoint is stateful Streamable MCP. Test clients must send:
+The HTTP endpoint defaults to stateful Streamable MCP. For a memory-bounded
+provider connector, set this on the managed OTA service and restart it:
+
+```bash
+OTA_MCP_TRANSPORT_MODE=stateless
+```
+
+Stateless mode creates a disposable server/transport for each request, emits no
+`mcp-session-id`, and keeps durable workspace, run, browser, and process state in
+their existing stores. Test clients must send:
 
 ```text
 Accept: application/json, text/event-stream
 ```
 
-The first `initialize` response returns `mcp-session-id`. Reuse that exact header for later `tools/list` and `tools/call` requests. Some local HTTP clients return header values as arrays; pass only the first string value back as the session header.
+In default stateful mode, the first `initialize` response returns `mcp-session-id`; reuse it for later requests. In stateless mode, each request reconnects independently and the response must not contain that header. Validate sequential and concurrent calls before making stateless mode the host default.
 
 Keep `security.max_request_bytes` small enough for expected MCP calls. The server rejects oversized `Content-Length` values before MCP handling. Keep `server.rate_limit` enabled as a local backstop even when the public tunnel provider also has rate limits.
 

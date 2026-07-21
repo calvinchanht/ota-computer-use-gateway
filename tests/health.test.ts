@@ -23,4 +23,10 @@ describe('health payload', () => {
     expect(raw).not.toContain('/secret/path');
     expect(raw).not.toContain('TEST_BEARER');
   });
+
+  it('reports stateless compatibility MCP transport when configured', () => {
+    vi.stubEnv('OTA_MCP_TRANSPORT_MODE', 'stateless');
+    expect(healthPayload(config, Date.now())).toMatchObject({ mcp_transport_mode: 'stateless' });
+    vi.unstubAllEnvs();
+  });
 });

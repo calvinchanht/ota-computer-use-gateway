@@ -6,6 +6,7 @@ export type HealthPayload = {
   transport: 'http';
   api_paths: { tool: '/api/v1/tool'; batch: '/api/v1/batch'; runs: '/api/v1/runs/{run_id}' };
   compatibility_mcp_path: '/mcp';
+  mcp_transport_mode: 'sessionful' | 'stateless';
   uptime_seconds: number;
   auth_required: boolean;
   rate_limit_enabled: boolean;
@@ -19,11 +20,16 @@ export function healthPayload(config: AppConfig, startedAt: number): HealthPaylo
     transport: 'http',
     api_paths: { tool: '/api/v1/tool', batch: '/api/v1/batch', runs: '/api/v1/runs/{run_id}' },
     compatibility_mcp_path: '/mcp',
+    mcp_transport_mode: mcpTransportMode(),
     uptime_seconds: uptimeSeconds(startedAt),
     auth_required: config.server.auth.enabled,
     rate_limit_enabled: config.server.rate_limit.enabled,
     max_request_bytes: config.security.max_request_bytes
   };
+}
+
+export function mcpTransportMode(): 'sessionful' | 'stateless' {
+  return process.env.OTA_MCP_TRANSPORT_MODE?.trim().toLowerCase() === 'stateless' ? 'stateless' : 'sessionful';
 }
 
 function uptimeSeconds(startedAt: number): number {
