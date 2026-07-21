@@ -12,10 +12,10 @@ describe('cua driver proxy tools', () => {
     delete process.env.THREADEX_JOB_API_BEARER_TOKEN;
   });
 
-  it('returns an instruction when screenshot visual follow-up has no job id', async () => {
+  it('returns an instruction when screenshot visual follow-up has neither job nor agent identity', async () => {
     const result = await screenshotVisualFollowup({ preview: { readable_url: 'https://boba-api.unrealize.com/api/v1/artifacts/screen.webp?sig=abc' } });
-    expect(result).toMatchObject({ state: 'not_requested', sent_to_provider: false, provider_visible: false, reason: 'threaddex_job_id_required' });
-    expect(String((result as any).instruction)).toContain('params.visual_followup.job_id');
+    expect(result).toMatchObject({ state: 'not_requested', sent_to_provider: false, provider_visible: false, reason: 'direct_visual_followup_agent_id_required' });
+    expect(String((result as any).instruction)).toContain('agent_id/workspace_id');
   });
 
   it('creates a Threaddex visual follow-up and returns a pollable public status URL', async () => {
