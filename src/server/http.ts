@@ -59,6 +59,7 @@ import { runArgvTailTool, runArgvTool, runConfiguredCommand } from '../tools/run
 import { processKill, processList, processLog, processStart, processStartArgv, processWrite } from '../tools/processes.js';
 import { listArtifacts, recordArtifact } from '../tools/artifacts.js';
 import { workspaceHelperList, workspaceHelperRun, workspaceHelperStatus, workspaceHelperUpsert } from '../tools/workspaceHelpers.js';
+import { otaMemoryCall, type OtaMemoryOperation } from '../tools/otaMemory.js';
 import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
 import { healthPayload, mcpTransportMode } from './health.js';
@@ -697,7 +698,18 @@ function callWorkspaceApiTool(config: AppConfig, workspace: Workspace, tool: str
     ?? callWindowsApiTool(workspace, tool, args)
     ?? callLargeFileApiTool(config, workspace, tool, args)
     ?? callProcessApiTool(config, workspace, tool, args)
-    ?? callWorkspaceHelperApiTool(config, workspace, tool, args);
+    ?? callWorkspaceHelperApiTool(config, workspace, tool, args)
+    ?? callOtaMemoryApiTool(workspace, tool, args);
+}
+
+function callOtaMemoryApiTool(workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
+  const operations: Record<string, OtaMemoryOperation> = {
+    memory_begin_turn: 'memory.begin_turn',
+    memory_commit_turn: 'memory.commit_turn',
+    memory_flush_session: 'memory.flush_session'
+  };
+  const operation = operations[tool];
+  return operation ? otaMemoryCall(workspace, operation, args) : undefined;
 }
 
 function callFileApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {

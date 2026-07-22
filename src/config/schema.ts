@@ -51,6 +51,26 @@ export const filesystemScopeSchema = z.object({
   host_root: z.string().min(1).default('/')
 }).default({ host_root: '/' });
 
+export const otaMemorySchema = z.object({
+  enabled: z.boolean().default(false),
+  python_executable: z.string().min(1).default('python'),
+  package_root: z.string().min(1).optional(),
+  database_path: z.string().min(1).optional(),
+  fixture_handles_file: z.string().min(1).optional(),
+  project_id: z.string().min(1).optional(),
+  workspace_id: z.string().min(1).optional(),
+  agent_id: z.string().min(1).optional(),
+  user_id: z.string().default(''),
+  scope_type: z.string().min(1).default('project'),
+  privacy: z.string().min(1).default('project_only'),
+  timeout_ms: z.number().int().min(1000).max(120000).default(30000)
+}).superRefine((value, context) => {
+  if (!value.enabled) return;
+  for (const key of ['package_root', 'database_path', 'project_id'] as const) {
+    if (!value[key]) context.addIssue({ code: 'custom', path: [key], message: `${key} is required when ota_memory is enabled` });
+  }
+}).prefault({});
+
 const workspaceBaseSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -67,6 +87,7 @@ const workspaceBaseSchema = z.object({
   windows_computer: windowsComputerSchema,
   commands: z.record(z.string(), z.string()).default({}),
   filesystem: filesystemScopeSchema,
+  ota_memory: otaMemorySchema,
   git: z.object({
     github_token_file: z.string().min(1).optional(),
     github_cli_wrapper: z.string().min(1).optional(),

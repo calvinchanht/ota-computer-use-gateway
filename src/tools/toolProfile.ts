@@ -13,6 +13,13 @@ export function toolProfile(config?: AppConfig) {
     command_runtime: commandRuntimeInfo(undefined, config?.command_runtime),
     github: githubProfile(),
     workspace_helpers: workspaceHelperProfile(),
+    optional_integrations: {
+      ota_memory: {
+        config_key: 'workspaces[].ota_memory',
+        tools: ['memory_begin_turn', 'memory_commit_turn', 'memory_flush_session'],
+        scope: 'server-owned database, project, workspace, agent, user, and privacy identity'
+      }
+    },
     tool_async: toolAsync(),
     aliases: aliases(),
     deprecated_tools: deprecatedTools(),

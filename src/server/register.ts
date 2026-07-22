@@ -11,6 +11,7 @@ import { registerGatewayTools } from './register/gateway.js';
 import { registerGenesisTools } from './register/genesis.js';
 import { registerJobLifecycleTools } from './register/jobLifecycle.js';
 import { registerMemoryTools } from './register/memory.js';
+import { registerOtaMemoryTools } from './register/otaMemory.js';
 import { registerPatchTools } from './register/patch.js';
 import { registerProcessTools } from './register/processes.js';
 import { registerSkillTools } from './register/skills.js';
@@ -35,6 +36,7 @@ export function registerTools(server: McpServer, config: AppConfig, workspaces: 
   registerFileTools(context);
   registerGitTools(context);
   registerMemoryTools(context);
+  registerOtaMemoryTools(context);
   registerSkillTools(context);
   registerPatchTools(context);
   registerApprovalTools(context);

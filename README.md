@@ -59,6 +59,7 @@ See `docs/CATALYST_ADAPTER.md` for the Catalyst adapter MVP plan and setup templ
 See `docs/CATALYST_CONNECTOR.md` for the Catalyst provider connector setup handoff.
 See `docs/CATALYST_PUBLIC_INGRESS.md` for the Catalyst public HTTPS ingress relay and recovery notes.
 See `docs/SIMILAR_PROJECT_SCAN.md` for adjacent GitHub project patterns we should borrow or avoid.
+See `docs/OTA_MEMORY.md` for the optional server-owned OTA-Memory lifecycle-v1 adapter and M14 fixture-handle contract.
 
 ## Mickey provider-thread proof
 

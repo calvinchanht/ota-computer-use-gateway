@@ -59,7 +59,10 @@ const CONTRACTS: Record<string, ContractSpec> = {
   read_process: spec({ workspace_id: 'string required', process_id: 'string required', max_bytes: 'number optional', cursor: 'number optional' }),
   write_process: spec({ workspace_id: 'string required', process_id: 'string required', input: 'string required', close_stdin: 'boolean optional' }),
   stop_process: spec({ workspace_id: 'string required', process_id: 'string required' }),
-  windows_screenshot: spec({ workspace_id: 'string required', monitor: 'string optional', visual_followup: 'object optional; may include job_id or agent_id', job_id: 'string optional', threaddex_job_id: 'string optional', threaddex_base_url: 'string optional' })
+  windows_screenshot: spec({ workspace_id: 'string required', monitor: 'string optional', visual_followup: 'object optional; may include job_id or agent_id', job_id: 'string optional', threaddex_job_id: 'string optional', threaddex_base_url: 'string optional' }),
+  memory_begin_turn: spec({ workspace_id: 'string required', request_id: 'string required', intent: 'string required', execution_handle: 'opaque string optional', session: 'object optional', resume_seed: 'string optional', relationship_mode: 'none|one_hop optional', budget: 'object optional' }),
+  memory_commit_turn: spec({ workspace_id: 'string required', request_id: 'string required', idempotency_key: 'string required', candidates: 'array required', execution_handle: 'opaque string optional', session: 'object optional' }),
+  memory_flush_session: spec({ workspace_id: 'string required', request_id: 'string required', idempotency_key: 'string required', execution_handle: 'opaque string optional', session: 'object optional', reason: 'string optional', active_task: 'string optional', transcript_summary: 'string optional', decisions: 'array optional', open_questions: 'array optional', artifacts: 'array optional', risks: 'array optional', next_actions: 'array optional', source_record_refs: 'array optional', budget: 'object optional' })
 };
 
 export function apiEnvelopeContract(): ApiContract {
