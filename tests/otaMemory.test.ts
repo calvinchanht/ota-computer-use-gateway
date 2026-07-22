@@ -44,6 +44,13 @@ describe('OTA-Memory lifecycle adapter', () => {
     expect(Object.keys(shape)).toContain('execution_handle');
     expect(Object.keys(shape)).not.toContain('database_path');
     expect(Object.keys(shape)).not.toContain('project_id');
+
+    const commitShape = zodShape(tools.memory_commit_turn.inputSchema);
+    const candidates = commitShape.candidates as z.ZodType;
+    expect(candidates.safeParse([{ candidate_key: 'provider-smoke', kind: 'observation',
+      content: 'Provider write smoke passed.', reason: 'explicit provider smoke' }]).success).toBe(true);
+    expect(candidates.safeParse([{ candidate_key: 'provider-smoke',
+      content: 'Provider write smoke passed.', reason: 'explicit provider smoke' }]).success).toBe(false);
   });
 });
 

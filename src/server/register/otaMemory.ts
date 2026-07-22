@@ -9,6 +9,30 @@ const sessionSchema = z.object({
   thread_id: z.string().optional(), job_id: z.string().optional()
 }).optional();
 const executionHandle = z.string().min(1).optional();
+const sourceRefs = z.record(z.string(), z.unknown()).optional();
+const memoryTarget = z.object({ record_type: z.string().min(1), record_id: z.string().min(1) });
+const observationCandidate = z.object({
+  candidate_key: z.string().min(1), kind: z.literal('observation'), content: z.string().min(1),
+  reason: z.string().min(1), source_refs: sourceRefs
+}).passthrough();
+const outcomeCandidate = z.object({
+  candidate_key: z.string().min(1), kind: z.literal('outcome'), summary: z.string().min(1),
+  reason: z.string().min(1), event_type: z.string().optional(), source_refs: sourceRefs
+}).passthrough();
+const evidenceCandidate = z.object({
+  candidate_key: z.string().min(1), kind: z.literal('tool_evidence'), summary: z.string().min(1),
+  reason: z.string().min(1), source_refs: z.record(z.string(), z.unknown())
+}).passthrough();
+const replacementCandidate = z.union([observationCandidate, outcomeCandidate, evidenceCandidate]);
+const commitCandidate = z.discriminatedUnion('kind', [
+  observationCandidate, outcomeCandidate, evidenceCandidate,
+  z.object({ candidate_key: z.string().min(1), kind: z.literal('correction'), target: memoryTarget,
+    reason: z.string().min(1), replacement: replacementCandidate.optional() }).passthrough(),
+  z.object({ candidate_key: z.string().min(1), kind: z.literal('forget'), target: memoryTarget,
+    reason: z.string().min(1) }).passthrough(),
+  z.object({ candidate_key: z.string().min(1), kind: z.literal('supersession'), target: memoryTarget,
+    replacement: replacementCandidate, reason: z.string().min(1) }).passthrough()
+]);
 
 export function registerOtaMemoryTools(context: RegisterContext): void {
   if (![...context.workspaces.values()].some((workspace) => workspace.ota_memory?.enabled)) return;
@@ -38,10 +62,10 @@ function beginTurnSpec() {
 function commitTurnSpec() {
   return {
     title: 'Memory commit turn',
-    description: 'Commit only explicit OTA-Memory lifecycle-v1 candidates with durable idempotency and complete receipts.',
+    description: 'Commit explicit lifecycle-v1 candidates. Each candidate requires candidate_key, kind, reason, and the kind-specific content shown by the schema.',
     inputSchema: {
       workspace_id: z.string(), request_id: z.string().min(1), idempotency_key: z.string().min(1),
-      candidates: z.array(z.record(z.string(), z.unknown())), execution_handle: executionHandle, session: sessionSchema
+      candidates: z.array(commitCandidate), execution_handle: executionHandle, session: sessionSchema
     },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
     annotations: WRITE_FILE
