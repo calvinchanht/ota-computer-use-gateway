@@ -32,8 +32,9 @@ describe('OTA-Memory lifecycle adapter', () => {
     const result = await otaMemoryCall(workspace, 'memory.flush_session', {
       request_id: 'flush-1', idempotency_key: 'flush-key-1', execution_handle: 'm14-fixture-1'
     });
-    const receipt = result.data as { boundary: { project_id: string } };
+    const receipt = result.data as { boundary: { project_id: string }; adapter_marker: string };
     expect(receipt.boundary.project_id).toBe('m14-isolated');
+    expect(receipt.adapter_marker).toBe('handle-package');
     await expect(otaMemoryCall(workspace, 'memory.begin_turn', {
       request_id: 'begin-2', intent: 'test', execution_handle: 'unknown'
     })).rejects.toThrow(/unknown or expired/);
@@ -59,11 +60,20 @@ async function memoryFixture(withHandle = false) {
   const packageRoot = path.join(root, 'package');
   await mkdir(path.join(packageRoot, 'memory_api'), { recursive: true });
   await writeFile(path.join(packageRoot, 'memory_api', '__init__.py'), '');
-  await writeFile(path.join(packageRoot, 'memory_api', 'gateway_adapter.py'), fakeAdapter());
+  await writeFile(path.join(packageRoot, 'memory_api', 'gateway_adapter.py'), fakeAdapter('default-package'));
   const handlesFile = path.join(root, 'handles.json');
-  if (withHandle) await writeFile(handlesFile, JSON.stringify({ handles: {
-    'm14-fixture-1': { database_path: path.join(root, 'm14.sqlite3'), project_id: 'm14-isolated' }
-  } }));
+  if (withHandle) {
+    const handlePackage = path.join(root, 'handle-package');
+    await mkdir(path.join(handlePackage, 'memory_api'), { recursive: true });
+    await writeFile(path.join(handlePackage, 'memory_api', '__init__.py'), '');
+    await writeFile(path.join(handlePackage, 'memory_api', 'gateway_adapter.py'), fakeAdapter('handle-package'));
+    await writeFile(handlesFile, JSON.stringify({ handles: {
+      'm14-fixture-1': {
+        database_path: path.join(root, 'm14.sqlite3'), package_root: handlePackage,
+        project_id: 'm14-isolated'
+      }
+    } }));
+  }
   return { root, config: fixtureConfig(root, packageRoot, withHandle ? handlesFile : undefined) };
 }
 
@@ -85,12 +95,12 @@ function pythonExecutable(): string {
   return process.env.PYTHON ?? (os.platform() === 'win32' ? 'python' : 'python3');
 }
 
-function fakeAdapter(): string {
+function fakeAdapter(marker: string): string {
   return [
     'import json, sys',
     'request = json.load(sys.stdin)',
     'args = request["arguments"]',
-    'result = {"contract_version":"lifecycle-v1","operation":request["operation"],"request_id":args["request_id"],"status":"ok","memory_used":False,"boundary":args["scope"],"receipt":{},"warnings":[],"errors":[]}',
+    `result = {"contract_version":"lifecycle-v1","operation":request["operation"],"request_id":args["request_id"],"status":"ok","memory_used":False,"boundary":args["scope"],"adapter_marker":${JSON.stringify(marker)},"receipt":{},"warnings":[],"errors":[]}`,
     'print(json.dumps(result))',
     ''
   ].join('\n');

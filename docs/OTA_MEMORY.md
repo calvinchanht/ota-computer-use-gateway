@@ -36,12 +36,13 @@ When `server.exposed_tools` is non-empty, include the three tool names there as 
 
 ## Opaque M14 fixture handles
 
-An optional server-owned handle store may map opaque execution handles to isolated databases and scopes:
+An optional server-owned handle store may map opaque execution handles to isolated package roots, databases, and scopes:
 
 ```json
 {
   "handles": {
     "m14-fixture-opaque-1": {
+      "package_root": "D:/Projects/Anna/deployments/ota-memory/releases/v0.1.78",
       "database_path": "D:/Projects/Anna/runtime/ota-memory/m14/fixture-1.sqlite3",
       "project_id": "m14-fixture-1",
       "workspace_id": "anna",
@@ -55,7 +56,7 @@ An optional server-owned handle store may map opaque execution handles to isolat
 }
 ```
 
-The model may supply only `execution_handle`. Unknown, expired, unavailable, or malformed stores fail explicitly without returning server paths.
+The model may supply only `execution_handle`. The trusted handle may override `package_root` as well as database and scope; relative paths are rejected. Unknown, expired, unavailable, or malformed stores fail explicitly without returning server paths.
 
 ## Activation gate
 

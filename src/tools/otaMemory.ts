@@ -7,14 +7,14 @@ import type { Workspace } from '../core/workspaces.js';
 export type OtaMemoryOperation = 'memory.begin_turn' | 'memory.commit_turn' | 'memory.flush_session';
 export const OTA_MEMORY_TOOL_NAMES = ['memory_begin_turn', 'memory_commit_turn', 'memory_flush_session'] as const;
 type JsonObject = Record<string, unknown>;
-type MemoryTarget = { databasePath: string; scope: JsonObject };
+type MemoryTarget = { databasePath: string; packageRoot: string; scope: JsonObject };
 
 export async function otaMemoryCall(workspace: Workspace, operation: OtaMemoryOperation, args: JsonObject) {
   const config = workspace.ota_memory;
   if (!config?.enabled) throw new Error('OTA-Memory is not configured for this workspace');
   const target = await resolveTarget(workspace, optionalString(args.execution_handle));
   const arguments_ = lifecycleArguments(operation, args, target.scope);
-  const receipt = await invokeAdapter(workspace, operation, target.databasePath, arguments_);
+  const receipt = await invokeAdapter(workspace, operation, target.packageRoot, target.databasePath, arguments_);
   return ok(`${operation} ${String(receipt.status ?? 'completed')}`, receipt);
 }
 
@@ -59,6 +59,7 @@ async function readHandleStore(file: string): Promise<JsonObject> {
 function targetFromConfig(workspace: Workspace, config: NonNullable<Workspace['ota_memory']>): MemoryTarget {
   return {
     databasePath: absolutePath(config.database_path, 'ota_memory.database_path'),
+    packageRoot: absolutePath(config.package_root, 'ota_memory.package_root'),
     scope: configuredScope(workspace, config)
   };
 }
@@ -66,6 +67,7 @@ function targetFromConfig(workspace: Workspace, config: NonNullable<Workspace['o
 function targetFromEntry(workspace: Workspace, config: NonNullable<Workspace['ota_memory']>, entry: JsonObject): MemoryTarget {
   return {
     databasePath: absolutePath(entry.database_path, 'fixture database_path'),
+    packageRoot: absolutePath(entry.package_root ?? config.package_root, 'fixture package_root'),
     scope: configuredScope(workspace, {
       ...config,
       project_id: requiredString(entry.project_id, 'fixture project_id'),
@@ -89,9 +91,8 @@ function configuredScope(workspace: Workspace, config: NonNullable<Workspace['ot
   };
 }
 
-async function invokeAdapter(workspace: Workspace, operation: OtaMemoryOperation, databasePath: string, args: JsonObject): Promise<JsonObject> {
+async function invokeAdapter(workspace: Workspace, operation: OtaMemoryOperation, packageRoot: string, databasePath: string, args: JsonObject): Promise<JsonObject> {
   const config = requiredConfig(workspace);
-  const packageRoot = absolutePath(config.package_root, 'ota_memory.package_root');
   const request = JSON.stringify({ operation, database_path: databasePath, arguments: args });
   let output: string;
   try { output = await runPython(config.python_executable, packageRoot, request, config.timeout_ms); }
