@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.3",
     "yaml": "latest",
     "yazl": "^3.3.1",
     "zod": "latest"
