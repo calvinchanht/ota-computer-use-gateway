@@ -54,7 +54,7 @@ function registerDeprecatedProcessTools(context: RegisterContext): void {
 function commandTool() {
   return {
     title: 'Run command',
-    description: 'Run a scoped argv command in the workspace. Prefer cmd_array with executable and arguments as separate strings.',
+    description: 'Run a scoped argv command in the workspace. Prefer cmd_array. For work that may exceed the synchronous request window, set tail=true and poll read_process.',
     inputSchema: {
       workspace_id: z.string(),
       cmd_array: z.array(z.string()).min(1),
@@ -89,7 +89,7 @@ function execTool() {
 function startProcessTool() {
   return {
     title: 'Start process',
-    description: 'Start a scoped local background command. Prefer cmd_array; command remains legacy shell-string compatibility.',
+    description: 'Start a scoped background command and return immediately. Prefer cmd_array, then poll read_process. The default managed-process lifetime is 60 minutes.',
     inputSchema: {
       workspace_id: z.string(),
       cmd_array: z.array(z.string()).min(1).optional(),
@@ -112,15 +112,15 @@ function deprecatedStartProcessTool() {
 
 function startProcessFromArgs(config: RegisterContext['config'], workspace: Parameters<typeof processStart>[1], args: { cmd_array?: string[]; command?: string; cwd?: string; timeout_ms?: number }) {
   if (args.cmd_array !== undefined && args.command !== undefined) throw new Error('start_process cmd_array/command conflict: prefer cmd_array and remove legacy command.');
-  if (args.cmd_array !== undefined) return processStartArgv(config, workspace, args.cmd_array, args.cwd ?? '.', args.timeout_ms ?? 30000);
+  if (args.cmd_array !== undefined) return processStartArgv(config, workspace, args.cmd_array, args.cwd ?? '.', args.timeout_ms);
   if (args.command !== undefined) return processStart(config, workspace, args.command);
   throw new Error('cmd_array must be an array');
 }
 
 function runCommandFromArgs(config: RegisterContext['config'], workspace: Parameters<typeof runArgvTool>[1], args: { cmd_array: string[]; cwd?: string; timeout_ms?: number; max_stdout_bytes?: number; max_stderr_bytes?: number; tail?: boolean }) {
   const cwd = args.cwd ?? '.';
+  if (args.tail) return runArgvTailTool(config, workspace, args.cmd_array, cwd, args.timeout_ms);
   const timeoutMs = args.timeout_ms ?? 30000;
-  if (args.tail) return runArgvTailTool(config, workspace, args.cmd_array, cwd, timeoutMs);
   return runArgvTool(config, workspace, args.cmd_array, cwd, timeoutMs, args.max_stdout_bytes ?? 20000, args.max_stderr_bytes ?? 8000);
 }
 

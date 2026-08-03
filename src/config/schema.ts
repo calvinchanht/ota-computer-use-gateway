@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { brokeredExecutorsConfigSchema } from '../brokeredExecutor/config.js';
 
+export const DEFAULT_MAX_PROCESS_MS = 60 * 60 * 1000;
+
 export const browserProfileSchema = z.object({
   label: z.string().min(1).optional(),
   user_data_dir: z.string().min(1).optional(),
@@ -182,9 +184,14 @@ export const configSchema = z.object({
     max_response_bytes: z.number().int().positive().default(50000),
     max_request_bytes: z.number().int().positive().default(1000000),
     max_search_results: z.number().int().positive().default(50),
-    max_exec_ms: z.number().int().positive().default(120000)
+    max_exec_ms: z.number().int().positive().default(120000),
+    max_process_ms: z.number().int().positive().optional()
   }).prefault({})
 });
 
 export type AppConfig = z.infer<typeof configSchema>;
 export type WorkspaceConfig = z.infer<typeof workspaceSchema>;
+
+export function configuredMaxProcessMs(config: AppConfig): number {
+  return config.security.max_process_ms ?? DEFAULT_MAX_PROCESS_MS;
+}

@@ -5,7 +5,7 @@ import { ok } from '../core/result.js';
 import { resolveInside } from '../core/paths.js';
 import { truncateText } from '../core/text.js';
 import { jobLifecycleCommandWarnings, commandTextFromArgv } from './jobLifecycleGuard.js';
-import type { AppConfig } from '../config/schema.js';
+import { configuredMaxProcessMs, type AppConfig } from '../config/schema.js';
 import type { Workspace } from '../core/workspaces.js';
 
 const MAX_OUTPUT_BYTES = 50000;
@@ -47,13 +47,14 @@ export async function runArgvTool(config: AppConfig, workspace: Workspace, cmd: 
   return response;
 }
 
-export async function runArgvTailTool(config: AppConfig, workspace: Workspace, cmd: string[], cwdPath = '.', timeoutMs = 30000) {
+export async function runArgvTailTool(config: AppConfig, workspace: Workspace, cmd: string[], cwdPath = '.', timeoutMs?: number) {
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   if (!Array.isArray(cmd) || cmd.length === 0) throw new Error('cmd array is required');
   const [command, ...args] = cmd.map(String);
   const warnings = jobLifecycleCommandWarnings(commandTextFromArgv([command, ...args]));
   const cwd = await resolveInside(workspace, cwdPath, config);
-  const timeout = Math.min(Math.max(1, timeoutMs), config.security.max_exec_ms);
+  const limit = configuredMaxProcessMs(config);
+  const timeout = Math.min(Math.max(1, timeoutMs ?? limit), limit);
   const item = startManagedArgvProcess(command, args, cwd.absolute, timeout, cmd.join(' '));
   const response = ok('command started for tailing', { ...describeManagedProcess(item), command_argv: cmd, cwd: cwd.relative, timeout_ms: timeout, tail_supported: true, read_with: 'read_process', initial_cursor: 0 });
   response.warnings = warnings;

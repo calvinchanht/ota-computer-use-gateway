@@ -27,7 +27,7 @@ describe('process tools', () => {
     const workspace = await fixtureWorkspace(true);
     const started = await processStartArgv(config, workspace, [process.execPath, 'background.cjs']);
     const processId = String(started.data?.process_id);
-    expect(started.data).toMatchObject({ command_argv: [process.execPath, 'background.cjs'], tail_supported: true, read_with: 'read_process' });
+    expect(started.data).toMatchObject({ command_argv: [process.execPath, 'background.cjs'], timeout_ms: 3600000, tail_supported: true, read_with: 'read_process' });
     await expect(waitForOutput(processId, 'background-ok')).resolves.toContain('background-ok');
   });
 
@@ -80,8 +80,18 @@ describe('process tools', () => {
     const started = await runArgvTailTool(config, workspace, [process.execPath, '-e', "process.stdout.write('tail-mode-ok')"]);
     const processId = String((started.data as { process_id: string }).process_id);
     expect(started.summary).toBe('command started for tailing');
-    expect(JSON.stringify(started.data)).toContain('read_process');
+    expect(started.data).toMatchObject({ timeout_ms: 3600000, read_with: 'read_process' });
     await expect(waitForOutput(processId, 'tail-mode-ok')).resolves.toContain('tail-mode-ok');
+  });
+
+  it('clamps requested managed-process lifetime to its independent limit', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const bounded = { ...config, security: { ...config.security, max_process_ms: 600000 } };
+    const started = await processStartArgv(bounded, workspace, [process.execPath, 'wait.cjs'], '.', 3600000);
+    const processId = String(started.data?.process_id);
+
+    expect(started.data).toMatchObject({ timeout_ms: 600000, running: true });
+    expect(processKill(processId).data).toMatchObject({ killed: true });
   });
 
   it('terminates running managed processes during gateway shutdown', async () => {

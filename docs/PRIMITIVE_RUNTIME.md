@@ -115,7 +115,7 @@ For long-running commands where incremental output matters, prefer:
 start_process(cmd_array=[...]) -> read_process(cursor=previous next_cursor) -> stop_process if needed
 ```
 
-This gives cursor-based tail behavior without retrying the original command. `read_process` returns `output`, `cursor`, `next_cursor`, `cursor_clamped`, `running`, `exit_code`, and `tail_supported`.
+This gives cursor-based tail behavior without retrying the original command. `read_process` returns `output`, `cursor`, `next_cursor`, `cursor_clamped`, `running`, `exit_code`, and `tail_supported`. Synchronous commands remain bounded by `security.max_exec_ms`; managed background commands use the independent `security.max_process_ms`, which defaults to 60 minutes. A requested process timeout is clamped to that managed-process limit.
 
 If a stale or out-of-range cursor is provided, the gateway clamps it to the current buffer and sets `cursor_clamped=true`. Treat this as a recoverable tail-position correction, not a reason to rerun the original command.
 
