@@ -833,7 +833,7 @@ function callProcessApiTool(config: AppConfig, workspace: Workspace, tool: strin
   if (tool === 'read_process') return processLog(requiredString(args.process_id, 'process_id'), optionalNumber(args.max_bytes) ?? 50000, optionalNumber(args.cursor));
   if (tool === 'write_process') return processWrite(requiredString(args.process_id, 'process_id'), requiredString(args.input, 'input'), Boolean(args.close_stdin));
   if (tool === 'stop_process') return processKill(requiredString(args.process_id, 'process_id'));
-  if (tool === 'run_command' && Boolean(args.tail)) return runArgvTailTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000);
+  if (tool === 'run_command' && Boolean(args.tail)) return runArgvTailTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms));
   if (tool === 'run_command') return runArgvTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000, optionalNumber(args.max_stdout_bytes) ?? 20000, optionalNumber(args.max_stderr_bytes) ?? 8000);
   if (tool === 'run_configured_command') return runConfiguredCommand(config, workspace, requiredString(args.command_id, 'command_id'));
   return undefined;
@@ -896,7 +896,7 @@ async function startProcessFromArgs(config: AppConfig, workspace: Workspace, arg
   const preferred = args.cmd_array;
   const legacyCommand = args.command;
   if (preferred !== undefined && legacyCommand !== undefined) throw new Error('start_process cmd_array/command conflict: prefer cmd_array and remove legacy command.');
-  if (preferred !== undefined) return processStartArgv(config, workspace, requiredStringArray(preferred, 'cmd_array'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 30000);
+  if (preferred !== undefined) return processStartArgv(config, workspace, requiredStringArray(preferred, 'cmd_array'), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms));
   if (legacyCommand !== undefined) return processStart(config, workspace, requiredString(legacyCommand, 'command'));
   throw new Error('cmd_array must be an array');
 }

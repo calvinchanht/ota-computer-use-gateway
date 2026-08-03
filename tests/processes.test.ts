@@ -1,3 +1,4 @@
+import { createServer, type Server } from 'node:http';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -5,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { processKill, processList, processLog, processStart, processStartArgv, processWrite } from '../src/tools/processes.js';
 import { shutdownManagedProcesses } from '../src/core/processManager.js';
 import { runArgvTailTool } from '../src/tools/runCommand.js';
+import { createHttpRequestHandler } from '../src/server/http.js';
 import type { AppConfig } from '../src/config/schema.js';
 import type { Workspace } from '../src/core/workspaces.js';
 
@@ -94,6 +96,26 @@ describe('process tools', () => {
     expect(processKill(processId).data).toMatchObject({ killed: true });
   });
 
+  it('uses the managed-process default through the HTTP facade', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const server: Server = createServer(createHttpRequestHandler(httpConfig(workspace)));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('expected TCP address');
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/v1/tool`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ operation: 'start_process', arguments: { workspace_id: 'test', cmd_array: [process.execPath, 'wait.cjs'] } })
+      });
+      const body = await response.json() as { data: { process_id: string; timeout_ms: number } };
+      expect(body.data.timeout_ms).toBe(3600000);
+      expect(processKill(body.data.process_id).data).toMatchObject({ killed: true });
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  });
+
   it('terminates running managed processes during gateway shutdown', async () => {
     const workspace = await fixtureWorkspace(true);
     const started = await processStart(config, workspace, 'node wait.cjs');
@@ -131,6 +153,15 @@ async function waitForOutput(processId: string, expected: string, cursor?: numbe
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   return (processLog(processId, 50000, cursor).data as { output: string }).output;
+}
+
+function httpConfig(workspace: Workspace): AppConfig {
+  return {
+    ...config,
+    server: { host: '127.0.0.1', port: 0, auth: { enabled: false, bearer_token_env: 'TEST_TOKEN', allow_loopback_without_auth: true }, rate_limit: { enabled: false, window_ms: 60000, max_requests: 120, trust_proxy_headers: false }, tool_annotations: { mode: 'honest' }, exposed_tools: [] },
+    workspaces: [workspace],
+    brokered_executors: { enabled: false, include_action_schema: false, default_ttl_ms: 60000, default_lease_ms: 30000, executors: [] }
+  };
 }
 
 async function waitForSpawnError(processId: string): Promise<{ running: boolean; spawn_error_code?: string; output: string }> {
