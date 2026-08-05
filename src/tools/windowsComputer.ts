@@ -18,6 +18,12 @@ export type WindowsBatchStep =
   | { tool: string; args?: Record<string, unknown> }
   | { delay_ms: number };
 
+export interface WindowsUiaSelector {
+  automation_id?: string;
+  name?: string;
+  control_type?: string;
+}
+
 export async function windowsComputerStatus(workspace: Workspace) {
   return ok('windows computer status', {
     workspace_id: workspace.id,
@@ -54,10 +60,28 @@ export async function windowsScreenshot(workspace: Workspace, monitor = 'primary
   return ok('windows screenshot', windowsScreenshotResponse(data, visualFollowup));
 }
 
+export async function windowsWindowScreenshot(workspace: Workspace, hwnd: number, params: Record<string, unknown> = {}) {
+  ensureEnabled(workspace);
+  ensureCapability(workspace, 'allow_screenshot');
+  ensureCapability(workspace, 'allow_window_management');
+  const target = integer(hwnd, 'hwnd');
+  ensureWindows();
+  const paths = screenshotPaths(workspace);
+  await mkdir(path.dirname(paths.full), { recursive: true });
+  const data = await psObject(windowScreenshotScript(paths.full, target));
+  const preview = await writePreview(paths.full, paths.preview);
+  const artifact = artifactPair(workspace, paths.full, preview);
+  const payload = { ...data, artifact, preview: artifact.preview, full: artifact.full };
+  const visualFollowup = await screenshotVisualFollowup(payload, { ...params, source: 'windows_computer', attachment_path: paths.preview });
+  return ok('windows window screenshot', windowsScreenshotResponse(data, visualFollowup));
+}
+
 function windowsScreenshotResponse(data: Record<string, unknown>, visualFollowup: unknown) {
   return {
     monitor: data.monitor,
+    hwnd: data.hwnd,
     bounds: data.bounds,
+    capture_method: data.capture_method,
     visual_followup: windowsVisualFollowupResponse(visualFollowup)
   };
 }
@@ -72,12 +96,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-export async function windowsUiaTree(workspace: Workspace, maxNodes = 120) {
+export async function windowsUiaTree(workspace: Workspace, maxNodes = 120, hwnd?: number) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_uia_tree');
   const limit = boundedInteger(maxNodes, 'max_nodes', 1, 1000);
+  const target = hwnd === undefined ? undefined : integer(hwnd, 'hwnd');
   ensureWindows();
-  return ok('windows uia tree', await psJson(uiaTreeScript(limit)));
+  return ok('windows uia tree', await psJson(uiaTreeScript(limit, target)));
 }
 
 export async function windowsListWindows(workspace: Workspace) {
@@ -93,6 +118,37 @@ export async function windowsFocusWindow(workspace: Workspace, hwnd: number) {
   const target = integer(hwnd, 'hwnd');
   ensureWindows();
   return ok('windows focus window', await psJson(focusWindowScript(target)));
+}
+
+export async function windowsPlaceWindow(workspace: Workspace, hwnd: number, monitor = 'primary', x = 0, y = 0, width?: number, height?: number) {
+  ensureEnabled(workspace);
+  ensureCapability(workspace, 'allow_window_management');
+  ensureMonitorAllowed(workspace, monitor);
+  const target = integer(hwnd, 'hwnd');
+  const offset = screenPoint(x, y);
+  const size = optionalSize(width, height);
+  ensureWindows();
+  return ok('windows placed window', await psJson(placeWindowScript(target, monitor, offset.x, offset.y, size.width, size.height)));
+}
+
+export async function windowsUiaRead(workspace: Workspace, hwnd: number, selector: WindowsUiaSelector, maxChars = 20000) {
+  ensureEnabled(workspace);
+  ensureCapability(workspace, 'allow_uia_tree');
+  const target = integer(hwnd, 'hwnd');
+  const normalized = normalizeUiaSelector(selector);
+  const limit = boundedInteger(maxChars, 'max_chars', 1, 200000);
+  ensureWindows();
+  return ok('windows uia value', await psJson(uiaReadScript(target, normalized, limit)));
+}
+
+export async function windowsUiaSetValue(workspace: Workspace, hwnd: number, selector: WindowsUiaSelector, value: string) {
+  ensureEnabled(workspace);
+  ensureCapability(workspace, 'allow_uia_tree');
+  ensureCapability(workspace, 'allow_keyboard');
+  const target = integer(hwnd, 'hwnd');
+  const normalized = normalizeUiaSelector(selector);
+  ensureWindows();
+  return ok('windows uia value set', await psJson(uiaSetValueScript(target, normalized, value)));
 }
 
 export async function windowsLaunchApp(workspace: Workspace, filePath: string, args: string[] = [], cwd?: string) {
@@ -177,25 +233,28 @@ export async function windowsWindowScroll(workspace: Workspace, hwnd: number, x:
   return ok('windows window scroll', await psJson(windowScrollScript(integer(hwnd, 'hwnd'), finiteNumber(x, 'x'), finiteNumber(y, 'y'), scrollDelta, coordinateSpaceName(coordinateSpace), Boolean(focus))));
 }
 
-export async function windowsTypeText(workspace: Workspace, text: string) {
+export async function windowsTypeText(workspace: Workspace, text: string, hwnd?: number) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_keyboard');
+  const target = optionalHwnd(workspace, hwnd);
   ensureWindows();
-  return ok('windows typed text', await psJson(typeTextScript(text)));
+  return ok('windows typed text', await psJson(typeTextScript(text, target)));
 }
 
-export async function windowsKey(workspace: Workspace, key: string) {
+export async function windowsKey(workspace: Workspace, key: string, hwnd?: number) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_keyboard');
+  const target = optionalHwnd(workspace, hwnd);
   ensureWindows();
-  return ok('windows key', await psJson(sendKeysScript(key)));
+  return ok('windows key', await psJson(sendKeysScript(key, target)));
 }
 
-export async function windowsHotkey(workspace: Workspace, keys: string[]) {
+export async function windowsHotkey(workspace: Workspace, keys: string[], hwnd?: number) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_keyboard');
+  const target = optionalHwnd(workspace, hwnd);
   ensureWindows();
-  return ok('windows hotkey', await psJson(sendKeysScript(hotkeySequence(keys))));
+  return ok('windows hotkey', await psJson(sendKeysScript(hotkeySequence(keys), target)));
 }
 
 export async function windowsClipboardGet(workspace: Workspace) {
@@ -242,9 +301,9 @@ async function runNamedTool(workspace: Workspace, tool: string, args: Record<str
   if (tool === 'window_mouse_move') return windowsWindowMouseMove(workspace, num(args.hwnd), num(args.x), num(args.y), str(args.coordinate_space, 'client'), bool(args.focus, false));
   if (tool === 'window_drag') return windowsWindowDrag(workspace, num(args.hwnd), num(args.from_x), num(args.from_y), num(args.to_x), num(args.to_y), str(args.coordinate_space, 'client'), bool(args.focus, true));
   if (tool === 'window_scroll') return windowsWindowScroll(workspace, num(args.hwnd), num(args.x), num(args.y), num(args.delta), str(args.coordinate_space, 'client'), bool(args.focus, true));
-  if (tool === 'type_text') return windowsTypeText(workspace, str(args.text));
-  if (tool === 'key') return windowsKey(workspace, str(args.key));
-  if (tool === 'hotkey') return windowsHotkey(workspace, arr(args.keys));
+  if (tool === 'type_text') return windowsTypeText(workspace, str(args.text), optionalNum(args.hwnd));
+  if (tool === 'key') return windowsKey(workspace, str(args.key), optionalNum(args.hwnd));
+  if (tool === 'hotkey') return windowsHotkey(workspace, arr(args.keys), optionalNum(args.hwnd));
   throw new Error(`unsupported windows batch tool: ${tool}`);
 }
 
@@ -296,8 +355,13 @@ function screenshotScript(file: string, monitor: string) {
   return `${formsAssemblies()}; ${screenObjFn()}; ${boundsFn()}; ${captureFn()}; $b = bounds ${q(monitor)}; capture $b ${q(file)}; @{ monitor=${q(monitor)}; bounds=rectObj $b; path=${q(file)} } | ConvertTo-Json -Depth 5`;
 }
 
-function uiaTreeScript(maxNodes: number) {
-  return `${uiaAssemblies()}; ${rectObjFn()}; ${uiaWalkFn()}; $root=[System.Windows.Automation.AutomationElement]::RootElement; $out=New-Object System.Collections.ArrayList; walk $root 0 ${Math.max(1, Math.trunc(maxNodes))} $out; @{ nodes=$out; count=$out.Count; truncated=($out.Count -ge ${Math.max(1, Math.trunc(maxNodes))}) } | ConvertTo-Json -Depth 8`;
+function windowScreenshotScript(file: string, hwnd: number) {
+  return `${formsAssemblies()}; ${win32WindowTypes()}; ${windowCaptureTypes()}; $focus=[Win32Windows]::Focus([IntPtr]${int(hwnd)}); $result=captureWindow ${int(hwnd)} ${q(file)}; $result.focus=$focus; $result | ConvertTo-Json -Depth 6`;
+}
+
+function uiaTreeScript(maxNodes: number, hwnd?: number) {
+  const root = hwnd === undefined ? '[System.Windows.Automation.AutomationElement]::RootElement' : `[System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]${int(hwnd)})`;
+  return `${uiaAssemblies()}; ${rectObjFn()}; ${uiaWalkFn()}; $root=${root}; if($root -eq $null){throw 'UI Automation root not found'}; $out=New-Object System.Collections.ArrayList; walk $root 0 ${Math.max(1, Math.trunc(maxNodes))} $out; @{ hwnd=${psOptionalLiteral(hwnd)}; nodes=$out; count=$out.Count; truncated=($out.Count -ge ${Math.max(1, Math.trunc(maxNodes))}) } | ConvertTo-Json -Depth 8`;
 }
 
 function listWindowsScript() {
@@ -305,7 +369,19 @@ function listWindowsScript() {
 }
 
 function focusWindowScript(hwnd: number) {
-  return `${win32WindowTypes()}; $ok=[Win32Windows]::Focus([IntPtr]${Math.trunc(hwnd)}); @{ hwnd=${Math.trunc(hwnd)}; focused=$ok } | ConvertTo-Json`;
+  return `${win32WindowTypes()}; [Win32Windows]::Focus([IntPtr]${Math.trunc(hwnd)}) | ConvertTo-Json -Depth 5`;
+}
+
+function placeWindowScript(hwnd: number, monitor: string, x: number, y: number, width?: number, height?: number) {
+  return `${formsAssemblies()}; ${win32WindowTypes()}; ${windowPlacementTypes()}; ${resolveMonitorFn()}; $s=resolveMonitor ${q(monitor)}; $a=$s.WorkingArea; $w=${psOptionalNumber(width, '$a.Width')}; $h=${psOptionalNumber(height, '$a.Height')}; $ok=[Win32Placement]::Place([IntPtr]${int(hwnd)},$a.X+${int(x)},$a.Y+${int(y)},$w,$h); if(-not $ok){throw 'MoveWindow failed'}; $focus=[Win32Windows]::Focus([IntPtr]${int(hwnd)}); @{ hwnd=${int(hwnd)}; monitor=$s.DeviceName; bounds=@{x=$a.X+${int(x)};y=$a.Y+${int(y)};width=$w;height=$h}; focused=$focus.focused; foreground_hwnd=$focus.foreground_hwnd } | ConvertTo-Json -Depth 5`;
+}
+
+function uiaReadScript(hwnd: number, selector: Required<WindowsUiaSelector>, maxChars: number) {
+  return `${uiaAssemblies()}; ${uiaSelectorFn()}; $e=findUiaElement ${int(hwnd)} ${q(selector.automation_id)} ${q(selector.name)} ${q(selector.control_type)}; $source='name'; $text=$e.Current.Name; $patterns=@($e.GetSupportedPatterns() | ForEach-Object {$_.ProgrammaticName}); try{$p=$e.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern);$source='value';$text=$p.Current.Value}catch{}; if($source -eq 'name'){try{$p=$e.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern);$source='text';$text=$p.DocumentRange.GetText(${int(maxChars)})}catch{}}; if($source -eq 'name'){try{$p=$e.GetCurrentPattern([System.Windows.Automation.LegacyIAccessiblePattern]::Pattern);$source='legacy_value';$text=$p.Current.Value}catch{}}; if($null -eq $text){$text=''}; if($text.Length -gt ${int(maxChars)}){$text=$text.Substring(0,${int(maxChars)})}; @{ hwnd=${int(hwnd)}; automation_id=$e.Current.AutomationId; name=$e.Current.Name; control_type=($e.Current.ControlType.ProgrammaticName -replace '^ControlType\\.'); source=$source; text=$text; supported_patterns=$patterns; truncated=($text.Length -ge ${int(maxChars)}) } | ConvertTo-Json -Depth 6`;
+}
+
+function uiaSetValueScript(hwnd: number, selector: Required<WindowsUiaSelector>, value: string) {
+  return `${formsAssemblies()}; ${uiaAssemblies()}; ${win32WindowTypes()}; ${uiaSelectorFn()}; $e=findUiaElement ${int(hwnd)} ${q(selector.automation_id)} ${q(selector.name)} ${q(selector.control_type)}; $method=''; try{$p=$e.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern);if($p.Current.IsReadOnly){throw 'UI Automation ValuePattern is read-only'};$p.SetValue(${q(value)});$method='ValuePattern'}catch{if($_.Exception.Message -like '*read-only*'){throw}}; if(-not $method){try{$p=$e.GetCurrentPattern([System.Windows.Automation.LegacyIAccessiblePattern]::Pattern);$p.SetValue(${q(value)});$method='LegacyIAccessiblePattern'}catch{}}; if(-not $method -and $e.Current.NativeWindowHandle -ne 0){if([Win32Windows]::SetControlText([IntPtr]$e.Current.NativeWindowHandle,${q(value)})){$method='WM_SETTEXT'}}; if(-not $method){$focus=[Win32Windows]::Focus([IntPtr]${int(hwnd)});if(-not $focus.focused){throw ('failed to focus hwnd ${int(hwnd)}; foreground hwnd is '+$focus.foreground_hwnd)};$e.SetFocus();Start-Sleep -Milliseconds 100;[System.Windows.Forms.SendKeys]::SendWait('^{A}');Start-Sleep -Milliseconds 100;[System.Windows.Forms.SendKeys]::SendWait(${q(sendKeysEscape(value))});$method='SetFocus+SendKeys'}; @{ hwnd=${int(hwnd)}; automation_id=$e.Current.AutomationId; name=$e.Current.Name; control_type=($e.Current.ControlType.ProgrammaticName -replace '^ControlType\\.'); set=$true; method=$method; value_chars=${value.length} } | ConvertTo-Json -Depth 5`;
 }
 
 function launchScript(filePath: string, args: string[], cwd?: string) {
@@ -346,12 +422,12 @@ function windowScrollScript(hwnd: number, x: number, y: number, delta: number, c
   return `${mouseTypes()}; ${windowCoordinateTypes()}; $p=windowPoint ${int(hwnd)} ${int(x)} ${int(y)} ${q(coordinateSpace)} ${psBool(focus)}; [System.Windows.Forms.Cursor]::Position=New-Object System.Drawing.Point($p.screen.x,$p.screen.y); [Win32Input]::mouse_event(0x0800,0,0,${int(delta)},[UIntPtr]::Zero); $p | Add-Member -NotePropertyName delta -NotePropertyValue ${int(delta)} -PassThru | ConvertTo-Json -Depth 5`;
 }
 
-function typeTextScript(text: string) {
-  return `${formsAssemblies()}; [System.Windows.Forms.SendKeys]::SendWait(${q(sendKeysEscape(text))}); @{ typed_chars=${text.length} } | ConvertTo-Json`;
+function typeTextScript(text: string, hwnd?: number) {
+  return `${targetedSendKeysPrefix(hwnd)}; [System.Windows.Forms.SendKeys]::SendWait(${q(sendKeysEscape(text))}); @{ typed_chars=${text.length}; hwnd=${psOptionalLiteral(hwnd)}; focused=$focused } | ConvertTo-Json`;
 }
 
-function sendKeysScript(keys: string) {
-  return `${formsAssemblies()}; [System.Windows.Forms.SendKeys]::SendWait(${q(keys)}); @{ keys=${q(keys)} } | ConvertTo-Json`;
+function sendKeysScript(keys: string, hwnd?: number) {
+  return `${targetedSendKeysPrefix(hwnd)}; [System.Windows.Forms.SendKeys]::SendWait(${q(keys)}); @{ keys=${q(keys)}; hwnd=${psOptionalLiteral(hwnd)}; focused=$focused } | ConvertTo-Json`;
 }
 
 function clipboardGetScript() {
@@ -426,25 +502,77 @@ function captureFn() {
   return `function capture($b,$file){ $bmp=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.X,$b.Y,0,0,$b.Size); $bmp.Save($file,[System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose() }`;
 }
 
+function windowCaptureTypes() {
+  return `Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32Capture {
+  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+  [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdc, uint flags);
+  public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+}
+"@; function captureWindow($hwnd,$file){ $h=[IntPtr]$hwnd; if(-not [Win32Capture]::IsWindow($h)){throw 'hwnd is not a valid window'}; $r=New-Object Win32Capture+RECT; if(-not [Win32Capture]::GetWindowRect($h,[ref]$r)){throw 'GetWindowRect failed'}; $w=$r.Right-$r.Left; $hgt=$r.Bottom-$r.Top; if($w -le 0 -or $hgt -le 0){throw 'window has empty bounds'}; $bmp=New-Object System.Drawing.Bitmap($w,$hgt); $g=[System.Drawing.Graphics]::FromImage($bmp); $dc=$g.GetHdc(); try{$ok=[Win32Capture]::PrintWindow($h,$dc,2)}finally{$g.ReleaseHdc($dc)}; if(-not $ok){$g.CopyFromScreen($r.Left,$r.Top,0,0,$bmp.Size)}; $bmp.Save($file,[System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose(); @{ hwnd=$hwnd; bounds=@{x=$r.Left;y=$r.Top;width=$w;height=$hgt}; capture_method=$(if($ok){'print_window'}else{'screen_fallback'}); path=$file } }`;
+}
+
+function windowPlacementTypes() {
+  return `Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32Placement {
+  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int command);
+  [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr hWnd, int x, int y, int width, int height, bool repaint);
+  public static bool Place(IntPtr hWnd, int x, int y, int width, int height) { if(!IsWindow(hWnd)) throw new Exception("hwnd is not a valid window"); ShowWindowAsync(hWnd, 9); return MoveWindow(hWnd, x, y, width, height, true); }
+}
+"@`;
+}
+
+function resolveMonitorFn() {
+  return `function resolveMonitor($m){ $screens=[System.Windows.Forms.Screen]::AllScreens; if($m -eq 'primary'){return [System.Windows.Forms.Screen]::PrimaryScreen}; $i=[int]$m; if($i -lt 0 -or $i -ge $screens.Count){throw 'monitor index out of range'}; return $screens[$i] }`;
+}
+
 function win32WindowTypes() {
   return `Add-Type @"
 using System;
 using System.Text;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 public class Win32Windows {
   public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int command);
+  [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint first, uint second, bool attach);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr hWnd, uint message, IntPtr wParam, string lParam);
+  [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
   public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
-  public static bool Focus(IntPtr hWnd) { return SetForegroundWindow(hWnd); }
+  public static object Focus(IntPtr hWnd) {
+    if(!IsWindow(hWnd)) throw new Exception("hwnd is not a valid window");
+    bool restored=IsIconic(hWnd); if(restored) ShowWindowAsync(hWnd,9);
+    uint pid; uint targetThread=GetWindowThreadProcessId(hWnd,out pid); uint currentThread=GetCurrentThreadId();
+    IntPtr before=GetForegroundWindow(); uint foregroundPid; uint foregroundThread=GetWindowThreadProcessId(before,out foregroundPid);
+    bool attachTarget=targetThread!=0 && targetThread!=currentThread && AttachThreadInput(currentThread,targetThread,true);
+    bool attachForeground=foregroundThread!=0 && foregroundThread!=currentThread && foregroundThread!=targetThread && AttachThreadInput(currentThread,foregroundThread,true);
+    int attempts=0; try { for(attempts=1; attempts<=3; attempts++){ BringWindowToTop(hWnd); SetForegroundWindow(hWnd); Thread.Sleep(100); if(GetForegroundWindow()==hWnd) break; } }
+    finally { if(attachForeground) AttachThreadInput(currentThread,foregroundThread,false); if(attachTarget) AttachThreadInput(currentThread,targetThread,false); }
+    IntPtr after=GetForegroundWindow(); return new { hwnd=hWnd.ToInt64(), focused=after==hWnd, foreground_hwnd=after.ToInt64(), previous_foreground_hwnd=before.ToInt64(), restored=restored, attempts=Math.Min(attempts,3) };
+  }
+  public static bool SetControlText(IntPtr hWnd, string value) { return IsWindow(hWnd) && SendMessage(hWnd,0x000C,IntPtr.Zero,value)!=IntPtr.Zero; }
   public static object[] List() {
-    var items = new List<object>();
-    EnumWindows((h,l) => { if(!IsWindowVisible(h)) return true; var sb=new StringBuilder(512); GetWindowText(h,sb,512); if(sb.Length==0) return true; uint pid; GetWindowThreadProcessId(h,out pid); RECT r; GetWindowRect(h,out r); items.Add(new { hwnd=h.ToInt64(), title=sb.ToString(), pid=pid, bounds=new { x=r.Left, y=r.Top, width=r.Right-r.Left, height=r.Bottom-r.Top } }); return true; }, IntPtr.Zero);
+    var items = new List<object>(); IntPtr foreground=GetForegroundWindow();
+    EnumWindows((h,l) => { if(!IsWindowVisible(h)) return true; var sb=new StringBuilder(512); GetWindowText(h,sb,512); if(sb.Length==0) return true; uint pid; GetWindowThreadProcessId(h,out pid); RECT r; GetWindowRect(h,out r); string processName=""; try{processName=Process.GetProcessById((int)pid).ProcessName;}catch{} items.Add(new { hwnd=h.ToInt64(), title=sb.ToString(), pid=pid, process_name=processName, foreground=h==foreground, minimized=IsIconic(h), maximized=IsZoomed(h), bounds=new { x=r.Left, y=r.Top, width=r.Right-r.Left, height=r.Bottom-r.Top } }); return true; }, IntPtr.Zero);
     return items.ToArray();
   }
 }
@@ -491,6 +619,15 @@ function uiaWalkFn() {
   return `${rectObjFn()}; function nodeObj($e,$d,$r){ $ct=$e.Current.ControlType.ProgrammaticName -replace '^ControlType\\.'; @{ ref=$r; depth=$d; name=$e.Current.Name; automation_id=$e.Current.AutomationId; class_name=$e.Current.ClassName; control_type=$ct; hwnd=$e.Current.NativeWindowHandle; pid=$e.Current.ProcessId; bounds=rectObj $e.Current.BoundingRectangle; enabled=$e.Current.IsEnabled; offscreen=$e.Current.IsOffscreen } }; function walk($e,$d,$max,$out){ if($out.Count -ge $max){ return }; [void]$out.Add((nodeObj $e $d ("n"+$out.Count))); $w=[System.Windows.Automation.TreeWalker]::ControlViewWalker; $c=$w.GetFirstChild($e); while($c -ne $null -and $out.Count -lt $max){ walk $c ($d+1) $max $out; $c=$w.GetNextSibling($c) } }`;
 }
 
+function uiaSelectorFn() {
+  return `function findUiaElement($hwnd,$automationId,$name,$controlType){ $root=[System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]$hwnd); if($root -eq $null){throw 'UI Automation root not found for hwnd'}; $all=$root.FindAll([System.Windows.Automation.TreeScope]::Subtree,[System.Windows.Automation.Condition]::TrueCondition); foreach($e in $all){ $ct=$e.Current.ControlType.ProgrammaticName -replace '^ControlType\\.'; if($automationId -and $e.Current.AutomationId -ne $automationId){continue}; if($name -and $e.Current.Name -ne $name){continue}; if($controlType -and $ct -ne $controlType){continue}; return $e }; throw 'UI Automation element not found for selector' }`;
+}
+
+function targetedSendKeysPrefix(hwnd?: number) {
+  if (hwnd === undefined) return `${formsAssemblies()}; $focused=$true`;
+  return `${formsAssemblies()}; ${win32WindowTypes()}; $focus=[Win32Windows]::Focus([IntPtr]${int(hwnd)}); if(-not $focus.focused){throw ('failed to focus hwnd ${int(hwnd)}; foreground hwnd is '+$focus.foreground_hwnd)}; $focused=$true`;
+}
+
 function hotkeySequence(keys: string[]) {
   const names = keys.map((key) => key.toLowerCase());
   const modifiers = [['ctrl', '^'], ['control', '^'], ['alt', '%'], ['shift', '+']];
@@ -517,6 +654,10 @@ function num(value: unknown) {
   return number;
 }
 
+function optionalNum(value: unknown) {
+  return value === undefined || value === null ? undefined : num(value);
+}
+
 function finiteNumber(value: unknown, name: string) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`${name} must be a finite number`);
@@ -533,6 +674,30 @@ function boundedInteger(value: unknown, name: string, min: number, max: number) 
   const number = integer(value, name);
   if (number < min || number > max) throw new Error(`${name} must be between ${min} and ${max}`);
   return number;
+}
+
+function optionalHwnd(workspace: Workspace, value?: number) {
+  if (value === undefined) return undefined;
+  ensureCapability(workspace, 'allow_window_management');
+  return integer(value, 'hwnd');
+}
+
+function optionalSize(width?: number, height?: number) {
+  const parsedWidth = width === undefined ? undefined : finiteNumber(width, 'width');
+  const parsedHeight = height === undefined ? undefined : finiteNumber(height, 'height');
+  if (parsedWidth !== undefined && parsedWidth <= 0) throw new Error('width must be positive');
+  if (parsedHeight !== undefined && parsedHeight <= 0) throw new Error('height must be positive');
+  return { width: parsedWidth, height: parsedHeight };
+}
+
+function normalizeUiaSelector(selector: WindowsUiaSelector): Required<WindowsUiaSelector> {
+  const normalized = {
+    automation_id: String(selector.automation_id ?? '').trim(),
+    name: String(selector.name ?? '').trim(),
+    control_type: String(selector.control_type ?? '').replace(/^ControlType\./, '').trim()
+  };
+  if (!normalized.automation_id && !normalized.name && !normalized.control_type) throw new Error('UI Automation selector requires automation_id, name, or control_type');
+  return normalized;
 }
 
 function screenPoint(x: unknown, y: unknown, prefix = '') {
@@ -560,6 +725,14 @@ function bool(value: unknown, fallback: boolean) {
 
 function psBool(value: boolean) {
   return value ? '$true' : '$false';
+}
+
+function psOptionalLiteral(value?: number) {
+  return value === undefined ? '$null' : String(int(value));
+}
+
+function psOptionalNumber(value: number | undefined, fallback: string) {
+  return value === undefined ? fallback : String(int(value));
 }
 
 function str(value: unknown, fallback = '') {

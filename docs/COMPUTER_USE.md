@@ -68,14 +68,18 @@ Tools:
 
 - `windows_computer_status` — report host/platform and configured Windows authority.
 - `windows_list_monitors` — list monitor bounds, working areas, and primary flags.
-- `windows_screenshot` — capture `primary`, `all`, or a monitor index and save PNG/WebP artifacts with provider-fetchable URL metadata.
+- `windows_screenshot` — capture `primary`, `all`, or a monitor index and hand it to Threaddex through the established visual-followup contract.
+- `windows_window_screenshot` — capture one top-level `hwnd` through the same path-free visual-followup contract.
 - `windows_uia_tree` — return a bounded Microsoft UI Automation tree snapshot.
-- `windows_list_windows` — list visible top-level windows with hwnd, title, pid, and bounds.
-- `windows_focus_window` — focus a top-level window by hwnd.
+- `windows_uia_read` — read an exact UIA element through ValuePattern, TextPattern/DocumentRange, or LegacyIAccessiblePattern.
+- `windows_uia_set_value` — set an exact writable UIA element without coordinate-based typing.
+- `windows_list_windows` — list visible top-level windows with hwnd, title, pid, process name, state, and bounds.
+- `windows_focus_window` — restore and focus a top-level hwnd with bounded retries and foreground verification.
+- `windows_place_window` — move and size a top-level hwnd within a selected monitor working area.
 - `windows_launch_app` — launch a local executable or application path with optional args/cwd.
 - `windows_mouse_move`, `windows_click`, `windows_double_click`, `windows_drag`, `windows_scroll` — screen-coordinate mouse control.
 - `windows_window_mouse_move`, `windows_window_click`, `windows_window_double_click`, `windows_window_drag`, `windows_window_scroll` — window-local mouse control for a known top-level hwnd.
-- `windows_type_text`, `windows_key`, `windows_hotkey` — keyboard control.
+- `windows_type_text`, `windows_key`, `windows_hotkey` — keyboard control; optional `hwnd` makes each operation focus and verify its intended target first.
 - `windows_clipboard_get`, `windows_clipboard_set` — clipboard text.
 - `windows_batch` — sequence common Windows input actions plus delay steps.
 
@@ -85,7 +89,11 @@ Screen mouse coordinates are Windows virtual-screen coordinates. For multi-monit
 
 Window mouse coordinates require a current `hwnd` from `windows_list_windows`. Use `coordinate_space: "client"` for app-content coordinates, or `coordinate_space: "window"` for full window-frame coordinates. Window mouse tools convert those coordinates with native Win32 APIs and then send the same underlying screen mouse input. They default to focusing the target window except `windows_window_mouse_move`, whose default is hover-only `focus: false`.
 
-Screenshot capture stores a full PNG artifact and a WebP preview artifact under `.agent/artifacts/windows-screenshots/`, but those image paths and signed URLs are internal to the OTA -> Threaddex visual-followup handoff. The `windows_screenshot` response must not expose local paths, `artifact`, `preview`, `full`, `readable_url`, `image_web_url`, or `web_url` as competing agent-facing visual sources.
+For deterministic desktop work, call `windows_list_windows`, select by `process_name` plus title, and pass the returned `hwnd` to focus/input/screenshot operations. `windows_focus_window` reports both `focused` and the actual `foreground_hwnd`; a false result is an explicit failure, not a silent observer-mode downgrade.
+
+Roblox Studio-specific operations are not reimplemented here. Use the separately connected transparent Roblox Studio MCP for `list_roblox_studios`, `set_active_studio`, `execute_luau`, `get_console_output`, `get_studio_state`, `start_stop_play`, and other Studio-owned schemas. OTA Windows tools remain the OS-level fallback for window placement, focus, UIA, and desktop input.
+
+Screenshot capture stores a full PNG artifact and a WebP preview artifact under `.agent/artifacts/windows-screenshots/`, but those image paths and signed URLs are internal to the OTA -> Threaddex visual-followup handoff. Neither screenshot operation may expose local paths, `artifact`, `preview`, `full`, `readable_url`, `image_web_url`, or `web_url` as competing agent-facing visual sources.
 
 For webchat visual inspection, call `windows_screenshot` with the active Threaddex job id:
 

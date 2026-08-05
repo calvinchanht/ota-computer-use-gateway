@@ -108,8 +108,10 @@ function windowsComputerTools(workspace: Workspace) {
   const config = workspace.windows_computer;
   const tools = ['windows_computer_status', 'windows_list_monitors'];
   if (config?.allow_screenshot) tools.push('windows_screenshot');
-  if (config?.allow_uia_tree) tools.push('windows_uia_tree');
-  if (config?.allow_window_management) tools.push('windows_list_windows', 'windows_focus_window');
+  if (config?.allow_screenshot && config?.allow_window_management) tools.push('windows_window_screenshot');
+  if (config?.allow_uia_tree) tools.push('windows_uia_tree', 'windows_uia_read');
+  if (config?.allow_uia_tree && config?.allow_keyboard) tools.push('windows_uia_set_value');
+  if (config?.allow_window_management) tools.push('windows_list_windows', 'windows_focus_window', 'windows_place_window');
   if (config?.allow_app_launch) tools.push('windows_launch_app');
   if (config?.allow_mouse) tools.push('windows_mouse_move', 'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll');
   if (config?.allow_mouse && config?.allow_window_management) tools.push('windows_window_mouse_move', 'windows_window_click', 'windows_window_double_click', 'windows_window_drag', 'windows_window_scroll');

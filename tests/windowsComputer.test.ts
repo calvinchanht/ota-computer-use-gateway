@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { windowsBatch, windowsClick, windowsClipboardGet, windowsFocusWindow, windowsLaunchApp, windowsScreenshot, windowsTypeText, windowsUiaTree, windowsWindowClick } from '../src/tools/windowsComputer.js';
+import { windowsBatch, windowsClick, windowsClipboardGet, windowsFocusWindow, windowsLaunchApp, windowsPlaceWindow, windowsScreenshot, windowsTypeText, windowsUiaRead, windowsUiaSetValue, windowsUiaTree, windowsWindowClick, windowsWindowScreenshot } from '../src/tools/windowsComputer.js';
 
 describe('windows computer-use capability gates', () => {
   it('rejects screenshots when screenshot authority is disabled', async () => {
     await expect(windowsScreenshot(fixtureWorkspace({ allow_screenshot: false }))).rejects.toThrow('allow_screenshot');
+    await expect(windowsWindowScreenshot(fixtureWorkspace({ allow_screenshot: false }), 1)).rejects.toThrow('allow_screenshot');
   });
 
   it('rejects mouse actions when mouse authority is disabled', async () => {
@@ -32,8 +33,15 @@ describe('windows computer-use capability gates', () => {
 
   it('rejects malformed window and UIA arguments before host execution', async () => {
     await expect(windowsFocusWindow(fixtureWorkspace(), 1.5)).rejects.toThrow('hwnd must be an integer');
+    await expect(windowsPlaceWindow(fixtureWorkspace(), 1, 'primary', 0, 0, 0, 100)).rejects.toThrow('width must be positive');
     await expect(windowsUiaTree(fixtureWorkspace(), 0)).rejects.toThrow('max_nodes must be between 1 and 1000');
     await expect(windowsUiaTree(fixtureWorkspace(), 1001)).rejects.toThrow('max_nodes must be between 1 and 1000');
+    await expect(windowsUiaRead(fixtureWorkspace(), 1, {})).rejects.toThrow('selector requires');
+    await expect(windowsUiaSetValue(fixtureWorkspace(), 1, {}, 'text')).rejects.toThrow('selector requires');
+  });
+
+  it('requires window authority for hwnd-targeted keyboard actions', async () => {
+    await expect(windowsTypeText(fixtureWorkspace({ allow_window_management: false }), 'hello', 1)).rejects.toThrow('allow_window_management');
   });
 
   it('rejects empty app launch paths before host execution', async () => {

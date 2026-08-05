@@ -43,14 +43,18 @@ import {
   windowsListMonitors,
   windowsListWindows,
   windowsMouseMove,
+  windowsPlaceWindow,
   windowsScreenshot,
   windowsScroll,
   windowsTypeText,
+  windowsUiaRead,
+  windowsUiaSetValue,
   windowsUiaTree,
   windowsWindowClick,
   windowsWindowDoubleClick,
   windowsWindowDrag,
   windowsWindowMouseMove,
+  windowsWindowScreenshot,
   windowsWindowScroll,
   type WindowsBatchStep
 } from '../tools/windowsComputer.js';
@@ -787,8 +791,12 @@ function callWindowsApiTool(workspace: Workspace, tool: string, args: Record<str
   if (tool === 'windows_list_monitors') return windowsListMonitors(workspace);
   if (tool === 'windows_list_windows') return windowsListWindows(workspace);
   if (tool === 'windows_screenshot') return windowsScreenshot(workspace, optionalString(args.monitor) ?? 'primary', windowsScreenshotParams(workspace, args));
-  if (tool === 'windows_uia_tree') return windowsUiaTree(workspace, optionalNumber(args.max_nodes) ?? 120);
+  if (tool === 'windows_window_screenshot') return windowsWindowScreenshot(workspace, requiredNumber(args.hwnd, 'hwnd'), windowsScreenshotParams(workspace, args));
+  if (tool === 'windows_uia_tree') return windowsUiaTree(workspace, optionalNumber(args.max_nodes) ?? 120, optionalNumber(args.hwnd));
+  if (tool === 'windows_uia_read') return windowsUiaRead(workspace, requiredNumber(args.hwnd, 'hwnd'), args, optionalNumber(args.max_chars) ?? 20000);
+  if (tool === 'windows_uia_set_value') return windowsUiaSetValue(workspace, requiredNumber(args.hwnd, 'hwnd'), args, requiredTextArg(args.value, 'value', true));
   if (tool === 'windows_focus_window') return windowsFocusWindow(workspace, requiredNumber(args.hwnd, 'hwnd'));
+  if (tool === 'windows_place_window') return windowsPlaceWindow(workspace, requiredNumber(args.hwnd, 'hwnd'), optionalString(args.monitor) ?? 'primary', optionalNumber(args.x) ?? 0, optionalNumber(args.y) ?? 0, optionalNumber(args.width), optionalNumber(args.height));
   if (tool === 'windows_launch_app') return windowsLaunchApp(workspace, requiredString(args.file_path, 'file_path'), optionalStringArray(args.args), optionalString(args.cwd));
   if (tool === 'windows_mouse_move') return windowsMouseMove(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'));
   if (tool === 'windows_click') return windowsClick(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left');
@@ -800,9 +808,9 @@ function callWindowsApiTool(workspace: Workspace, tool: string, args: Record<str
   if (tool === 'windows_window_double_click') return windowsWindowDoubleClick(workspace, requiredNumber(args.hwnd, 'hwnd'), requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left', optionalString(args.coordinate_space) ?? 'client', optionalBoolean(args.focus) ?? true);
   if (tool === 'windows_window_drag') return windowsWindowDrag(workspace, requiredNumber(args.hwnd, 'hwnd'), requiredNumber(args.from_x, 'from_x'), requiredNumber(args.from_y, 'from_y'), requiredNumber(args.to_x, 'to_x'), requiredNumber(args.to_y, 'to_y'), optionalString(args.coordinate_space) ?? 'client', optionalBoolean(args.focus) ?? true);
   if (tool === 'windows_window_scroll') return windowsWindowScroll(workspace, requiredNumber(args.hwnd, 'hwnd'), requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), requiredNumber(args.delta, 'delta'), optionalString(args.coordinate_space) ?? 'client', optionalBoolean(args.focus) ?? true);
-  if (tool === 'windows_type_text') return windowsTypeText(workspace, requiredString(args.text, 'text'));
-  if (tool === 'windows_key') return windowsKey(workspace, requiredString(args.key, 'key'));
-  if (tool === 'windows_hotkey') return windowsHotkey(workspace, requiredStringArray(args.keys, 'keys'));
+  if (tool === 'windows_type_text') return windowsTypeText(workspace, requiredString(args.text, 'text'), optionalNumber(args.hwnd));
+  if (tool === 'windows_key') return windowsKey(workspace, requiredString(args.key, 'key'), optionalNumber(args.hwnd));
+  if (tool === 'windows_hotkey') return windowsHotkey(workspace, requiredStringArray(args.keys, 'keys'), optionalNumber(args.hwnd));
   if (tool === 'windows_clipboard_get') return windowsClipboardGet(workspace);
   if (tool === 'windows_clipboard_set') return windowsClipboardSet(workspace, requiredTextArg(args.text, 'text', true));
   if (tool === 'windows_batch') return windowsBatch(workspace, requiredWindowsBatchSteps(args.calls));

@@ -33,8 +33,12 @@ async function exercisePolicy(port, sessionId) {
   const policy = await toolData(port, sessionId, 'get_workspace_policy', { workspace_id: 'windows-smoke' });
   expectIncludes(policy.allowed_tools, 'windows_list_monitors', 'policy');
   expectIncludes(policy.allowed_tools, 'windows_uia_tree', 'policy');
+  expectIncludes(policy.allowed_tools, 'windows_uia_read', 'policy');
+  expectIncludes(policy.allowed_tools, 'windows_place_window', 'policy');
   expectIncludes(policy.allowed_tools, 'windows_launch_app', 'policy');
   expectExcludes(policy.allowed_tools, 'windows_screenshot', 'policy');
+  expectExcludes(policy.allowed_tools, 'windows_window_screenshot', 'policy');
+  expectExcludes(policy.allowed_tools, 'windows_uia_set_value', 'policy');
   expectExcludes(policy.allowed_tools, 'windows_click', 'policy');
 }
 

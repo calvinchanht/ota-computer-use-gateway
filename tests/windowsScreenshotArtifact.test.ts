@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { windowsScreenshot } from '../src/tools/windowsComputer.js';
+import { windowsScreenshot, windowsWindowScreenshot } from '../src/tools/windowsComputer.js';
 
 const mocks = vi.hoisted(() => ({
   execFile: vi.fn(),
@@ -56,10 +56,23 @@ describe('windows screenshot artifacts', () => {
     expect(data.visual_followup.state).toBe('not_requested');
     expect(data.visual_followup.readable_url).toBeUndefined();
   });
+
+  it('uses the same path-free response contract for hwnd screenshots', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: JSON.stringify({ hwnd: 42, bounds: { x: 0, y: 0, width: 800, height: 600 }, capture_method: 'print_window', path: 'captured.png' }), stderr: '' });
+    const workspace = fixtureWorkspace(root);
+    workspace.windows_computer!.allow_window_management = true;
+    const result = await windowsWindowScreenshot(workspace, 42);
+    const data = result.data as ScreenshotData;
+    expect(data.hwnd).toBe(42);
+    expect(data.path).toBeUndefined();
+    expect(data.readable_url).toBeUndefined();
+    expect(data.visual_followup.state).toBe('not_requested');
+  });
 });
 
 interface ScreenshotData {
-  monitor: string;
+  monitor?: string;
+  hwnd?: number;
   bounds: Record<string, unknown>;
   path?: string;
   artifact?: unknown;
