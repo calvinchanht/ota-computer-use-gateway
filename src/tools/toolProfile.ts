@@ -131,7 +131,7 @@ function gitProfile() {
   return {
     operation: 'git',
     parameter_model: 'cmd_array is forwarded as local git argv after the executable; OTA does not maintain a Git operation allowlist.',
-    auth_lane: 'same_workspace_github_token_file_via_askpass',
+    auth_lane: 'same_workspace_github_token_file_via_ephemeral_git_config',
     identity_lane: 'workspaces[].git.user_name and user_email',
     adapter: 'git_cli'
   };

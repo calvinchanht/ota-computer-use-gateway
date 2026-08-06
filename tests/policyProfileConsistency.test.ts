@@ -50,7 +50,7 @@ describe('policy and tool profile consistency', () => {
     const policy = workspacePolicy(fixtureWorkspace({ git: { github_token_file: '/secrets/test_pat.txt', github_cli: 'gh', user_name: 'Calvin Chan', user_email: 'calvinchanht@gmail.com' } })).data;
     expect(policy?.git).toMatchObject({
       enabled: true,
-      auth_lane: 'configured_token_askpass',
+      auth_lane: 'configured_token_git_config_env',
       identity_lane: 'configured_workspace_identity',
       accepted_parameter_model: 'unrestricted_cmd_array_forwarded_to_git_adapter'
     });

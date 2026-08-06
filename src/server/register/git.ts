@@ -22,7 +22,7 @@ export function registerGitTools({ server, config, workspaces }: RegisterContext
 function gitTool() {
   return {
     title: 'Git',
-    description: 'Run local Git argv. The configured workspace PAT is supplied automatically through askpass for network operations; cmd_array starts after git.',
+    description: 'Run local Git argv. The configured workspace PAT is supplied automatically through ephemeral child-process Git config for GitHub network operations; cmd_array starts after git.',
     inputSchema: argvToolSchema(),
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
     annotations: RUN_LOCAL

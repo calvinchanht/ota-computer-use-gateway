@@ -44,7 +44,7 @@ function gitPolicy(workspace: Workspace) {
   return {
     enabled: allowedTools(workspace).includes('git'),
     operation: 'git',
-    auth_lane: workspace.git?.github_token_file ? 'configured_token_askpass' : 'default_workspace_token_askpass',
+    auth_lane: workspace.git?.github_token_file ? 'configured_token_git_config_env' : 'default_workspace_token_git_config_env',
     identity_lane: workspace.git?.user_name && workspace.git?.user_email ? 'configured_workspace_identity' : 'repository_or_global_identity',
     accepted_parameter_model: 'unrestricted_cmd_array_forwarded_to_git_adapter'
   };

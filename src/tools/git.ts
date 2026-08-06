@@ -1,5 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile, chmod } from 'node:fs/promises';
-import os from 'node:os';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { runCommand } from '../core/process.js';
 import { ok } from '../core/result.js';
@@ -30,7 +29,7 @@ export async function gitCliTool(config: AppConfig, workspace: Workspace, cmd: s
     return ok('git command finished', {
       command: ['git', ...cmd].map(redactGitOutputForDisplay), cwd: cwd.displayPath,
       exit_code: result.code, timed_out: result.timed_out, output: output.text,
-      truncated: output.truncated, auth_lane: 'configured_token_askpass', identity_lane: gitIdentityLane(workspace)
+      truncated: output.truncated, auth_lane: 'configured_token_git_config_env', identity_lane: gitIdentityLane(workspace)
     });
   });
 }
@@ -55,17 +54,18 @@ export async function gitPushCurrentBranch(config: AppConfig, workspace: Workspa
 
 async function withGitAuth<T>(workspace: Workspace, action: (env: Record<string, string>) => Promise<T>): Promise<T> {
   const tokenFile = workspace.git?.github_token_file || defaultTokenPath(workspace);
-  const askpassDir = await mkdtemp(path.join(os.tmpdir(), 'ota-git-askpass-'));
-  const definition = gitAskpassDefinition(tokenFile);
-  const askpass = path.join(askpassDir, definition.name);
-  try {
-    await assertReadableToken(tokenFile);
-    await writeFile(askpass, definition.content, { mode: 0o700 });
-    if (process.platform !== 'win32') await chmod(askpass, 0o700);
-    return await action({ GIT_ASKPASS: askpass, GIT_TERMINAL_PROMPT: '0', ...gitIdentityEnvironment(workspace) });
-  } finally {
-    await rm(askpassDir, { recursive: true, force: true });
-  }
+  const token = await readGitToken(tokenFile);
+  return action({ ...gitAuthEnvironment(token), ...gitIdentityEnvironment(workspace) });
+}
+
+function gitAuthEnvironment(token: string): Record<string, string> {
+  const authorization = Buffer.from(`x-access-token:${token}`).toString('base64');
+  return {
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+    GIT_CONFIG_VALUE_0: `Authorization: Basic ${authorization}`,
+    GIT_TERMINAL_PROMPT: '0'
+  };
 }
 
 function gitIdentityEnvironment(workspace: Workspace): Record<string, string> {
@@ -103,7 +103,7 @@ async function gitOutput(args: string[], cwd: string, config: AppConfig, context
   return result.stdout.trim();
 }
 
-async function assertReadableToken(tokenFile: string) {
+async function readGitToken(tokenFile: string): Promise<string> {
   let token = '';
   try {
     token = (await readFile(tokenFile, 'utf8')).trim();
@@ -111,22 +111,11 @@ async function assertReadableToken(tokenFile: string) {
     throw new Error('git auth diagnostic: configured github token file is not readable');
   }
   if (!token) throw new Error('git auth diagnostic: configured github token file is empty');
+  return token;
 }
 
 function defaultTokenPath(workspace: Workspace): string {
   return path.join(workspace.realRoot, 'secrets', `${workspace.id}_github_pat.txt`);
-}
-
-function askpassScript(tokenFile: string): string {
-  const safePath = tokenFile.replace(/'/g, `'"'"'`);
-  return `#!/usr/bin/env bash\ncase "$1" in\n  *Username*) printf '%s\\n' 'x-access-token' ;;\n  *Password*) cat '${safePath}' ;;\n  *) printf '\\n' ;;\nesac\n`;
-}
-
-export function gitAskpassDefinition(tokenFile: string): { name: string; content: string } {
-  if (process.platform !== 'win32') return { name: 'askpass.sh', content: askpassScript(tokenFile) };
-  const safePath = tokenFile.replace(/%/g, '%%').replace(/"/g, '""');
-  const content = `@echo off\r\necho %~1 | findstr /I "Username" >nul && (echo x-access-token& exit /b 0)\r\necho %~1 | findstr /I "Password" >nul && (type "${safePath}"& exit /b 0)\r\necho.\r\n`;
-  return { name: 'askpass.cmd', content };
 }
 
 export function sanitizeGitRemoteForDisplay(url: string): string {

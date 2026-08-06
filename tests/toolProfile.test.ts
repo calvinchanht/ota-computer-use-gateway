@@ -18,7 +18,7 @@ describe('toolProfile', () => {
     });
     expect(result.data?.git).toMatchObject({
       operation: 'git',
-      auth_lane: 'same_workspace_github_token_file_via_askpass',
+      auth_lane: 'same_workspace_github_token_file_via_ephemeral_git_config',
       adapter: 'git_cli'
     });
     expect(result.data?.command_runtime?.recommended_cmd_array_for_shell).toContain('<script>');
