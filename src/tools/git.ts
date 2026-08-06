@@ -56,11 +56,12 @@ export async function gitPushCurrentBranch(config: AppConfig, workspace: Workspa
 async function withGitAuth<T>(workspace: Workspace, action: (env: Record<string, string>) => Promise<T>): Promise<T> {
   const tokenFile = workspace.git?.github_token_file || defaultTokenPath(workspace);
   const askpassDir = await mkdtemp(path.join(os.tmpdir(), 'ota-git-askpass-'));
-  const askpass = path.join(askpassDir, 'askpass.sh');
+  const definition = gitAskpassDefinition(tokenFile);
+  const askpass = path.join(askpassDir, definition.name);
   try {
     await assertReadableToken(tokenFile);
-    await writeFile(askpass, askpassScript(tokenFile), { mode: 0o700 });
-    await chmod(askpass, 0o700);
+    await writeFile(askpass, definition.content, { mode: 0o700 });
+    if (process.platform !== 'win32') await chmod(askpass, 0o700);
     return await action({ GIT_ASKPASS: askpass, GIT_TERMINAL_PROMPT: '0', ...gitIdentityEnvironment(workspace) });
   } finally {
     await rm(askpassDir, { recursive: true, force: true });
@@ -119,6 +120,13 @@ function defaultTokenPath(workspace: Workspace): string {
 function askpassScript(tokenFile: string): string {
   const safePath = tokenFile.replace(/'/g, `'"'"'`);
   return `#!/usr/bin/env bash\ncase "$1" in\n  *Username*) printf '%s\\n' 'x-access-token' ;;\n  *Password*) cat '${safePath}' ;;\n  *) printf '\\n' ;;\nesac\n`;
+}
+
+export function gitAskpassDefinition(tokenFile: string): { name: string; content: string } {
+  if (process.platform !== 'win32') return { name: 'askpass.sh', content: askpassScript(tokenFile) };
+  const safePath = tokenFile.replace(/%/g, '%%').replace(/"/g, '""');
+  const content = `@echo off\r\necho %~1 | findstr /I "Username" >nul && (echo x-access-token& exit /b 0)\r\necho %~1 | findstr /I "Password" >nul && (type "${safePath}"& exit /b 0)\r\necho.\r\n`;
+  return { name: 'askpass.cmd', content };
 }
 
 export function sanitizeGitRemoteForDisplay(url: string): string {

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { gitCliTool, gitPushCurrentBranch, redactGitOutputForDisplay, sanitizeGitRemoteForDisplay } from '../src/tools/git.js';
+import { gitAskpassDefinition, gitCliTool, gitPushCurrentBranch, redactGitOutputForDisplay, sanitizeGitRemoteForDisplay } from '../src/tools/git.js';
 import { githubCliTool } from '../src/tools/github.js';
 import { createHttpRequestHandler } from '../src/server/http.js';
 import type { AppConfig } from '../src/config/schema.js';
@@ -89,6 +89,22 @@ describe('git display hygiene', () => {
 
     expect(commit.data).toMatchObject({ exit_code: 0, auth_lane: 'configured_token_askpass', identity_lane: 'configured_workspace_identity' });
     expect(author.stdout.trim()).toBe('Calvin Chan <calvinchanht@gmail.com>');
+  });
+
+  it('uses a working platform-native askpass helper', async () => {
+    const repo = await fixtureRepo();
+    await writeFile(repo.tokenFile, 'github_pat_TESTSECRET\n');
+    const definition = gitAskpassDefinition(repo.tokenFile);
+    const helper = path.join(repo.root, definition.name);
+    await writeFile(helper, definition.content, { mode: 0o700 });
+    try {
+      const username = spawnSync(helper, ['Username for test:'], { encoding: 'utf8', shell: true });
+      const password = spawnSync(helper, ['Password for test:'], { encoding: 'utf8', shell: true });
+      expect(username.stdout.trim()).toBe('x-access-token');
+      expect(password.stdout.trim()).toBe('github_pat_TESTSECRET');
+    } finally {
+      await rm(repo.root, { recursive: true, force: true });
+    }
   });
 
   it('exposes github through the /ota/api/v1/gh HTTP alias', async () => {
