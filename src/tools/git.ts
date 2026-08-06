@@ -19,6 +19,22 @@ export async function gitDiff(workspace: Workspace, maxBytes = 20000) {
   return ok('git diff', { exit_code: result.code, stdout: limited.text, stderr: limit(result.stderr), truncated: limited.truncated });
 }
 
+export async function gitCliTool(config: AppConfig, workspace: Workspace, cmd: string[], cwdPath = '.', timeoutMs = 60000, maxOutputChars = 20000) {
+  if (!workspace.allow_tests) throw new Error('workspace does not allow Git command execution');
+  if (!Array.isArray(cmd) || cmd.length === 0) throw new Error('cmd_array must be an array');
+  const cwd = await resolveInside(workspace, cwdPath, config);
+  const timeout = Math.min(Math.max(1, timeoutMs), config.security.max_exec_ms);
+  return withGitAuth(workspace, async (env) => {
+    const result = await runCommand(workspace.git?.git_cli || 'git', cmd.map(String), cwd.absolute, timeout, env);
+    const output = truncateText(redactGitOutputForDisplay(`${result.stdout}${result.stderr}`), Math.min(Math.max(1, maxOutputChars), 50000));
+    return ok('git command finished', {
+      command: ['git', ...cmd].map(redactGitOutputForDisplay), cwd: cwd.displayPath,
+      exit_code: result.code, timed_out: result.timed_out, output: output.text,
+      truncated: output.truncated, auth_lane: 'configured_token_askpass', identity_lane: gitIdentityLane(workspace)
+    });
+  });
+}
+
 export async function gitPushCurrentBranch(config: AppConfig, workspace: Workspace, repoPath = '.', remote = 'origin', branch?: string) {
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   const repo = await resolveInside(workspace, repoPath, config);
@@ -31,6 +47,13 @@ export async function gitPushCurrentBranch(config: AppConfig, workspace: Workspa
   if (!currentBranch || currentBranch === 'HEAD') throw new Error('cannot push detached HEAD without an explicit branch');
   const sha = await gitOutput(['rev-parse', '--short', 'HEAD'], cwd, config, 'git ref diagnostic: failed to resolve HEAD');
   const remoteUrlRaw = await gitOutput(['remote', 'get-url', remote], cwd, config, `git remote diagnostic: remote not found or unreadable: ${remote}`);
+  return withGitAuth(workspace, async (env) => {
+    const result = await runCommand('git', ['push', remote, currentBranch], cwd, config.security.max_exec_ms, env);
+    return ok('git push finished', gitPushResult(workspace, cwd, remote, remoteUrlRaw, currentBranch, sha, result));
+  });
+}
+
+async function withGitAuth<T>(workspace: Workspace, action: (env: Record<string, string>) => Promise<T>): Promise<T> {
   const tokenFile = workspace.git?.github_token_file || defaultTokenPath(workspace);
   const askpassDir = await mkdtemp(path.join(os.tmpdir(), 'ota-git-askpass-'));
   const askpass = path.join(askpassDir, 'askpass.sh');
@@ -38,14 +61,21 @@ export async function gitPushCurrentBranch(config: AppConfig, workspace: Workspa
     await assertReadableToken(tokenFile);
     await writeFile(askpass, askpassScript(tokenFile), { mode: 0o700 });
     await chmod(askpass, 0o700);
-    const result = await runCommand('git', ['push', remote, currentBranch], cwd, config.security.max_exec_ms, {
-      GIT_ASKPASS: askpass,
-      GIT_TERMINAL_PROMPT: '0'
-    });
-    return ok('git push finished', gitPushResult(workspace, cwd, remote, remoteUrlRaw, currentBranch, sha, result));
+    return await action({ GIT_ASKPASS: askpass, GIT_TERMINAL_PROMPT: '0', ...gitIdentityEnvironment(workspace) });
   } finally {
     await rm(askpassDir, { recursive: true, force: true });
   }
+}
+
+function gitIdentityEnvironment(workspace: Workspace): Record<string, string> {
+  const name = workspace.git?.user_name;
+  const email = workspace.git?.user_email;
+  if (!name || !email) return {};
+  return { GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email, GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email };
+}
+
+function gitIdentityLane(workspace: Workspace): string {
+  return workspace.git?.user_name && workspace.git?.user_email ? 'configured_workspace_identity' : 'repository_or_global_identity';
 }
 
 function gitPushResult(workspace: Workspace, cwd: string, remote: string, remoteUrlRaw: string, branch: string, sha: string, result: { code: number | null; stdout: string; stderr: string; timed_out: boolean }) {

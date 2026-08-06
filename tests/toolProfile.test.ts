@@ -16,8 +16,13 @@ describe('toolProfile', () => {
       permission_model: 'github_pat_scope',
       adapter: 'gh_cli'
     });
+    expect(result.data?.git).toMatchObject({
+      operation: 'git',
+      auth_lane: 'same_workspace_github_token_file_via_askpass',
+      adapter: 'git_cli'
+    });
     expect(result.data?.command_runtime?.recommended_cmd_array_for_shell).toContain('<script>');
-    expect(result.data?.tool_async).toMatchObject({ browser_cdp_batch: { may_return_running: true, default_async_mode: 'quota_saver' }, search_files: { may_return_running: true, default_async_mode: 'quota_saver' }, run_command: { may_return_running: true, default_async_mode: 'quota_saver' }, read_process: { tail_supported: true, cursor_field: 'cursor' } });
+    expect(result.data?.tool_async).toMatchObject({ browser_cdp_batch: { may_return_running: true, default_async_mode: 'quota_saver' }, search_files: { may_return_running: true, default_async_mode: 'quota_saver' }, run_command: { may_return_running: true, default_async_mode: 'quota_saver' }, git: { may_return_running: true, default_async_mode: 'quota_saver' }, read_process: { tail_supported: true, cursor_field: 'cursor' } });
   });
 
   it('exposes configured PowerShell 7 runtime when supplied', () => {

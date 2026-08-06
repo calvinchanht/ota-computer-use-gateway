@@ -55,6 +55,8 @@ const CONTRACTS: Record<string, ContractSpec> = {
   browser_manage_tabs: spec({ workspace_id: 'string required', profile_label: 'string optional', action: 'string required', url_contains: 'string optional', title_contains: 'string optional', target_id: 'string optional', include_urls: 'boolean optional', max_close: 'number optional' }),
   browser_upload_file_and_verify: spec({ workspace_id: 'string required', profile_label: 'string optional', target_id: 'string required', selector: 'string required', path: 'string required', verify_visible_text: 'string optional', timeout_ms: 'number optional' }),
   run_command: spec({ workspace_id: 'string required', cmd_array: 'string[] required', cwd: 'string optional', timeout_ms: 'number optional', max_stdout_bytes: 'number optional', max_stderr_bytes: 'number optional', tail: 'boolean optional', cmd: 'legacy string[] alias only' }, { cmd: ['cmd_array'] }),
+  git: spec({ workspace_id: 'string required', cmd_array: 'string[] required', cwd: 'string optional', timeout_ms: 'number optional', max_output_chars: 'number optional' }),
+  github: spec({ workspace_id: 'string required', cmd_array: 'string[] required', cwd: 'string optional', timeout_ms: 'number optional', max_output_chars: 'number optional' }),
   start_process: spec({ workspace_id: 'string required', cmd_array: 'string[] preferred', command: 'legacy string optional', cwd: 'string optional', timeout_ms: 'number optional' }),
   read_process: spec({ workspace_id: 'string required', process_id: 'string required', max_bytes: 'number optional', cursor: 'number optional' }),
   write_process: spec({ workspace_id: 'string required', process_id: 'string required', input: 'string required', close_stdin: 'boolean optional' }),

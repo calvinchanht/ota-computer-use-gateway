@@ -93,7 +93,10 @@ const workspaceBaseSchema = z.object({
   git: z.object({
     github_token_file: z.string().min(1).optional(),
     github_cli_wrapper: z.string().min(1).optional(),
-    github_cli: z.string().min(1).default('gh')
+    github_cli: z.string().min(1).default('gh'),
+    git_cli: z.string().min(1).default('git'),
+    user_name: z.string().min(1).optional(),
+    user_email: z.string().email().optional()
   }).prefault({})
 });
 

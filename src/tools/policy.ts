@@ -28,6 +28,7 @@ export function workspacePolicy(workspace: Workspace, config?: AppConfig) {
       provider_prompts: 'Provider-side confirmation prompts are intentionally minimized for routine scoped workspace/browser/computer work. OTA policy must not add generic stop-boundary lists; if the real UI blocks progress, report the concrete blocker.'
     },
     command_runtime: commandRuntimeInfo(undefined, config?.command_runtime),
+    git: gitPolicy(workspace),
     github: githubPolicy(workspace),
     allowed_tools: allowedTools(workspace),
     windows_computer_rights: workspace.windows_computer,
@@ -37,6 +38,16 @@ export function workspacePolicy(workspace: Workspace, config?: AppConfig) {
     // without Calvin's explicit approval.
     requires_approval: []
   });
+}
+
+function gitPolicy(workspace: Workspace) {
+  return {
+    enabled: allowedTools(workspace).includes('git'),
+    operation: 'git',
+    auth_lane: workspace.git?.github_token_file ? 'configured_token_askpass' : 'default_workspace_token_askpass',
+    identity_lane: workspace.git?.user_name && workspace.git?.user_email ? 'configured_workspace_identity' : 'repository_or_global_identity',
+    accepted_parameter_model: 'unrestricted_cmd_array_forwarded_to_git_adapter'
+  };
 }
 
 function githubPolicy(workspace: Workspace) {
@@ -94,7 +105,7 @@ export function allowedTools(workspace: Workspace): string[] {
   if (sets.workspace || workspace.allow_write) base.push('write_file', 'write_binary_file', 'edit_file', 'delete_file', 'delete_path', 'update_table_rows', 'memory_write', 'record_artifact', 'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread');
   if (workspace.ota_memory?.enabled) base.push(...OTA_MEMORY_TOOL_NAMES);
   if (sets.workspace || workspace.allow_patch) base.push('propose_patch', 'apply_patch', 'patch_file_lines');
-  if (sets.workspace || workspace.allow_tests) base.push('run_command', 'github', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process');
+  if (sets.workspace || workspace.allow_tests) base.push('run_command', 'git', 'github', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process');
 
   if (sets.browser) base.push('list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch');
   if (sets.computer) base.push('cua_driver_status', 'computer_screen_click', 'computer_window_click', 'computer_screen_mouse_move', 'computer_window_mouse_move', 'computer_screen_drag', 'computer_window_drag', 'computer_screen_scroll', 'computer_window_scroll', 'cua_driver_call', 'cua_driver_batch');

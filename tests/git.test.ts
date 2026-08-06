@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { gitPushCurrentBranch, redactGitOutputForDisplay, sanitizeGitRemoteForDisplay } from '../src/tools/git.js';
+import { gitCliTool, gitPushCurrentBranch, redactGitOutputForDisplay, sanitizeGitRemoteForDisplay } from '../src/tools/git.js';
 import { githubCliTool } from '../src/tools/github.js';
 import { createHttpRequestHandler } from '../src/server/http.js';
 import type { AppConfig } from '../src/config/schema.js';
@@ -77,6 +77,20 @@ describe('git display hygiene', () => {
       .rejects.toThrow('github auth diagnostic');
   });
 
+  it('stages and commits local files with the configured PAT account identity', async () => {
+    const repo = await fixtureRepo();
+    const ws = workspace(repo.root, repo.tokenFile);
+    ws.git = { ...ws.git, user_name: 'Calvin Chan', user_email: 'calvinchanht@gmail.com' };
+    await writeFile(path.join(repo.root, 'card.png'), 'png-bytes');
+
+    expect((await gitCliTool(config, ws, ['add', '--', 'card.png'])).data).toMatchObject({ exit_code: 0 });
+    const commit = await gitCliTool(config, ws, ['commit', '-m', 'Add card art']);
+    const author = spawnSync('git', ['log', '-1', '--format=%an <%ae>'], { cwd: repo.root, encoding: 'utf8' });
+
+    expect(commit.data).toMatchObject({ exit_code: 0, auth_lane: 'configured_token_askpass', identity_lane: 'configured_workspace_identity' });
+    expect(author.stdout.trim()).toBe('Calvin Chan <calvinchanht@gmail.com>');
+  });
+
   it('exposes github through the /ota/api/v1/gh HTTP alias', async () => {
     const repo = await fixtureRepo();
     await writeFile(repo.tokenFile, 'github_pat_TESTSECRET\n');
@@ -117,6 +131,26 @@ describe('git display hygiene', () => {
       expect(body.ok).toBe(false);
       expect(body.summary).toContain('git remote diagnostic');
       expect(body.summary).not.toContain('unsupported API tool');
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      await rm(repo.root, { recursive: true, force: true });
+    }
+  });
+
+  it('dispatches generic git argv through the HTTP tool facade', async () => {
+    const repo = await fixtureRepo();
+    const server: Server = createServer(createHttpRequestHandler(configForGithub(repo.root, repo.tokenFile)));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('expected TCP address');
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/v1/tool`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ tool: 'git', arguments: { workspace_id: 'anna', cmd_array: ['status', '--short'], async_mode: 'sync' } })
+      });
+      const body = await response.json() as { ok: boolean; data: { exit_code: number; command: string[] } };
+      expect(body.ok).toBe(true);
+      expect(body.data).toMatchObject({ exit_code: 0, command: ['git', 'status', '--short'] });
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
       await rm(repo.root, { recursive: true, force: true });

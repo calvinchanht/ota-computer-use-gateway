@@ -47,7 +47,13 @@ describe('policy and tool profile consistency', () => {
   });
 
   it('exposes non-secret GitHub operation status through workspace policy', () => {
-    const policy = workspacePolicy(fixtureWorkspace({ git: { github_token_file: '/secrets/test_pat.txt', github_cli: 'gh' } })).data;
+    const policy = workspacePolicy(fixtureWorkspace({ git: { github_token_file: '/secrets/test_pat.txt', github_cli: 'gh', user_name: 'Calvin Chan', user_email: 'calvinchanht@gmail.com' } })).data;
+    expect(policy?.git).toMatchObject({
+      enabled: true,
+      auth_lane: 'configured_token_askpass',
+      identity_lane: 'configured_workspace_identity',
+      accepted_parameter_model: 'unrestricted_cmd_array_forwarded_to_git_adapter'
+    });
     expect(policy?.github).toMatchObject({
       enabled: true,
       preferred_surface: 'ota_github_operation',
