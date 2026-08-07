@@ -122,11 +122,12 @@ If a stale or out-of-range cursor is provided, the gateway clamps it to the curr
 ## Git primitives
 
 - `github` — run GitHub CLI argv through the workspace configured PAT-backed lane. `cmd_array` starts after `gh`; for example `["issue", "view", "40", "-R", "owner/repo"]`.
+- `git_lfs_publish_current_branch` — verify canonical LFS pointers and local objects, upload required LFS objects, then push the Git ref. Pass `force_with_lease_sha` only when intentionally repairing a branch against one exact remote SHA.
 - `git_status` — return concise git status.
 - `git_diff` — return bounded git diff output.
 - `git_push_current_branch` — push the current branch using configured server-side credentials.
 
-`git` is raw local Git argv behind the OTA `git` operation. `github` is raw GitHub CLI argv behind the OTA `github` operation. Neither operation shell-interpolates the request or maintains a command allowlist. Configure `git.github_token_file` once for both operations: OTA injects it into `github` as `GH_TOKEN` and into `git` through ephemeral child-process Git config scoped to `https://github.com/`, with interactive prompting disabled. Configure `git.user_name` and `git.user_email` when local commits must always use the same GitHub account identity. Token values, tokenized remotes, and GitHub token patterns are redacted from output.
+`git` is raw local Git argv behind the OTA `git` operation, including transparent `git lfs` subcommands when Git LFS is installed. `github` is raw GitHub CLI argv behind the OTA `github` operation. Neither operation shell-interpolates the request or maintains a command allowlist. Configure `git.github_token_file` once for both operations: OTA injects it into `github` as `GH_TOKEN` and into `git` through ephemeral child-process Git config scoped to `https://github.com/`, with interactive prompting disabled. Configure `git.user_name` and `git.user_email` when local commits must always use the same GitHub account identity. Token values, tokenized remotes, and GitHub token patterns are redacted from output.
 
 OTA does not maintain a GitHub operation allowlist. The `cmd_array` is forwarded to the configured `gh` adapter, and GitHub/PAT scopes decide what is permitted. Agents should call the OTA `github` operation instead of `run_command` with `gh`, `curl`, or ambient `GH_TOKEN`.
 

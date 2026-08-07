@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { gitCliTool, gitPushCurrentBranch, redactGitOutputForDisplay, sanitizeGitRemoteForDisplay } from '../src/tools/git.js';
+import { gitCliTool, gitLfsPublishCurrentBranch, gitPushCurrentBranch, redactGitOutputForDisplay, sanitizeGitRemoteForDisplay } from '../src/tools/git.js';
 import { githubCliTool } from '../src/tools/github.js';
 import { createHttpRequestHandler } from '../src/server/http.js';
 import type { AppConfig } from '../src/config/schema.js';
@@ -90,6 +90,31 @@ describe('git display hygiene', () => {
     expect(commit.data).toMatchObject({ exit_code: 0, auth_lane: 'configured_token_git_config_env', identity_lane: 'configured_workspace_identity' });
     expect(author.stdout.trim()).toBe('Calvin Chan <calvinchanht@gmail.com>');
   });
+
+  it('verifies and uploads LFS objects before pushing the current branch', async () => {
+    if (spawnSync('git', ['lfs', 'version']).status !== 0) return;
+    const repo = await fixtureRepo();
+    const remote = await mkdtemp(path.join(tmpdir(), 'gtp-lfs-remote-'));
+    try {
+      runGit(remote, ['init', '--bare']);
+      runGit(repo.root, ['lfs', 'install', '--local']);
+      await writeFile(path.join(repo.root, '.gitattributes'), '*.png filter=lfs diff=lfs merge=lfs -text\n');
+      await writeFile(path.join(repo.root, 'card.png'), Buffer.alloc(4096, 7));
+      runGit(repo.root, ['add', '.gitattributes', 'card.png']);
+      runGit(repo.root, ['commit', '-m', 'Add LFS card']);
+      runGit(repo.root, ['remote', 'add', 'origin', remote]);
+      const branch = spawnSync('git', ['branch', '--show-current'], { cwd: repo.root, encoding: 'utf8' }).stdout.trim();
+      const result = await gitLfsPublishCurrentBranch(config, workspace(repo.root, repo.tokenFile), '.', 'origin', branch);
+      const pointer = spawnSync('git', ['--git-dir', remote, 'show', `${branch}:card.png`], { encoding: 'utf8' });
+
+      expect(result.data).toMatchObject({ status: 'pushed', branch, auth_lane: 'configured_token_git_config_env' });
+      expect(result.data.steps.map((step: { command: string[] }) => step.command)).toContainEqual(['git', 'lfs', 'push', 'origin', branch]);
+      expect(pointer.stdout).toContain('https://git-lfs.github.com/spec/v1');
+    } finally {
+      await rm(repo.root, { recursive: true, force: true });
+      await rm(remote, { recursive: true, force: true });
+    }
+  }, 30000);
 
   it('exposes github through the /ota/api/v1/gh HTTP alias', async () => {
     const repo = await fixtureRepo();

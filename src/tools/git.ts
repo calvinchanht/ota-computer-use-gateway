@@ -36,19 +36,28 @@ export async function gitCliTool(config: AppConfig, workspace: Workspace, cmd: s
 
 export async function gitPushCurrentBranch(config: AppConfig, workspace: Workspace, repoPath = '.', remote = 'origin', branch?: string) {
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
-  const repo = await resolveInside(workspace, repoPath, config);
-  const isRepo = await runCommand('git', ['rev-parse', '--is-inside-work-tree'], repo.absolute, config.security.max_exec_ms);
-  if (isRepo.code !== 0 || !isRepo.stdout.includes('true')) throw new Error('git repo diagnostic: repo_path is not inside a git work tree');
-  const top = await runCommand('git', ['rev-parse', '--show-toplevel'], repo.absolute, config.security.max_exec_ms);
-  if (top.code !== 0) throw new Error(`git repo diagnostic: failed to resolve git root: ${safeGitMessage(top.stderr || top.stdout)}`);
-  const cwd = top.stdout.trim();
-  const currentBranch = branch || (await gitOutput(['rev-parse', '--abbrev-ref', 'HEAD'], cwd, config, 'git ref diagnostic: failed to resolve current branch'));
-  if (!currentBranch || currentBranch === 'HEAD') throw new Error('cannot push detached HEAD without an explicit branch');
-  const sha = await gitOutput(['rev-parse', '--short', 'HEAD'], cwd, config, 'git ref diagnostic: failed to resolve HEAD');
-  const remoteUrlRaw = await gitOutput(['remote', 'get-url', remote], cwd, config, `git remote diagnostic: remote not found or unreadable: ${remote}`);
+  const context = await gitPublishContext(config, workspace, repoPath, remote, branch);
   return withGitAuth(workspace, async (env) => {
-    const result = await runCommand('git', ['push', remote, currentBranch], cwd, config.security.max_exec_ms, env);
-    return ok('git push finished', gitPushResult(workspace, cwd, remote, remoteUrlRaw, currentBranch, sha, result));
+    const result = await runCommand(context.executable, ['push', remote, context.branch], context.cwd, config.security.max_exec_ms, env);
+    return ok('git push finished', gitPushResult(workspace, context.cwd, remote, context.remoteUrl, context.branch, context.sha, result));
+  });
+}
+
+export async function gitLfsPublishCurrentBranch(config: AppConfig, workspace: Workspace, repoPath = '.', remote = 'origin', branch?: string, forceWithLeaseSha?: string) {
+  if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
+  if (forceWithLeaseSha && !/^[0-9a-f]{40}$/i.test(forceWithLeaseSha)) throw new Error('force_with_lease_sha must be a full 40-character Git SHA');
+  const context = await gitPublishContext(config, workspace, repoPath, remote, branch);
+  return withGitAuth(workspace, async (env) => {
+    const steps = [];
+    for (const command of [['lfs', 'version'], ['lfs', 'fsck', '--objects', '--pointers', 'HEAD'], ['lfs', 'push', remote, context.branch]]) {
+      const step = await runGitPublishStep(context.executable, command, context.cwd, config.security.max_exec_ms, env);
+      steps.push(step);
+      if (step.exit_code !== 0 || step.timed_out) return ok('git LFS publish failed', gitLfsPublishResult(workspace, context, steps, forceWithLeaseSha));
+    }
+    const push = ['push', remote, context.branch];
+    if (forceWithLeaseSha) push.splice(1, 0, `--force-with-lease=refs/heads/${context.branch}:${forceWithLeaseSha}`);
+    steps.push(await runGitPublishStep(context.executable, push, context.cwd, config.security.max_exec_ms, env));
+    return ok('git LFS publish finished', gitLfsPublishResult(workspace, context, steps, forceWithLeaseSha));
   });
 }
 
@@ -97,8 +106,37 @@ function gitPushResult(workspace: Workspace, cwd: string, remote: string, remote
   };
 }
 
-async function gitOutput(args: string[], cwd: string, config: AppConfig, context: string): Promise<string> {
-  const result = await runCommand('git', args, cwd, config.security.max_exec_ms);
+async function gitPublishContext(config: AppConfig, workspace: Workspace, repoPath: string, remote: string, branch?: string) {
+  const repo = await resolveInside(workspace, repoPath, config);
+  const executable = workspace.git?.git_cli || 'git';
+  const isRepo = await runCommand(executable, ['rev-parse', '--is-inside-work-tree'], repo.absolute, config.security.max_exec_ms);
+  if (isRepo.code !== 0 || !isRepo.stdout.includes('true')) throw new Error('git repo diagnostic: repo_path is not inside a git work tree');
+  const cwd = await gitOutput(executable, ['rev-parse', '--show-toplevel'], repo.absolute, config, 'git repo diagnostic: failed to resolve git root');
+  const currentBranch = branch || await gitOutput(executable, ['rev-parse', '--abbrev-ref', 'HEAD'], cwd, config, 'git ref diagnostic: failed to resolve current branch');
+  if (!currentBranch || currentBranch === 'HEAD') throw new Error('cannot push detached HEAD without an explicit branch');
+  const sha = await gitOutput(executable, ['rev-parse', 'HEAD'], cwd, config, 'git ref diagnostic: failed to resolve HEAD');
+  const remoteUrl = await gitOutput(executable, ['remote', 'get-url', remote], cwd, config, `git remote diagnostic: remote not found or unreadable: ${remote}`);
+  return { executable, cwd, branch: currentBranch, sha, remote, remoteUrl };
+}
+
+async function runGitPublishStep(executable: string, args: string[], cwd: string, timeout: number, env: Record<string, string>) {
+  const result = await runCommand(executable, args, cwd, timeout, env);
+  const output = truncateText(redactGitOutputForDisplay(result.stdout + result.stderr), 50000);
+  return { command: ['git', ...args], exit_code: result.code, timed_out: result.timed_out, output: output.text, truncated: output.truncated };
+}
+
+function gitLfsPublishResult(workspace: Workspace, context: Awaited<ReturnType<typeof gitPublishContext>>, steps: Awaited<ReturnType<typeof runGitPublishStep>>[], forceWithLeaseSha?: string) {
+  const failed = steps.find((step) => step.exit_code !== 0 || step.timed_out);
+  return {
+    status: failed ? 'failed' : 'pushed', failed_command: failed?.command ?? null,
+    repo_path: path.relative(workspace.realRoot, context.cwd) || '.', remote: context.remote,
+    remote_url: sanitizeGitRemoteForDisplay(context.remoteUrl), branch: context.branch, sha: context.sha,
+    force_with_lease_sha: forceWithLeaseSha ?? null, steps, auth_lane: 'configured_token_git_config_env'
+  };
+}
+
+async function gitOutput(executable: string, args: string[], cwd: string, config: AppConfig, context: string): Promise<string> {
+  const result = await runCommand(executable, args, cwd, config.security.max_exec_ms);
   if (result.code !== 0) throw new Error(`${context}: ${safeGitMessage(result.stderr || result.stdout || `git ${args.join(' ')} failed`)}`);
   return result.stdout.trim();
 }

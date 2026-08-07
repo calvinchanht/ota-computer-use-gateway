@@ -101,7 +101,7 @@ export function allowedTools(workspace: Workspace): string[] {
   if (sets.estate_admin) base.push(...ESTATE_TOOL_NAMES);
 
 
-  if (sets.workspace || workspace.allow_read) base.push('workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'read_file_chunk', 'read_file_lines', 'read_binary_file', 'infer_file_structure', 'sample_file', 'read_around', 'search_file', 'search_files', 'table_profile', 'query_table', 'query_table_aggregate', 'json_profile', 'query_json', 'git_status', 'git_diff', 'git_push_current_branch', 'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'memory_search', 'list_skills', 'read_skill', 'approval_status', 'list_artifacts');
+  if (sets.workspace || workspace.allow_read) base.push('workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'read_file_chunk', 'read_file_lines', 'read_binary_file', 'infer_file_structure', 'sample_file', 'read_around', 'search_file', 'search_files', 'table_profile', 'query_table', 'query_table_aggregate', 'json_profile', 'query_json', 'git_status', 'git_diff', 'git_push_current_branch', 'git_lfs_publish_current_branch', 'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'memory_search', 'list_skills', 'read_skill', 'approval_status', 'list_artifacts');
   if (sets.workspace || workspace.allow_write) base.push('write_file', 'write_binary_file', 'edit_file', 'delete_file', 'delete_path', 'update_table_rows', 'memory_write', 'record_artifact', 'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread');
   if (workspace.ota_memory?.enabled) base.push(...OTA_MEMORY_TOOL_NAMES);
   if (sets.workspace || workspace.allow_patch) base.push('propose_patch', 'apply_patch', 'patch_file_lines');

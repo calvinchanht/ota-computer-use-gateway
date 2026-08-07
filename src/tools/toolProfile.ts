@@ -43,7 +43,7 @@ function canonicalTools(): string[] {
     'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch',
     'workspace_inventory', 'read_file', 'read_file_chunk', 'read_file_lines', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
     'run_command', 'run_configured_command', 'workspace_helper_list', 'workspace_helper_status', 'workspace_helper_upsert', 'workspace_helper_run', 'list_dir', 'stat_path', 'tree', 'search_files',
-    'git', 'github', 'git_status', 'git_diff', 'git_push_current_branch', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',
+    'git', 'github', 'git_status', 'git_diff', 'git_push_current_branch', 'git_lfs_publish_current_branch', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',
     'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'memory_search', 'memory_write',
     'list_skills', 'read_skill', 'approval_status', 'list_artifacts', 'record_artifact',
     'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread'
@@ -130,10 +130,11 @@ function githubProfile() {
 function gitProfile() {
   return {
     operation: 'git',
-    parameter_model: 'cmd_array is forwarded as local git argv after the executable; OTA does not maintain a Git operation allowlist.',
+    parameter_model: 'cmd_array is forwarded as local git argv after the executable, including git lfs subcommands; OTA does not maintain a Git operation allowlist.',
     auth_lane: 'same_workspace_github_token_file_via_ephemeral_git_config',
     identity_lane: 'workspaces[].git.user_name and user_email',
-    adapter: 'git_cli'
+    adapter: 'git_cli',
+    lfs_publish_workflow: 'git_lfs_publish_current_branch verifies LFS pointers/objects, uploads required LFS objects, then pushes the Git ref'
   };
 }
 
@@ -187,6 +188,7 @@ function toolAsync() {
     search_files: quotaSaverAsync('workspace search'),
     run_command: quotaSaverAsync('workspace command'),
     git: quotaSaverAsync('Git command'),
+    git_lfs_publish_current_branch: quotaSaverAsync('Git LFS publish'),
     github: quotaSaverAsync('GitHub command'),
     read_process: { may_return_running: false, tail_supported: true, cursor_field: 'cursor', next_cursor_field: 'data.next_cursor', note: 'For long-running commands, prefer start_process plus read_process(cursor). Managed processes default to a 60-minute lifetime.' },
     browser_tail: { may_return_running: false, tail_supported: true, cursor_field: 'cursor', next_cursor_field: 'data.next_cursor', note: 'For long-running browser observation, call browser_tail with cursor=previous next_cursor to retrieve visible-state deltas.' },

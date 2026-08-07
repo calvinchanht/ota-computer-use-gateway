@@ -14,7 +14,7 @@ import { workspaceStatus } from '../tools/workspace.js';
 import { toolProfile } from '../tools/toolProfile.js';
 import { allowedTools, workspacePolicy } from '../tools/policy.js';
 import { deleteFileTool, deletePathTool, editFileTool, listDir, readBinaryFileTool, readFileTool, statPath, treeTool, workspaceInventory, writeBinaryFileTool, writeFileTool } from '../tools/files.js';
-import { gitCliTool, gitDiff, gitPushCurrentBranch, gitStatus } from '../tools/git.js';
+import { gitCliTool, gitDiff, gitLfsPublishCurrentBranch, gitPushCurrentBranch, gitStatus } from '../tools/git.js';
 import { githubCliTool } from '../tools/github.js';
 import {
   genesisAgentDeepDive,
@@ -580,7 +580,7 @@ export function shouldUseQuotaSaver(tool: string, args: Record<string, unknown>)
 }
 
 function defaultQuotaSaverTool(tool: string): boolean {
-  if (tool === 'run_command' || tool === 'search_files' || tool === 'git' || tool === 'github') return true;
+  if (tool === 'run_command' || tool === 'search_files' || tool === 'git' || tool === 'github' || tool === 'git_lfs_publish_current_branch') return true;
   if (tool === 'cua_driver_status') return false;
   return tool.startsWith('browser_cdp') || tool.startsWith('cua_driver_') || tool.startsWith('computer_');
 }
@@ -591,6 +591,7 @@ function initialWaitReason(tool: string): string {
   if (tool === 'search_files') return 'searching_workspace';
   if (tool === 'run_command') return 'running_command';
   if (tool === 'git') return 'running_git_command';
+  if (tool === 'git_lfs_publish_current_branch') return 'publishing_git_lfs_branch';
   if (tool === 'github') return 'running_github_command';
   return 'running';
 }
@@ -736,6 +737,7 @@ function callGitContextApiTool(config: AppConfig, workspace: Workspace, tool: st
   if (tool === 'git_status') return gitStatus(workspace);
   if (tool === 'git_diff') return gitDiff(workspace, optionalNumber(args.max_bytes) ?? 20000);
   if (tool === 'git_push_current_branch') return gitPushCurrentBranch(config, workspace, optionalString(args.repo_path) ?? '.', optionalString(args.remote) ?? 'origin', optionalString(args.branch));
+  if (tool === 'git_lfs_publish_current_branch') return gitLfsPublishCurrentBranch(config, workspace, optionalString(args.repo_path) ?? '.', optionalString(args.remote) ?? 'origin', optionalString(args.branch), optionalString(args.force_with_lease_sha));
   if (tool === 'git') return gitCliTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 60000, optionalNumber(args.max_output_chars) ?? optionalNumber(args.max_stdout_bytes) ?? 20000);
   if (tool === 'github') return githubCliTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 60000, optionalNumber(args.max_output_chars) ?? optionalNumber(args.max_stdout_bytes) ?? 20000);
   if (tool === 'get_agent_bootstrap') return agentBootstrap(workspace);
