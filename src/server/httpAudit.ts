@@ -15,10 +15,22 @@ type HttpAuditEntry = {
   headers?: Record<string, string | undefined>;
 };
 
-export function auditHttpRequest(workspace: Workspace | null, req: IncomingMessage, res: ServerResponse, startedAt = Date.now()): void {
+type HttpAuditOptions = {
+  onWriteError?: (error: unknown) => void;
+};
+
+export function auditHttpRequest(
+  workspace: Workspace | null,
+  req: IncomingMessage,
+  res: ServerResponse,
+  startedAt = Date.now(),
+  options: HttpAuditOptions = {}
+): void {
   if (!workspace || !req.url?.startsWith('/mcp')) return;
   res.once('finish', () => {
-    void writeHttpAudit(workspace, entryFor(req, res, startedAt));
+    void writeHttpAudit(workspace, entryFor(req, res, startedAt)).catch((error: unknown) => {
+      options.onWriteError?.(error);
+    });
   });
 }
 

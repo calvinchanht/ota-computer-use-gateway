@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
@@ -28,6 +28,20 @@ describe('HTTP request audit', () => {
     auditHttpRequest(workspace, request('/healthz'), res);
     res.emit('finish');
     await expect(readFile(path.join(workspace.realRoot, '.agent/audit/http_requests.jsonl'), 'utf8')).rejects.toThrow();
+  });
+
+  it('contains audit write failures instead of creating an unhandled rejection', async () => {
+    const workspace = await fixtureWorkspace();
+    const blockedAgentDir = path.join(workspace.realRoot, 'not-a-directory');
+    await writeFile(blockedAgentDir, 'blocked');
+    workspace.realAgentDir = blockedAgentDir;
+    const error = new Promise<unknown>((resolve) => {
+      const res = response(200);
+      auditHttpRequest(workspace, request('/mcp'), res, Date.now(), { onWriteError: resolve });
+      res.emit('finish');
+    });
+
+    await expect(error).resolves.toMatchObject({ code: expect.stringMatching(/ENOTDIR|EEXIST/) });
   });
 });
 
