@@ -119,13 +119,35 @@ describe('git display hygiene', () => {
       runGit(repo.root, ['add', 'card-2.png']);
       runGit(repo.root, ['commit', '-m', 'Add second LFS card']);
 
-      const partialCloneResult = await gitLfsPublishCurrentBranch(config, workspace(repo.root, repo.tokenFile), '.', 'origin', branch);
-      expect(partialCloneResult.data).toMatchObject({ status: 'pushed', branch });
+      const partialCloneResult = await gitPushCurrentBranch(config, workspace(repo.root, repo.tokenFile), '.', 'origin', branch);
+      expect(partialCloneResult.data).toMatchObject({ status: 'pushed', branch, publish_mode: 'git_lfs', auto_selected: true });
+      expect(partialCloneResult.data.steps.map((step: { command: string[] }) => step.command)).toContainEqual(['git', 'lfs', 'install', '--local']);
     } finally {
       await rm(repo.root, { recursive: true, force: true });
       await rm(remote, { recursive: true, force: true });
     }
   }, 30000);
+
+  it('initializes LFS before creating an isolated worktree', async () => {
+    if (spawnSync('git', ['lfs', 'version']).status !== 0) return;
+    const repo = await fixtureRepo();
+    const worktree = await mkdtemp(path.join(tmpdir(), 'gtp-lfs-worktree-'));
+    await rm(worktree, { recursive: true, force: true });
+    try {
+      await writeFile(path.join(repo.root, '.gitattributes'), '*.png filter=lfs diff=lfs merge=lfs -text\n');
+      runGit(repo.root, ['add', '.gitattributes']);
+      runGit(repo.root, ['commit', '-m', 'Configure LFS']);
+      const result = await gitCliTool(config, workspace(repo.root, repo.tokenFile), ['worktree', 'add', '-b', 'feature/lfs-worktree', worktree]);
+      const filter = spawnSync('git', ['config', '--local', '--get', 'filter.lfs.process'], { cwd: repo.root, encoding: 'utf8' });
+
+      expect(result.data).toMatchObject({ exit_code: 0, lfs_initialized: true });
+      expect(filter.stdout).toContain('git-lfs filter-process');
+    } finally {
+      spawnSync('git', ['worktree', 'remove', '--force', worktree], { cwd: repo.root, encoding: 'utf8' });
+      await rm(repo.root, { recursive: true, force: true });
+      await rm(worktree, { recursive: true, force: true });
+    }
+  });
 
   it('exposes github through the /ota/api/v1/gh HTTP alias', async () => {
     const repo = await fixtureRepo();

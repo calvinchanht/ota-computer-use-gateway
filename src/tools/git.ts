@@ -24,12 +24,15 @@ export async function gitCliTool(config: AppConfig, workspace: Workspace, cmd: s
   const cwd = await resolveInside(workspace, cwdPath, config);
   const timeout = Math.min(Math.max(1, timeoutMs), config.security.max_exec_ms);
   return withGitAuth(workspace, async (env) => {
-    const result = await runCommand(workspace.git?.git_cli || 'git', cmd.map(String), cwd.absolute, timeout, env);
+    const executable = workspace.git?.git_cli || 'git';
+    const lfsInitialized = await initializeLfsForWorktreeAdd(executable, cmd, cwd.absolute, timeout, env);
+    const result = await runCommand(executable, cmd.map(String), cwd.absolute, timeout, env);
     const output = truncateText(redactGitOutputForDisplay(`${result.stdout}${result.stderr}`), Math.min(Math.max(1, maxOutputChars), 50000));
     return ok('git command finished', {
       command: ['git', ...cmd].map(redactGitOutputForDisplay), cwd: cwd.displayPath,
       exit_code: result.code, timed_out: result.timed_out, output: output.text,
-      truncated: output.truncated, auth_lane: 'configured_token_git_config_env', identity_lane: gitIdentityLane(workspace)
+      truncated: output.truncated, auth_lane: 'configured_token_git_config_env', identity_lane: gitIdentityLane(workspace),
+      lfs_initialized: lfsInitialized
     });
   });
 }
@@ -38,6 +41,9 @@ export async function gitPushCurrentBranch(config: AppConfig, workspace: Workspa
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   const context = await gitPublishContext(config, workspace, repoPath, remote, branch);
   return withGitAuth(workspace, async (env) => {
+    if (await repositoryUsesGitLfs(context.executable, context.cwd, config.security.max_exec_ms, env)) {
+      return gitLfsPublish(config, workspace, context, env, undefined, true);
+    }
     const result = await runCommand(context.executable, ['push', remote, context.branch], context.cwd, config.security.max_exec_ms, env);
     return ok('git push finished', gitPushResult(workspace, context.cwd, remote, context.remoteUrl, context.branch, context.sha, result));
   });
@@ -47,18 +53,33 @@ export async function gitLfsPublishCurrentBranch(config: AppConfig, workspace: W
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   if (forceWithLeaseSha && !/^[0-9a-f]{40}$/i.test(forceWithLeaseSha)) throw new Error('force_with_lease_sha must be a full 40-character Git SHA');
   const context = await gitPublishContext(config, workspace, repoPath, remote, branch);
-  return withGitAuth(workspace, async (env) => {
-    const steps = [];
-    for (const command of [['lfs', 'version'], ['lfs', 'fsck', '--pointers', 'HEAD'], ['lfs', 'push', remote, context.branch]]) {
-      const step = await runGitPublishStep(context.executable, command, context.cwd, config.security.max_exec_ms, env);
-      steps.push(step);
-      if (step.exit_code !== 0 || step.timed_out) return ok('git LFS publish failed', gitLfsPublishResult(workspace, context, steps, forceWithLeaseSha));
-    }
-    const push = ['push', remote, context.branch];
-    if (forceWithLeaseSha) push.splice(1, 0, `--force-with-lease=refs/heads/${context.branch}:${forceWithLeaseSha}`);
-    steps.push(await runGitPublishStep(context.executable, push, context.cwd, config.security.max_exec_ms, env));
-    return ok('git LFS publish finished', gitLfsPublishResult(workspace, context, steps, forceWithLeaseSha));
-  });
+  return withGitAuth(workspace, (env) => gitLfsPublish(config, workspace, context, env, forceWithLeaseSha, false));
+}
+
+async function gitLfsPublish(config: AppConfig, workspace: Workspace, context: Awaited<ReturnType<typeof gitPublishContext>>, env: Record<string, string>, forceWithLeaseSha?: string, autoSelected = false) {
+  const steps = [];
+  for (const command of [['lfs', 'version'], ['lfs', 'install', '--local'], ['lfs', 'fsck', '--pointers', 'HEAD'], ['lfs', 'push', context.remote, context.branch]]) {
+    const step = await runGitPublishStep(context.executable, command, context.cwd, config.security.max_exec_ms, env);
+    steps.push(step);
+    if (step.exit_code !== 0 || step.timed_out) return ok('git LFS publish failed', gitLfsPublishResult(workspace, context, steps, forceWithLeaseSha, autoSelected));
+  }
+  const push = ['push', context.remote, context.branch];
+  if (forceWithLeaseSha) push.splice(1, 0, `--force-with-lease=refs/heads/${context.branch}:${forceWithLeaseSha}`);
+  steps.push(await runGitPublishStep(context.executable, push, context.cwd, config.security.max_exec_ms, env));
+  return ok('git LFS publish finished', gitLfsPublishResult(workspace, context, steps, forceWithLeaseSha, autoSelected));
+}
+
+async function initializeLfsForWorktreeAdd(executable: string, cmd: string[], cwd: string, timeout: number, env: Record<string, string>): Promise<boolean> {
+  if (cmd[0] !== 'worktree' || cmd[1] !== 'add') return false;
+  if (!await repositoryUsesGitLfs(executable, cwd, timeout, env)) return false;
+  const result = await runCommand(executable, ['lfs', 'install', '--local'], cwd, timeout, env);
+  if (result.code !== 0 || result.timed_out) throw new Error(`git LFS initialization failed: ${safeGitMessage(result.stderr || result.stdout)}`);
+  return true;
+}
+
+async function repositoryUsesGitLfs(executable: string, cwd: string, timeout: number, env: Record<string, string>): Promise<boolean> {
+  const result = await runCommand(executable, ['grep', '-l', 'filter=lfs', 'HEAD', '--', '.gitattributes', ':(glob)**/.gitattributes'], cwd, timeout, env);
+  return result.code === 0 && Boolean(result.stdout.trim());
 }
 
 async function withGitAuth<T>(workspace: Workspace, action: (env: Record<string, string>) => Promise<T>): Promise<T> {
@@ -99,6 +120,7 @@ function gitPushResult(workspace: Workspace, cwd: string, remote: string, remote
     remote_url: sanitizeGitRemoteForDisplay(remoteUrlRaw),
     branch,
     sha,
+    publish_mode: 'git',
     exit_code: result.code,
     timed_out: result.timed_out,
     output: output.text,
@@ -125,13 +147,14 @@ async function runGitPublishStep(executable: string, args: string[], cwd: string
   return { command: ['git', ...args], exit_code: result.code, timed_out: result.timed_out, output: output.text, truncated: output.truncated };
 }
 
-function gitLfsPublishResult(workspace: Workspace, context: Awaited<ReturnType<typeof gitPublishContext>>, steps: Awaited<ReturnType<typeof runGitPublishStep>>[], forceWithLeaseSha?: string) {
+function gitLfsPublishResult(workspace: Workspace, context: Awaited<ReturnType<typeof gitPublishContext>>, steps: Awaited<ReturnType<typeof runGitPublishStep>>[], forceWithLeaseSha?: string, autoSelected = false) {
   const failed = steps.find((step) => step.exit_code !== 0 || step.timed_out);
   return {
     status: failed ? 'failed' : 'pushed', failed_command: failed?.command ?? null,
     repo_path: path.relative(workspace.realRoot, context.cwd) || '.', remote: context.remote,
     remote_url: sanitizeGitRemoteForDisplay(context.remoteUrl), branch: context.branch, sha: context.sha,
-    force_with_lease_sha: forceWithLeaseSha ?? null, steps, auth_lane: 'configured_token_git_config_env'
+    force_with_lease_sha: forceWithLeaseSha ?? null, publish_mode: 'git_lfs', auto_selected: autoSelected,
+    steps, auth_lane: 'configured_token_git_config_env'
   };
 }
 

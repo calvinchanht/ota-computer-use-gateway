@@ -134,7 +134,7 @@ function gitProfile() {
     auth_lane: 'same_workspace_github_token_file_via_ephemeral_git_config',
     identity_lane: 'workspaces[].git.user_name and user_email',
     adapter: 'git_cli',
-    lfs_publish_workflow: 'git_lfs_publish_current_branch verifies canonical LFS pointers, uploads required local LFS objects, then pushes the Git ref; existing remote objects need not be downloaded locally'
+    lfs_publish_workflow: 'git_push_current_branch auto-selects Git LFS when configured; git_lfs_publish_current_branch remains available for explicit force-with-lease repairs'
   };
 }
 
