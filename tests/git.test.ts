@@ -108,8 +108,19 @@ describe('git display hygiene', () => {
       const pointer = spawnSync('git', ['--git-dir', remote, 'show', `${branch}:card.png`], { encoding: 'utf8' });
 
       expect(result.data).toMatchObject({ status: 'pushed', branch, auth_lane: 'configured_token_git_config_env' });
+      expect(result.data.steps.map((step: { command: string[] }) => step.command)).toContainEqual(['git', 'lfs', 'fsck', '--pointers', 'HEAD']);
       expect(result.data.steps.map((step: { command: string[] }) => step.command)).toContainEqual(['git', 'lfs', 'push', 'origin', branch]);
       expect(pointer.stdout).toContain('https://git-lfs.github.com/spec/v1');
+
+      const oid = pointer.stdout.match(/oid sha256:([0-9a-f]{64})/)?.[1];
+      expect(oid).toBeTruthy();
+      await rm(path.join(repo.root, '.git', 'lfs', 'objects', oid!.slice(0, 2), oid!.slice(2, 4), oid!), { force: true });
+      await writeFile(path.join(repo.root, 'card-2.png'), Buffer.alloc(4096, 9));
+      runGit(repo.root, ['add', 'card-2.png']);
+      runGit(repo.root, ['commit', '-m', 'Add second LFS card']);
+
+      const partialCloneResult = await gitLfsPublishCurrentBranch(config, workspace(repo.root, repo.tokenFile), '.', 'origin', branch);
+      expect(partialCloneResult.data).toMatchObject({ status: 'pushed', branch });
     } finally {
       await rm(repo.root, { recursive: true, force: true });
       await rm(remote, { recursive: true, force: true });

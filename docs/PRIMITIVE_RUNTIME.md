@@ -122,7 +122,7 @@ If a stale or out-of-range cursor is provided, the gateway clamps it to the curr
 ## Git primitives
 
 - `github` — run GitHub CLI argv through the workspace configured PAT-backed lane. `cmd_array` starts after `gh`; for example `["issue", "view", "40", "-R", "owner/repo"]`.
-- `git_lfs_publish_current_branch` — verify canonical LFS pointers and local objects, upload required LFS objects, then push the Git ref. Pass `force_with_lease_sha` only when intentionally repairing a branch against one exact remote SHA.
+- `git_lfs_publish_current_branch` — verify canonical LFS pointers, upload required local LFS objects, then push the Git ref. Existing remote LFS objects need not be downloaded locally. Pass `force_with_lease_sha` only when intentionally repairing a branch against one exact remote SHA.
 - `git_status` — return concise git status.
 - `git_diff` — return bounded git diff output.
 - `git_push_current_branch` — push the current branch using configured server-side credentials.

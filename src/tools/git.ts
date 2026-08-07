@@ -49,7 +49,7 @@ export async function gitLfsPublishCurrentBranch(config: AppConfig, workspace: W
   const context = await gitPublishContext(config, workspace, repoPath, remote, branch);
   return withGitAuth(workspace, async (env) => {
     const steps = [];
-    for (const command of [['lfs', 'version'], ['lfs', 'fsck', '--objects', '--pointers', 'HEAD'], ['lfs', 'push', remote, context.branch]]) {
+    for (const command of [['lfs', 'version'], ['lfs', 'fsck', '--pointers', 'HEAD'], ['lfs', 'push', remote, context.branch]]) {
       const step = await runGitPublishStep(context.executable, command, context.cwd, config.security.max_exec_ms, env);
       steps.push(step);
       if (step.exit_code !== 0 || step.timed_out) return ok('git LFS publish failed', gitLfsPublishResult(workspace, context, steps, forceWithLeaseSha));
