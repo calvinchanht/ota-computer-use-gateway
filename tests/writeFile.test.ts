@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -28,6 +28,17 @@ describe('writeFileTool', () => {
     const workspace = await fixtureWorkspace(true);
     await writeFile(path.join(workspace.realRoot, 'note.txt'), 'old');
     await expect(writeFileTool(config, workspace, 'note.txt', 'new')).rejects.toThrow('file exists');
+  });
+
+
+  it('does not overwrite a file outside the workspace through a symlink', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const outsideRoot = await mkdtemp(path.join(tmpdir(), 'gtp-write-outside-'));
+    const outside = path.join(outsideRoot, 'outside.txt');
+    await writeFile(outside, 'outside');
+    await symlink(outside, path.join(workspace.realRoot, 'link.txt'));
+    await expect(writeFileTool(config, workspace, 'link.txt', 'changed', true)).rejects.toThrow('workspace-relative');
+    await expect(readFile(outside, 'utf8')).resolves.toBe('outside');
   });
 
   it('writes secret-looking paths when workspace policy grants writes', async () => {

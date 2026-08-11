@@ -1,4 +1,5 @@
-import { access, appendFile, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { access, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileInfo, listEntries, mediaType, readBinary, readTextRange, treeEntries } from '../core/files.js';
 import { ok } from '../core/result.js';
@@ -141,27 +142,38 @@ function resolveWriteMode(mode: WriteMode | undefined, overwrite: boolean): Writ
 
 async function writeBytes(absolutePath: string, bytes: Buffer, mode: WriteMode, offset: number | undefined, maxBytes: number): Promise<void> {
   if (mode === 'create') await writeCreate(absolutePath, bytes);
-  else if (mode === 'overwrite') await writeFile(absolutePath, bytes);
+  else if (mode === 'overwrite') await writeOverwrite(absolutePath, bytes);
   else if (mode === 'append') await writeAppend(absolutePath, bytes, maxBytes);
   else await writePatch(absolutePath, bytes, offset, maxBytes);
 }
 
 async function writeCreate(absolutePath: string, bytes: Buffer): Promise<void> {
   await assertNewFile(absolutePath);
-  await writeFile(absolutePath, bytes);
+  const file = await open(absolutePath, 'wx');
+  try { await file.writeFile(bytes); } finally { await file.close(); }
+}
+
+async function writeOverwrite(absolutePath: string, bytes: Buffer): Promise<void> {
+  const file = await openNoFollow(absolutePath, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC);
+  try { await file.writeFile(bytes); } finally { await file.close(); }
 }
 
 async function writeAppend(absolutePath: string, bytes: Buffer, maxBytes: number): Promise<void> {
   await assertWithinFinalSize(absolutePath, bytes.length, maxBytes);
-  await appendFile(absolutePath, bytes);
+  const file = await openNoFollow(absolutePath, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT);
+  try { await file.writeFile(bytes); } finally { await file.close(); }
 }
 
 async function writePatch(absolutePath: string, bytes: Buffer, offset: number | undefined, maxBytes: number): Promise<void> {
   if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0) throw new Error('offset is required for mode=patch and must be a non-negative integer');
   const patchOffset = offset;
   await assertPatchBounds(absolutePath, patchOffset, bytes.length, maxBytes);
-  const file = await open(absolutePath, 'r+');
+  const file = await openNoFollow(absolutePath, constants.O_RDWR);
   try { await file.write(bytes, 0, bytes.length, patchOffset); } finally { await file.close(); }
+}
+
+async function openNoFollow(absolutePath: string, flags: number) {
+  return open(absolutePath, flags | (constants.O_NOFOLLOW ?? 0), 0o666);
 }
 
 async function assertWithinFinalSize(absolutePath: string, addedBytes: number, maxBytes: number): Promise<void> {

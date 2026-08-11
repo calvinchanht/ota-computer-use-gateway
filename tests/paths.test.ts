@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { resolveInside } from '../src/core/paths.js';
+import { resolveInside, resolveWritableInside } from '../src/core/paths.js';
 import type { AppConfig } from '../src/config/schema.js';
 import type { Workspace } from '../src/core/workspaces.js';
 
@@ -55,6 +55,22 @@ describe('resolveInside', () => {
     await writeFile(path.join(outsideRoot, 'outside.txt'), 'outside');
     await symlink(outsideRoot, path.join(workspace.realRoot, 'escape'), 'junction');
     await expect(resolveInside(workspace, path.join('escape', 'outside.txt'), config)).rejects.toThrow('workspace-relative');
+  });
+
+
+  it('rejects writable symlink escapes', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const outsideRoot = await mkdtemp(path.join(tmpdir(), 'gtp-outside-write-'));
+    await writeFile(path.join(outsideRoot, 'outside.txt'), 'outside');
+    await symlink(outsideRoot, path.join(workspace.realRoot, 'escape'), 'junction');
+    await expect(resolveWritableInside(workspace, path.join('escape', 'outside.txt'), config)).rejects.toThrow('workspace-relative');
+  });
+
+  it('rejects a writable target symlink that escapes the workspace', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const outside = await outsideFile('write-target.txt');
+    await symlink(outside, path.join(workspace.realRoot, 'escape.txt'));
+    await expect(resolveWritableInside(workspace, 'escape.txt', config)).rejects.toThrow('workspace-relative');
   });
 
 

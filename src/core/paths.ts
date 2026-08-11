@@ -1,4 +1,4 @@
-import { mkdir, realpath } from 'node:fs/promises';
+import { lstat, mkdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { AppConfig } from '../config/schema.js';
 import type { Workspace } from './workspaces.js';
@@ -19,14 +19,46 @@ export async function resolveInside(workspace: Workspace, requested: string, con
 }
 
 export async function resolveWritableInside(workspace: Workspace, requested: string, config: AppConfig): Promise<ResolvedPath> {
-  const absolute = resolveRequestedPath(workspace, requested);
+  const candidate = resolveRequestedPath(workspace, requested);
   const boundary = pathBoundaryFor(workspace, requested);
+  assertInside(boundary.root, candidate, requested, boundary.scope);
+  assertNoShadowDeny(config);
+
+  const parent = path.dirname(candidate);
+  const existingAncestor = await nearestExistingAncestor(parent);
+  const realAncestor = await realpath(existingAncestor);
+  assertInside(boundary.root, realAncestor, requested, boundary.scope);
+
+  await mkdir(parent, { recursive: true });
+  const realParent = await realpath(parent);
+  assertInside(boundary.root, realParent, requested, boundary.scope);
+
+  const concrete = path.join(realParent, path.basename(candidate));
+  const target = await lstat(concrete).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return undefined;
+    throw error;
+  });
+  const absolute = target ? await realpath(concrete) : concrete;
   assertInside(boundary.root, absolute, requested, boundary.scope);
+
   const relative = displayRelative(boundary.root, absolute);
   const displayPath = boundary.scope === 'host' ? ensureAbsoluteDisplay(boundary.root, relative) : relative;
-  assertNoShadowDeny(config);
-  await mkdir(path.dirname(absolute), { recursive: true });
   return { absolute, relative, displayPath, scope: boundary.scope };
+}
+
+async function nearestExistingAncestor(candidate: string): Promise<string> {
+  let current = candidate;
+  while (true) {
+    try {
+      await lstat(current);
+      return current;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      const parent = path.dirname(current);
+      if (parent === current) throw error;
+      current = parent;
+    }
+  }
 }
 
 function resolveRequestedPath(workspace: Workspace, requested: string): string {
