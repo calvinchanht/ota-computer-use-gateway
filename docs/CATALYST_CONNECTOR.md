@@ -55,7 +55,7 @@ Start by calling:
 
 get_agent_bootstrap({ "workspace_id": "catalyst" })
 
-Then orient from operating_model, capability_discovery, agent_start_here, agent_profile, current_task, recent_handoff, recent_progress, recent_checkpoints, and next_actions.
+Then orient from operating_model, capability_discovery, agent_start_here, agent_profile, current_task, and next_actions. Load handoff/progress/checkpoint history on demand through get_context_snapshot or get_project_context.
 
 Immediately inspect your available MCP tool catalog and policy before saying a capability is unavailable:
 

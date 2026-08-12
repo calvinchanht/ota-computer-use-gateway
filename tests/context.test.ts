@@ -46,8 +46,14 @@ describe('context tools', () => {
     expect(data.agent_profile.soul).toContain('mickey soul');
     expect(data.agent_profile.tools).toContain('tool notes');
     expect(data.current_task).toContain('current task');
-    expect(data.recent_handoff).toContain('handoff note');
+    expect(data).not.toHaveProperty('recent_handoff');
+    expect(data).not.toHaveProperty('recent_progress');
+    expect(data).not.toHaveProperty('recent_checkpoints');
+    expect(data.next_actions.join(' ')).toContain('get_context_snapshot');
     expect(data.operating_model.join(' ')).toContain('Checkpoint');
+
+    const history = (await contextSnapshot(workspace)).data as any;
+    expect(history.continuity['HANDOFF.md']).toContain('handoff note');
   });
 
   it('records progress and handoff notes', async () => {

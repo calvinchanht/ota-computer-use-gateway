@@ -63,7 +63,7 @@ async function checkpointAcceptance(sessionId) {
     summary: `${workspaceId} acceptance smoke passed at ${stamp}.`,
     next_steps: ['Continue Catalyst anchoring after Mickey proof is accepted.']
   }, sessionId);
-  await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, `${workspaceId} acceptance smoke passed at ${stamp}`, sessionId);
+  await expectText('get_context_snapshot', { workspace_id: workspaceId }, `${workspaceId} acceptance smoke passed at ${stamp}`, sessionId);
 }
 
 async function initialize() {

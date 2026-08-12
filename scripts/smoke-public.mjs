@@ -44,7 +44,7 @@ async function contextWriteSmoke(sessionId, stamp) {
   await call('record_handoff', { workspace_id: workspaceId, title: 'Public smoke handoff', body: `handoff ${stamp}` }, sessionId);
   await call('checkpoint_thread', { workspace_id: workspaceId, title: 'Public smoke checkpoint', summary: `checkpoint ${stamp}`, next_steps: ['continue'] }, sessionId);
   await expectText('get_context_snapshot', { workspace_id: workspaceId }, `checkpoint ${stamp}`, sessionId);
-  await expectText('get_agent_bootstrap', { workspace_id: workspaceId }, `handoff ${stamp}`, sessionId);
+  await expectText('get_context_snapshot', { workspace_id: workspaceId }, `handoff ${stamp}`, sessionId);
 }
 
 async function skillWriteSmoke(sessionId, stamp) {

@@ -35,9 +35,6 @@ export async function agentBootstrap(workspace: Workspace) {
     },
     project_instructions: snapshot.project_instructions,
     current_task: snapshot.continuity['CURRENT_TASK.md'],
-    recent_handoff: snapshot.continuity['HANDOFF.md'],
-    recent_progress: snapshot.continuity['PROGRESS.md'],
-    recent_checkpoints: snapshot.continuity['CHECKPOINTS.md'],
     capability_discovery: capabilityDiscovery(workspace),
     artifacts_hint: 'Call list_artifacts to find durable outputs from prior provider-thread work; call record_artifact after creating important files.',
     skills_hint: 'Call list_skills, then read_skill for relevant runbooks only when needed.',
@@ -149,7 +146,7 @@ function capabilityDiscovery(workspace: Workspace) {
 
 function bootstrapNextActions(workspace: Workspace) {
   return [
-    'Read agent_start_here, current_task, recent_handoff, recent_progress, and recent_checkpoints.',
+    'Read agent_start_here and current_task. Load historical handoff/progress/checkpoint material on demand through get_context_snapshot or get_project_context instead of treating it as normal bootstrap state.',
     'Call get_workspace_policy and get_tool_profile early; inspect available API tools before declaring limitations.',
     workspace.allow_read ? (workspace.api_sets?.machine_admin && workspace.filesystem?.machine_admin_host_scope ? 'Confirm file access by calling list_dir on "." for workspace-relative context and, when needed, stat_path/read_file on explicit absolute host paths inside host_root. Do not treat secrets/ or credential-named files as unavailable when gateway policy grants access. Avoid pasting raw secret contents into chat unless the operator explicitly asks.' : 'Confirm scoped file access by calling list_dir on ".", and when useful tree/stat_path/read_file anywhere inside the workspace. Do not treat secrets/ or credential-named files as unavailable when gateway policy grants workspace access. Avoid pasting raw secret contents into chat unless the operator explicitly asks.') : 'Read access is disabled by policy; say so explicitly if asked for files.',
     workspace.allow_write ? 'Use write_file/edit_file/write_binary_file for routine scoped workspace updates without asking the operator to babysit. Record important outputs with record_artifact.' : 'Write access is disabled by policy; do not imply you can write files.',

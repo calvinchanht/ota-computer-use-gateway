@@ -28,10 +28,9 @@ It returns an ordered startup packet with:
 - agent profile slices such as soul/user/tools/estate context when present;
 - project instructions;
 - current task;
-- recent handoff;
-- recent progress;
-- recent checkpoints;
 - suggested next actions.
+
+Historical handoff, progress, checkpoint, decision, and memory material is intentionally not injected into the normal bootstrap packet. Load it on demand through `get_context_snapshot`, `get_project_context`, `memory_search`, or targeted file reads.
 
 Use `get_context_snapshot` when a fuller raw view of continuity files is needed.
 
@@ -101,7 +100,7 @@ The provider-thread acceptance flow checks:
 6. `list_browser_profiles({ "workspace_id": "mickey" })`
 7. `browser_status({ "workspace_id": "mickey" })`
 8. `list_browser_tabs({ "workspace_id": "mickey" })`
-9. optionally `checkpoint_thread(...)`, then verify the checkpoint through `get_agent_bootstrap`.
+9. optionally `checkpoint_thread(...)`, then verify the checkpoint through `get_context_snapshot`.
 
 ## Validation
 
