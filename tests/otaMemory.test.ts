@@ -9,6 +9,14 @@ import { createServer } from '../src/server/create.js';
 import { otaMemoryCall } from '../src/tools/otaMemory.js';
 
 describe('OTA-Memory lifecycle adapter', () => {
+  it('requires bearer auth on loopback by default when auth is enabled', () => {
+    const parsed = configSchema.parse({
+      server: { auth: { enabled: true, bearer_token_env: 'TEST_BEARER' } },
+      workspaces: [{ id: 'genesis', name: 'Genesis', root: process.cwd() }]
+    });
+    expect(parsed.server.auth.allow_loopback_without_auth).toBe(false);
+  });
+
   it('requires server-owned paths and project identity when enabled', () => {
     const parsed = configSchema.safeParse({ workspaces: [{ id: 'anna', name: 'Anna', root: process.cwd(), ota_memory: { enabled: true } }] });
     expect(parsed.success).toBe(false);

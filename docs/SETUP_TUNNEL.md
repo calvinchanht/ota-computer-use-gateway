@@ -115,7 +115,7 @@ server:
   auth:
     enabled: true
     bearer_token_env: "OTA_GATEWAY_BEARER_TOKEN"
-    allow_loopback_without_auth: true
+    allow_loopback_without_auth: false
 ```
 
 ```bash

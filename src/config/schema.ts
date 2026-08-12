@@ -153,7 +153,7 @@ const misuseReportingSchema = z.object({
 export const authSchema = z.object({
   enabled: z.boolean().default(false),
   bearer_token_env: z.string().min(1).default('OTA_GATEWAY_BEARER_TOKEN'),
-  allow_loopback_without_auth: z.boolean().default(true)
+  allow_loopback_without_auth: z.boolean().default(false)
 });
 
 export const rateLimitSchema = z.object({
