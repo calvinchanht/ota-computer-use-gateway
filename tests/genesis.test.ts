@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import path from 'node:path';
 import { genesisAgentDeepDive, genesisBootstrap, genesisEstateOverview, genesisHostDeepDive, genesisSafeDiagnostic } from '../src/tools/genesis.js';
 
-process.env.OTA_GENESIS_CONTINUITY_ROOT ??= path.resolve('..', 'infunity-agents', 'genesis', 'continuity');
+process.env.OTA_GENESIS_CONTINUITY_ROOT = path.resolve('tests', 'fixtures', 'genesis-continuity');
 
 describe('estate report tools', () => {
   it('returns a bounded bootstrap without secrets', async () => {
