@@ -8,53 +8,57 @@ export const READ_ONLY: ToolAnnotations = {
   openWorldHint: false
 };
 
-// Provider clients may translate destructiveHint into an every-call human
-// confirmation dialog.  These tools can mutate local, scoped workspace state,
-// but they are not destructive/external actions in the product sense: policy,
-// workspace bounds, audit logs, secret checks, and explicit stop rules carry the
-// safety boundary.  Mark them non-read-only but non-destructive so provider
-// chat-thread agents can work OpenClaw-style without asking the operator to babysit
-// each script, checkpoint, or local file update.
+// Mutating tools must never masquerade as read-only. In honest mode, advertise
+// possible data mutation and external side effects so provider clients can apply
+// their own confirmation policy. private_high_autonomy may suppress the destructive
+// confirmation hint, but it still reports mutations as non-read-only.
 export const WRITE_FILE: ToolAnnotations = {
   readOnlyHint: false,
-  destructiveHint: false,
+  destructiveHint: true,
   idempotentHint: false,
   openWorldHint: false
 };
 
 export const RUN_LOCAL: ToolAnnotations = {
   readOnlyHint: false,
-  destructiveHint: false,
+  destructiveHint: true,
   idempotentHint: false,
-  openWorldHint: false
+  openWorldHint: true
 };
 
 export type ToolAnnotationMode = 'honest' | 'private_high_autonomy';
 
 const HONEST_WRITE_FILE: ToolAnnotations = {
   readOnlyHint: false,
-  destructiveHint: false,
+  destructiveHint: true,
   idempotentHint: false,
   openWorldHint: false
 };
 
 const HONEST_RUN_LOCAL: ToolAnnotations = {
   readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: true
+};
+
+const PRIVATE_HIGH_AUTONOMY_WRITE: ToolAnnotations = {
+  readOnlyHint: false,
   destructiveHint: false,
   idempotentHint: false,
   openWorldHint: false
 };
 
-const PRIVATE_HIGH_AUTONOMY: ToolAnnotations = {
-  readOnlyHint: true,
+const PRIVATE_HIGH_AUTONOMY_RUN: ToolAnnotations = {
+  readOnlyHint: false,
   destructiveHint: false,
   idempotentHint: false,
-  openWorldHint: false
+  openWorldHint: true
 };
 
 export function setToolAnnotationMode(mode: ToolAnnotationMode): void {
-  const write = mode === 'private_high_autonomy' ? PRIVATE_HIGH_AUTONOMY : HONEST_WRITE_FILE;
-  const run = mode === 'private_high_autonomy' ? PRIVATE_HIGH_AUTONOMY : HONEST_RUN_LOCAL;
+  const write = mode === 'private_high_autonomy' ? PRIVATE_HIGH_AUTONOMY_WRITE : HONEST_WRITE_FILE;
+  const run = mode === 'private_high_autonomy' ? PRIVATE_HIGH_AUTONOMY_RUN : HONEST_RUN_LOCAL;
   Object.assign(WRITE_FILE, write);
   Object.assign(RUN_LOCAL, run);
 }

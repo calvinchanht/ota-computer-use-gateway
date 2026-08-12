@@ -19,6 +19,22 @@ const config: AppConfig = {
 describe('HTTP MCP compatibility transport', () => {
   afterEach(() => vi.unstubAllEnvs());
 
+  it('advertises truthful read-only and destructive annotations in honest mode', async () => {
+    vi.stubEnv('OTA_MCP_TRANSPORT_MODE', 'stateless');
+    const server = createServer(createHttpRequestHandler(config));
+    await listen(server);
+    try {
+      const response = await mcpRequest(server, { jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} });
+      const payload = await mcpPayload(response);
+      const tools = new Map((payload.result?.tools ?? []).map((tool: any) => [tool.name, tool]));
+      expect(tools.get('read_file')?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+      expect(tools.get('write_file')?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, openWorldHint: false });
+      expect(tools.get('run_command')?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, openWorldHint: true });
+    } finally {
+      await close(server);
+    }
+  });
+
   it('handles independent stateless requests without a session id', async () => {
     vi.stubEnv('OTA_MCP_TRANSPORT_MODE', 'stateless');
     const server = createServer(createHttpRequestHandler(config));
@@ -35,6 +51,12 @@ describe('HTTP MCP compatibility transport', () => {
     }
   });
 });
+
+async function mcpPayload(response: Response): Promise<any> {
+  const text = await response.text();
+  const dataLine = text.split(/\r?\n/).find((line) => line.startsWith('data: '));
+  return JSON.parse(dataLine ? dataLine.slice(6) : text);
+}
 
 async function mcpRequest(server: Server, body: object): Promise<Response> {
   const address = server.address();
