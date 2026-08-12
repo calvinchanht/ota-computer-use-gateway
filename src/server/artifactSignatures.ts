@@ -28,7 +28,10 @@ export function hasValidArtifactSignature(req: IncomingMessage): boolean {
 }
 
 function artifactSigningSecret(): string {
-  return process.env.OTA_GATEWAY_ARTIFACT_URL_SECRET || process.env.OTA_GATEWAY_BEARER_TOKEN || '';
+  const dedicated = process.env.OTA_GATEWAY_ARTIFACT_URL_SECRET?.trim();
+  if (dedicated) return dedicated;
+  if (process.env.OTA_GATEWAY_ALLOW_BEARER_ARTIFACT_SIGNING_FALLBACK === 'true') return process.env.OTA_GATEWAY_BEARER_TOKEN?.trim() || '';
+  return '';
 }
 
 function artifactSignature(pathname: string, expires: string, secret: string): string {
