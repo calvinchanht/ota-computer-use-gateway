@@ -1,5 +1,7 @@
 # HKerBot API gateway service
 
+> Historical direct-OTA service recipe: this documents an older HKerBot Action-gateway deployment. Current HKerBot provider/job operation is owned by its Threaddex host and combined provider surface; do not create or restore `hkerbot-api-http.service` merely because this file mentions it. Verify current OpsVPS services and estate continuity before any HKerBot deployment change.
+
 HKerBot's webchat Action gateway should be owned by the user systemd service:
 
 ```text

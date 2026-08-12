@@ -1,5 +1,7 @@
 # Local Genesis MVP Runbook
 
+> Historical MVP runbook: this targets the former Cortex Genesis development layout and Secure-MCP-Tunnel-era workflow. Current primary Genesis is the PaperclipHQ Threaddex/OTA estate-manager runtime. Use current `infunity-agents` Genesis continuity and immutable release helpers; do not use the paths/services below as current production truth.
+
 This is the first target-machine runbook for the Genesis VPS.
 
 ## Install

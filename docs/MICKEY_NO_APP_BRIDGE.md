@@ -1,8 +1,10 @@
 # Mickey No-App Bridge
 
-Mickey now treats ChatGPT Projects as the **agent shell** and the Gateway JSON API as the **runtime**.
+> Historical provider experiment: this file records the 2026-05 Mickey no-App bridge phase. It does **not** describe the current canonical provider topology. Mickey and other Threaddex agents can now use the combined WPO root MCP, which composes lifecycle tools with assigned OTA capability tools. Preserve the bridge details below as incident/design history only.
 
-OpenAI Apps/MCP is intentionally not the core Mickey path. The removed `Mickey` / `Mickey Gateway` app entries were useful discovery experiments, but they created namespace/cache/tool-availability confusion in the webchat model.
+During this 2026-05 experiment, Mickey treated ChatGPT Projects as the **agent shell** and the Gateway JSON API as the **runtime**.
+
+OpenAI Apps/MCP was intentionally removed from that experimental core path. The removed `Mickey` / `Mickey Gateway` app entries were useful discovery experiments, but they created namespace/cache/tool-availability confusion in the webchat model at that time. Current provider setup has since moved to the combined Threaddex root MCP described in the historical banner above.
 
 ## Architecture
 

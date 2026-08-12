@@ -1,5 +1,7 @@
 # Secure MCP Tunnel Setup
 
+> Compatibility/historical ingress guide: this file documents direct OTA MCP exposure and the older Secure MCP Tunnel option. For a normal Threaddex webchat agent, the canonical provider app is the combined WPO root `https://<agent>-mcp.unrealize.com/`, with OAuth handled by the Threaddex host. Use direct OTA `/mcp` only for compatibility, debugging, or a deliberately OTA-only client. Point-in-time tunnel-client version/hash notes below are not a current-version recommendation.
+
 This project supports OpenAI Secure MCP Tunnel via stdio MCP and can also run a Streamable HTTP MCP endpoint for non-OpenAI public ingress such as Cloudflare Tunnel, Tailscale Funnel, or ngrok.
 
 Use Secure MCP Tunnel only when OpenAI Platform provisioning is already available and worth the extra dependency. The simpler proven path is HTTP Streamable MCP behind existing HTTPS ingress plus bearer auth; this avoids creating an OpenAI Platform project/app when that account lane is unreliable.

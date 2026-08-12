@@ -1,5 +1,7 @@
 # Catalyst Public Ingress
 
+> Historical ingress record: this describes the pre-rebuild Catalyst relay topology. Current Catalyst runs through the rebuilt PersonalVPS router/OTA/Threaddex stack; use current estate continuity and host release assets to determine service names, paths, and ingress. The values below are retained for recovery archaeology and must not override live configuration.
+
 Catalyst MCP is publicly exposed through a Genesis-hosted Cloudflare Tunnel relay.
 
 ## Endpoint

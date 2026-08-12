@@ -1,5 +1,7 @@
 # Catalyst Provider Connector Setup
 
+> Historical connector recipe: this predates the current combined Threaddex provider MCP and the 2026-08 PersonalVPS rebuild. For new or repaired Catalyst setup, use `https://catalyst-mcp.unrealize.com/` through the current WPO provider-app runbook; direct OTA connector/API-key instructions below are compatibility/history unless a live Catalyst config explicitly uses them. Never copy the old token/path examples into a new deployment without live verification.
+
 Catalyst is ready for provider connector setup after public acceptance smoke passes.
 
 ## Public endpoint
@@ -18,7 +20,7 @@ https://catalyst-mcp.unrealize.com/healthz
 
 ## Authorization
 
-Use API key / bearer-token authorization in the provider connector.
+In this historical direct-OTA connector recipe, API-key/bearer authorization was used. Current normal Catalyst provider setup should follow the combined Threaddex MCP authentication contract instead.
 
 The Catalyst bearer token is stored server-side on PersonalVPS at:
 

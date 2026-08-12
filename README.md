@@ -2,7 +2,7 @@
 
 Provider-neutral local computer-use gateway for OTA/web-thread agents, exposed through MCP-style tools.
 
-Status: early MVP scaffold. The first target is the Genesis VPS, with Linux and macOS support planned from the start and Windows kept as a future platform.
+Status: active production capability gateway used by multiple Threaddex/webchat agents. Linux, macOS/Cua Driver, and Windows native computer-use lanes are implemented; capability exposure is policy-driven per workspace through composable `api_sets` (`workspace`, `browser`, `computer`, `computer_windows`, `machine_admin`, `estate_admin`).
 
 ## Transports
 
@@ -33,23 +33,27 @@ server:
 export OTA_GATEWAY_BEARER_TOKEN="use-a-long-random-secret"
 ```
 
-ChatGPT Business developer-mode connectors can use a public HTTPS endpoint directly, for example `https://<agent-api-host>/ota/mcp`, with API key / bearer-token authorization. This route does not require creating an OpenAI Platform project or Secure MCP Tunnel, as long as the HTTPS ingress and bearer token are already managed outside OpenAI Platform.
+The HTTP server also exposes the JSON tool API used by Threaddex facades and machine integrations: `/api/v1/tool`, `/api/v1/batch`, and `/api/v1/runs/{run_id}`. For a normal Threaddex webchat agent, the canonical provider app is the combined root `https://<agent>-mcp.unrealize.com/` surface served by WPO/Threaddex; it composes native lifecycle tools with the OTA tools assigned to that workspace. Direct `https://<agent-api-host>/ota/mcp` remains an OTA-only compatibility/debug connector and should not replace the combined provider app for a job-managed agent.
 
-See GitHub issue #1 for the source-of-truth implementation plan.
+When HTTP auth is enabled, use bearer authorization and keep the token in protected runtime configuration. Auth applies on loopback too unless `allow_loopback_without_auth: true` is explicitly configured. A non-loopback HTTP bind is refused when auth is disabled.
+
+Historical issue #1 records the initial scaffold plan; current behavior is defined by the implementation, capability/security docs, tests, and live host configs.
 
 ## Primitive runtime
 
-The gateway exposes explicit snake_case MCP primitives for agent runtime work:
+The gateway exposes explicit snake_case primitives according to the selected workspace's capability sets. The exact surface is discoverable through `get_tool_profile` and `get_workspace_policy`; do not maintain a second hand-written allowlist in provider instructions.
 
-- discovery and policy: `heartbeat`, `workspace_status`, `get_workspace_policy`, `get_tool_profile`
-- browser/computer-use foundation: scoped CDP proxy tools (`list_browser_profiles`, `browser_status`, `list_browser_tabs`, `browser_cdp_browser_call`, `browser_cdp_browser_batch`, `browser_cdp_call`, `browser_cdp_batch`) and scoped Cua Driver proxy tools (`cua_driver_status`, `cua_driver_call`, `cua_driver_batch`)
-- filesystem: `list_dir`, `stat_path`, `tree`, `read_file`, `write_file`, `read_binary_file`, `write_binary_file`, `edit_file`, `search_files`
-- patches: `propose_patch`, `apply_patch`
-- commands: `run_command`, `run_configured_command`
-- processes: `start_process`, `list_processes`, `read_process`, `write_process`, `stop_process`
-- skills/runbooks: `list_skills`, `read_skill`
+Major groups include:
 
-`exec` and old `process_*` names exist only as deprecated compatibility aliases. Use `get_tool_profile` for machine-readable canonical names and aliases.
+- discovery/policy: `heartbeat`, `workspace_status`, `get_workspace_policy`, `get_tool_profile`;
+- workspace: inventory, scoped file read/write/edit/delete, structured data helpers, patches, git/GitHub, artifacts, memory/continuity, skills, bounded commands, and managed processes;
+- browser: profile/status/tab helpers plus scoped raw CDP calls/batches;
+- macOS/local computer: Cua Driver screenshots, accessibility/window state, mouse/keyboard, and local app control;
+- Windows computer: monitor/window/screenshot/UIA/mouse/keyboard/clipboard/app-launch tools, gated by `computer_windows` or explicit Windows rights;
+- machine admin: configured commands and server-approved workspace helpers plus host-scoped filesystem access when `filesystem.machine_admin_host_scope` is enabled;
+- estate admin: cross-host/agent estate diagnostics and approved control-plane operations.
+
+`exec` and old `process_*` names exist only as deprecated compatibility aliases. Use the discovery tools for canonical names, aliases, capability notes, and async/quota-saver behavior.
 
 See `docs/PRIMITIVE_RUNTIME.md` for the runtime surface, safety model, and validation gate.
 See `docs/CONTEXT_PICKUP.md` for the chat-thread bootstrap/checkpoint model used by issue #4 and the Mickey provider-thread proof used by issue #11.
@@ -63,8 +67,7 @@ See `docs/OTA_MEMORY.md` for the optional server-owned OTA-Memory lifecycle-v1 a
 
 ## Mickey provider-thread proof
 
-Mickey is the first proof workspace for OpenClaw-like provider chat-thread agents.
-A fresh provider thread should be able to call `get_agent_bootstrap`, read the `mickey-pickup` skill, inspect policy/tool/browser posture, and write a continuity checkpoint through the public MCP connector.
+Mickey was the original provider-thread proof workspace and remains a useful canary. It is no longer the only deployment target. A fresh provider thread should be able to call `get_agent_bootstrap`, read the `mickey-pickup` skill, inspect policy/tool/browser posture, and write a continuity checkpoint through its configured provider surface.
 
 Key Mickey startup artifacts live under `.agent/`:
 
