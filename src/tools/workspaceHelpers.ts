@@ -59,6 +59,7 @@ export async function workspaceHelperUpsert(config: AppConfig, workspace: Worksp
   if (!workspace.allow_write) throw new Error('workspace does not allow helper registry writes');
   const now = new Date().toISOString();
   const parsed = validateDefinition(helperDefinitionSchema.parse(input));
+  assertHelperPrivilege(workspace, parsed);
   const registry = await readRegistry(config, workspace);
   const existing = registry.helpers.findIndex((item) => item.helper_id === parsed.helper_id && item.mode === parsed.mode);
   const helper: HelperDefinition = {
@@ -78,6 +79,7 @@ export async function workspaceHelperRun(config: AppConfig, workspace: Workspace
   const registry = await readRegistry(config, workspace);
   const helper = findHelper(registry, helperId, mode);
   if (!helper) throw new Error(`unknown workspace helper: ${helperId}/${mode}`);
+  assertHelperPrivilege(workspace, helper);
   if (helper.kind === 'repo_build_test') return runRepoBuildTest(config, workspace, helper, args);
   if (helper.kind === 'ssh_systemd_user_service') return runSystemdUserService(config, workspace, helper);
   return ok('workspace helper plan ready', {
@@ -86,6 +88,12 @@ export async function workspaceHelperRun(config: AppConfig, workspace: Workspace
     reason: 'template validation is implemented; execution for this helper kind must be provided by a server-side executor lane',
     plan: helperPlan(helper)
   });
+}
+
+function assertHelperPrivilege(workspace: Workspace, helper: HelperDefinition): void {
+  if (helper.kind === 'ssh_systemd_user_service' && workspace.api_sets?.machine_admin !== true) {
+    throw new Error('systemd workspace helpers require machine_admin API set');
+  }
 }
 
 function validateDefinition(helper: HelperDefinition): HelperDefinition {
@@ -107,7 +115,8 @@ function validateDefinition(helper: HelperDefinition): HelperDefinition {
 
 async function runRepoBuildTest(config: AppConfig, workspace: Workspace, helper: HelperDefinition, args: Record<string, unknown>) {
   const requested = Array.isArray(args.checks) ? args.checks.map(String) : helper.checks;
-  const checks = requested.filter((check): check is 'build' | 'test' | 'style' | 'check' => ['build', 'test', 'style', 'check'].includes(check));
+  const configured = new Set(helper.checks);
+  const checks = requested.filter((check): check is 'build' | 'test' | 'style' | 'check' => ['build', 'test', 'style', 'check'].includes(check) && configured.has(check as 'build' | 'test' | 'style' | 'check'));
   if (checks.length === 0) throw new Error('no allowed checks requested');
   const repo = await resolveInside(workspace, helper.repo ?? '.', config);
   const results = [];

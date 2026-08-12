@@ -35,6 +35,21 @@ describe('HTTP MCP compatibility transport', () => {
     }
   });
 
+  it('restricts browser CORS to trusted origins', async () => {
+    const server = createServer(createHttpRequestHandler(config));
+    await listen(server);
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('expected TCP address');
+      const base = `http://127.0.0.1:${address.port}/mcp`;
+      const denied = await fetch(base, { method: 'OPTIONS', headers: { origin: 'https://evil.example' } });
+      const allowed = await fetch(base, { method: 'OPTIONS', headers: { origin: 'https://chatgpt.com' } });
+      expect(denied.headers.get('access-control-allow-origin')).toBeNull();
+      expect(allowed.headers.get('access-control-allow-origin')).toBe('https://chatgpt.com');
+      expect(allowed.headers.get('vary')).toMatch(/origin/i);
+    } finally { await close(server); }
+  });
+
   it('handles independent stateless requests without a session id', async () => {
     vi.stubEnv('OTA_MCP_TRANSPORT_MODE', 'stateless');
     const server = createServer(createHttpRequestHandler(config));

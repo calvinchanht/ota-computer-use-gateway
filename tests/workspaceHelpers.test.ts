@@ -16,7 +16,7 @@ const config: AppConfig = {
 
 describe('workspace helpers', () => {
   it('creates, lists, and reads a constrained helper definition', async () => {
-    const workspace = await fixtureWorkspace({ allow_write: true, allow_tests: true });
+    const workspace = await fixtureWorkspace({ allow_write: true, allow_tests: true, machine_admin: true });
     await workspaceHelperUpsert(config, workspace, {
       helper_id: 'mickey_chrome',
       mode: 'start',
@@ -38,7 +38,7 @@ describe('workspace helpers', () => {
   });
 
   it('rejects arbitrary helper ids and non-local http checks', async () => {
-    const workspace = await fixtureWorkspace({ allow_write: true, allow_tests: true });
+    const workspace = await fixtureWorkspace({ allow_write: true, allow_tests: true, machine_admin: true });
     await expect(workspaceHelperUpsert(config, workspace, {
       helper_id: '../bad',
       mode: 'start',
@@ -56,6 +56,20 @@ describe('workspace helpers', () => {
     })).rejects.toThrow(/local loopback/);
   });
 
+  it('rejects systemd helpers for non-machine-admin workspaces', async () => {
+    const workspace = await fixtureWorkspace({ allow_write: true, allow_tests: true });
+    await expect(workspaceHelperUpsert(config, workspace, {
+      helper_id: 'local_service', mode: 'restart', kind: 'ssh_systemd_user_service',
+      target_host_id: 'localhost', target_user: userInfo().username, service_unit: 'sensitive.service'
+    })).rejects.toThrow(/machine_admin/);
+  });
+
+  it('does not let callers expand a repo helper beyond its configured checks', async () => {
+    const workspace = await fixtureWorkspace({ allow_write: true, allow_tests: true });
+    await workspaceHelperUpsert(config, workspace, { helper_id: 'repo_checks', mode: 'test', kind: 'repo_build_test', repo: '.', checks: ['test'] });
+    await expect(workspaceHelperRun(config, workspace, 'repo_checks', 'test', { checks: ['build'] })).rejects.toThrow(/no allowed checks/);
+  });
+
   it('requires write permission for helper upsert and test permission for helper run', async () => {
     const readOnly = await fixtureWorkspace({ allow_write: false, allow_tests: true });
     await expect(workspaceHelperUpsert(config, readOnly, { helper_id: 'repo_checks', mode: 'build', kind: 'repo_build_test', repo: '.', checks: ['build'] })).rejects.toThrow(/does not allow/);
@@ -66,7 +80,7 @@ describe('workspace helpers', () => {
   });
 
   it('rejects systemd helper execution outside the current local user', async () => {
-    const workspace = await fixtureWorkspace({ allow_write: true, allow_tests: true });
+    const workspace = await fixtureWorkspace({ allow_write: true, allow_tests: true, machine_admin: true });
     await workspaceHelperUpsert(config, workspace, {
       helper_id: 'mickey_chrome',
       mode: 'start',
@@ -79,12 +93,12 @@ describe('workspace helpers', () => {
   });
 });
 
-async function fixtureWorkspace(flags: { allow_write: boolean; allow_tests: boolean }): Promise<Workspace> {
+async function fixtureWorkspace(flags: { allow_write: boolean; allow_tests: boolean; machine_admin?: boolean }): Promise<Workspace> {
   const root = await mkdtemp(path.join(tmpdir(), 'ota-helper-'));
   return {
     id: 'test', name: 'Test', root, realRoot: root, realAgentDir: path.join(root, '.agent'),
     allow_read: true, allow_write: flags.allow_write, allow_patch: false, allow_tests: flags.allow_tests,
-    allow_screen: false, allow_mouse_keyboard: false, browser: { profiles: [] }, commands: {},
+    allow_screen: false, allow_mouse_keyboard: false, api_sets: flags.machine_admin ? { machine_admin: true } : {}, browser: { profiles: [] }, commands: {},
     filesystem: { host_root: '/' }, git: { github_cli: 'gh' }, windows_computer: { enabled: false, allow_screenshot: false, allow_uia_tree: false, allow_mouse: false, allow_keyboard: false, allow_clipboard: false, allow_window_management: false, allow_app_launch: false, allow_process_attach: false, allow_multi_monitor: true }
   } as Workspace;
 }

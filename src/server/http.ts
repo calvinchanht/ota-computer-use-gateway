@@ -1,5 +1,4 @@
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -68,7 +67,9 @@ import { createServer } from './create.js';
 import { assertSafeHttpBind, authError, authStartupWarning, isAuthorized } from './auth.js';
 import { healthPayload, mcpTransportMode } from './health.js';
 import { hasValidArtifactSignature } from './artifactSignatures.js';
+import { openServedArtifact, resolveServedArtifactPath } from './artifactServing.js';
 import { auditHttpRequest } from './httpAudit.js';
+import { applyCors } from './cors.js';
 import { RateLimiter } from './rateLimit.js';
 import { installShutdownHooks } from './shutdown.js';
 import { reportApiShapeMisuse, reportToolMisuse } from './apiMisuse.js';
@@ -143,6 +144,7 @@ export function createHttpRequestHandler(config: AppConfig, rateLimiter = new Ra
 }
 
 async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, startedAt: number, req: IncomingMessage, res: ServerResponse) {
+  applyCors(req, res);
   stripOtaPathPrefix(req);
   if (isHealth(req)) return sendJson(res, 200, healthPayload(config, startedAt));
   if (req.method === 'OPTIONS') return sendCors(res);
@@ -164,7 +166,6 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
 }
 
 async function handleMcpRequest(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  applyCors(res);
   try {
     const parsedBody = req.method === 'POST' ? await readJsonBody(req) : undefined;
     if (parsedBody) logMcpMethods(parsedBody);
@@ -331,12 +332,10 @@ function logMcpMethods(body: unknown): void {
 }
 
 function sendCors(res: ServerResponse): void {
-  applyCors(res);
   res.writeHead(204).end();
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  applyCors(res);
   res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
 }
 
@@ -470,12 +469,11 @@ async function handleApiArtifact(config: AppConfig, req: IncomingMessage, res: S
   if (!parsed) return sendJson(res, 400, { ok: false, error: 'invalid_artifact_path' });
   const workspaces = await buildWorkspaces(config);
   const workspace = getWorkspace(workspaces, parsed.workspace_id);
-  const resolved = resolveServedArtifactPath(workspace, parsed.artifact_path);
+  const resolved = await resolveServedArtifactPath(workspace, parsed.artifact_path);
   if (!resolved) return sendJson(res, 403, { ok: false, error: 'artifact_path_not_allowed' });
-  const info = await stat(resolved).catch(() => null);
-  if (!info?.isFile()) return sendJson(res, 404, { ok: false, error: 'artifact_not_found' });
-  const body = await readFile(resolved);
-  applyCors(res);
+  const opened = await openServedArtifact(resolved);
+  if (!opened) return sendJson(res, 404, { ok: false, error: 'artifact_not_found' });
+  const { body } = opened;
   res.writeHead(200, {
     'content-type': artifactContentType(resolved),
     'content-length': String(body.length),
@@ -494,18 +492,6 @@ function parseArtifactRequest(req: IncomingMessage): { workspace_id: string; art
   const artifactPath = decodeURIComponent(rest.slice(slash + 1));
   if (!workspaceId || !artifactPath) return null;
   return { workspace_id: workspaceId, artifact_path: artifactPath };
-}
-
-function resolveServedArtifactPath(workspace: Workspace, artifactPath: string): string | null {
-  const normalized = path.posix.normalize(artifactPath.replaceAll('\\', '/'));
-  if (normalized.startsWith('../') || normalized === '..' || path.isAbsolute(normalized)) return null;
-  if (!normalized.startsWith('.agent/artifacts/')) return null;
-  const relativeToAgent = normalized.slice('.agent/'.length);
-  const absolute = path.resolve(workspace.realAgentDir, relativeToAgent);
-  const artifactsRoot = path.resolve(workspace.realAgentDir, 'artifacts');
-  const rel = path.relative(artifactsRoot, absolute);
-  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
-  return absolute;
 }
 
 function artifactContentType(filename: string): string {
@@ -969,11 +955,4 @@ function headerValue(value: string | string[] | undefined): string | undefined {
 function sendAuthError(config: AppConfig, res: ServerResponse): void {
   res.setHeader('www-authenticate', 'Bearer');
   sendJson(res, 401, authError(config));
-}
-
-function applyCors(res: ServerResponse): void {
-  res.setHeader('access-control-allow-origin', '*');
-  res.setHeader('access-control-allow-methods', 'GET,POST,DELETE,OPTIONS');
-  res.setHeader('access-control-allow-headers', 'authorization,content-type,idempotency-key,mcp-session-id,mcp-protocol-version,x-openai-conversation-id,x-openai-project-id,x-openai-gpt-id,x-openai-action-invocation-id');
-  res.setHeader('access-control-expose-headers', 'mcp-session-id');
 }
