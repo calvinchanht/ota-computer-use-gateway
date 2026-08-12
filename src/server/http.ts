@@ -150,10 +150,10 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
   if (req.method === 'OPTIONS') return sendCors(res);
   if (!isMcp(req) && !isApi(req)) return sendJson(res, 404, { error: 'not_found' });
   if (!allowedMethod(req.method)) return sendJson(res, 405, { error: 'method_not_allowed' });
-  if (!rateLimiter.check(config, req)) return sendJson(res, 429, { error: 'rate_limited' });
   if (requestTooLarge(config, req)) return sendJson(res, 413, { error: 'payload_too_large' });
   const signedArtifact = isApiArtifactPath(req) && hasValidArtifactSignature(req);
   if (!signedArtifact && !isAuthorized(config, req) && !isBrokeredExecutorWorkerRequestAuthorized(config, req)) return sendAuthError(config, res);
+  if (!rateLimiter.check(config, req)) return sendJson(res, 429, { error: 'rate_limited' });
   if (isApiDebugRequestContext(req)) return handleApiDebugRequestContext(req, res);
   if (isBrokeredExecutorPath(req)) return handleBrokeredExecutorApi(config, req, res);
   if (isApiArtifactPath(req)) return handleApiArtifact(config, req, res);
