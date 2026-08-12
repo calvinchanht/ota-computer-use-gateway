@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AppConfig } from '../config/schema.js';
 import { brokeredExecutorEnabled, enabledExecutor } from '../brokeredExecutor/config.js';
 import { brokeredExecutorStore } from '../brokeredExecutor/store.js';
+import { readBoundedJsonBody, RequestBodyTooLargeError } from './requestBody.js';
 import { completeExecutorJobSchema, executorClaimSchema, executorHeartbeatSchema, submitExecutorJobSchema } from '../brokeredExecutor/types.js';
 
 const API_EXECUTOR_JOBS_PREFIX = '/api/v1/executor-jobs';
@@ -31,7 +32,7 @@ export async function handleBrokeredExecutorApi(config: AppConfig, req: Incoming
 }
 
 async function handleBrokeredJobSubmit(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const parsed = await readApiJsonBody(req);
+  const parsed = await readApiJsonBody(config, req);
   if (!parsed.ok) return sendJson(res, parsed.status, { ok: false, error: parsed.error });
   const input = submitExecutorJobSchema.parse(parsed.body);
   const job = brokeredExecutorStore.submit(config, input);
@@ -58,7 +59,7 @@ async function handleBrokeredExecutorWorkerApi(config: AppConfig, req: IncomingM
   if (!parts || !executorId) return sendJson(res, 400, { ok: false, error: 'executor_id_required' });
   const auth = brokeredExecutorWorkerAuth(config, executorId, req);
   if (!auth.ok) return sendJson(res, auth.status, auth.body);
-  const parsed = await readApiJsonBody(req);
+  const parsed = await readApiJsonBody(config, req);
   if (!parsed.ok) return sendJson(res, parsed.status, { ok: false, error: parsed.error });
   return handleWorkerAction(config, res, parts, withExecutorId(parsed.body, executorId));
 }
@@ -133,19 +134,13 @@ function brokeredExecutorErrorBody(error: unknown): { status: number; body: Reco
   return { status, body: { ok: false, error: code, error_code: code, message } };
 }
 
-async function readApiJsonBody(req: IncomingMessage): Promise<{ ok: true; body: unknown } | { ok: false; status: number; error: string }> {
+async function readApiJsonBody(config: AppConfig, req: IncomingMessage): Promise<{ ok: true; body: unknown } | { ok: false; status: number; error: string }> {
   try {
-    return { ok: true, body: await readJsonBody(req) };
-  } catch {
+    return { ok: true, body: await readBoundedJsonBody(req, config.security.max_request_bytes) };
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) return { ok: false, status: 413, error: 'payload_too_large' };
     return { ok: false, status: 400, error: 'invalid_json' };
   }
-}
-
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  const raw = Buffer.concat(chunks).toString('utf8');
-  return raw ? JSON.parse(raw) : undefined;
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {

@@ -75,6 +75,7 @@ import { installShutdownHooks } from './shutdown.js';
 import { reportApiShapeMisuse, reportToolMisuse } from './apiMisuse.js';
 import { handleBrokeredExecutorApi, isBrokeredExecutorWorkerRequestAuthorized } from './brokeredExecutorApi.js';
 import { parseApiBatchRequestSafe, parseApiToolRequestSafe } from './apiRequest.js';
+import { readBoundedJsonBody, RequestBodyTooLargeError } from './requestBody.js';
 import { apiShapeErrorResponse, apiToolContract, invalidJsonResponse, validateApiToolArguments } from './apiContract.js';
 import { arrayRecordArg, optionalBoolean, optionalNumber, optionalString, optionalStringArray, optionalWriteMode, recordArg, requiredNumber, requiredString, requiredStringArray, requiredTextArg, runCommandCmdArray, stringRecordArg } from './httpArgs.js';
 
@@ -139,7 +140,7 @@ export async function listenHttp(config: AppConfig): Promise<void> {
 export function createHttpRequestHandler(config: AppConfig, rateLimiter = new RateLimiter(), startedAt = Date.now(), auditWorkspace: Workspace | null = null) {
   return (req: IncomingMessage, res: ServerResponse) => {
     auditHttpRequest(auditWorkspace, req, res);
-    void handleRequest(config, rateLimiter, startedAt, req, res);
+    void handleRequest(config, rateLimiter, startedAt, req, res).catch((error) => handleHttpRequestFailure(res, error));
   };
 }
 
@@ -154,7 +155,7 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
   const signedArtifact = isApiArtifactPath(req) && hasValidArtifactSignature(req);
   if (!signedArtifact && !isAuthorized(config, req) && !isBrokeredExecutorWorkerRequestAuthorized(config, req)) return sendAuthError(config, res);
   if (!rateLimiter.check(config, req)) return sendJson(res, 429, { error: 'rate_limited' });
-  if (isApiDebugRequestContext(req)) return handleApiDebugRequestContext(req, res);
+  if (isApiDebugRequestContext(req)) return handleApiDebugRequestContext(config, req, res);
   if (isBrokeredExecutorPath(req)) return handleBrokeredExecutorApi(config, req, res);
   if (isApiArtifactPath(req)) return handleApiArtifact(config, req, res);
   if (isApiRunPath(req)) return handleApiRun(req, res);
@@ -167,7 +168,7 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
 
 async function handleMcpRequest(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   try {
-    const parsedBody = req.method === 'POST' ? await readJsonBody(req) : undefined;
+    const parsedBody = req.method === 'POST' ? await readJsonBody(req, config.security.max_request_bytes) : undefined;
     if (parsedBody) logMcpMethods(parsedBody);
     if (mcpTransportMode() === 'stateless') return handleStatelessMcpRequest(config, req, res, parsedBody);
 
@@ -180,7 +181,11 @@ async function handleMcpRequest(config: AppConfig, req: IncomingMessage, res: Se
     return handleNewMcpSession(config, req, res, parsedBody);
   } catch (error) {
     console.error('compatibility transport request failed', error);
-    if (!res.headersSent) return sendMcpError(res, 500, 'Internal server error');
+    if (!res.headersSent) {
+      if (error instanceof RequestBodyTooLargeError) return sendMcpError(res, 413, 'Payload too large');
+      if (error instanceof SyntaxError) return sendMcpError(res, 400, 'Invalid JSON');
+      return sendMcpError(res, 500, 'Internal server error');
+    }
     res.end();
   }
 }
@@ -307,18 +312,15 @@ export function requestTooLarge(config: AppConfig, req: IncomingMessage): boolea
   return Number.isFinite(size) && size > config.security.max_request_bytes;
 }
 
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  const raw = Buffer.concat(chunks).toString('utf8');
-  if (!raw) return undefined;
-  return JSON.parse(raw);
+async function readJsonBody(req: IncomingMessage, maxBytes: number): Promise<unknown> {
+  return readBoundedJsonBody(req, maxBytes);
 }
 
-async function readApiJsonBody(req: IncomingMessage): Promise<{ ok: true; body: unknown } | { ok: false; status: number; body: Record<string, unknown> }> {
+async function readApiJsonBody(config: AppConfig, req: IncomingMessage): Promise<{ ok: true; body: unknown } | { ok: false; status: number; body: Record<string, unknown> }> {
   try {
-    return { ok: true, body: await readJsonBody(req) };
-  } catch {
+    return { ok: true, body: await readJsonBody(req, config.security.max_request_bytes) };
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) return { ok: false, status: 413, body: { error: 'payload_too_large' } };
     return { ok: false, status: 400, body: invalidJsonResponse() };
   }
 }
@@ -335,6 +337,15 @@ function sendCors(res: ServerResponse): void {
   res.writeHead(204).end();
 }
 
+function handleHttpRequestFailure(res: ServerResponse, error: unknown): void {
+  console.error('OTA HTTP request failed', error);
+  if (res.headersSent || res.writableEnded) { if (!res.writableEnded) res.end(); return; }
+  if (error instanceof RequestBodyTooLargeError) return sendJson(res, 413, { error: 'payload_too_large' });
+  if (error instanceof URIError) return sendJson(res, 400, { error: 'invalid_request_path' });
+  if (error instanceof SyntaxError) return sendJson(res, 400, invalidJsonResponse());
+  return sendJson(res, 500, { error: 'internal_error' });
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
 }
@@ -346,7 +357,7 @@ function sendMcpError(res: ServerResponse, status: number, message: string): voi
 
 async function handleApiTool(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
-  const parsed = await readApiJsonBody(req);
+  const parsed = await readApiJsonBody(config, req);
   if (!parsed.ok) return sendJson(res, parsed.status, parsed.body);
   const parsedBody = parsed.body;
   const idempotencyKey = idempotencyKeyFor(req, parsedBody);
@@ -367,7 +378,7 @@ async function handleApiTool(config: AppConfig, req: IncomingMessage, res: Serve
 
 async function handleApiGithub(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
-  const parsed = await readApiJsonBody(req);
+  const parsed = await readApiJsonBody(config, req);
   if (!parsed.ok) return sendJson(res, parsed.status, parsed.body);
   const args = recordArg(parsed.body, 'github request') ?? {};
   const idempotencyKey = idempotencyKeyFor(req, parsed.body);
@@ -382,7 +393,7 @@ async function handleApiGithub(config: AppConfig, req: IncomingMessage, res: Ser
 
 async function handleApiBatch(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
-  const parsed = await readApiJsonBody(req);
+  const parsed = await readApiJsonBody(config, req);
   if (!parsed.ok) return sendJson(res, parsed.status, parsed.body);
   const parsedBody = parsed.body;
   const idempotencyKey = idempotencyKeyFor(req, parsedBody);
@@ -899,9 +910,9 @@ async function startProcessFromArgs(config: AppConfig, workspace: Workspace, arg
   throw new Error('cmd_array must be an array');
 }
 
-async function handleApiDebugRequestContext(req: IncomingMessage, res: ServerResponse): Promise<void> {
+async function handleApiDebugRequestContext(config: AppConfig, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST' && req.method !== 'GET') return sendJson(res, 405, { error: 'method_not_allowed' });
-  const parsedBody = req.method === 'POST' ? await readJsonBody(req).catch(() => undefined) : undefined;
+  const parsedBody = req.method === 'POST' ? await readJsonBody(req, config.security.max_request_bytes).catch(() => undefined) : undefined;
   return sendJson(res, 200, {
     ok: true,
     summary: 'safe request context captured',
