@@ -1,3 +1,4 @@
+import { hostname, userInfo } from 'node:os';
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
@@ -146,9 +147,18 @@ async function runSystemdUserService(config: AppConfig, workspace: Workspace, he
 }
 
 function isLocalHelperTarget(helper: HelperDefinition): boolean {
-  const localTargets = new Set(['local', 'localhost', 'cortex', 'cortex-gateway']);
-  const currentUser = process.env.USER || process.env.USERNAME || '';
-  return localTargets.has(helper.target_host_id ?? '') && helper.target_user === currentUser;
+  const targetHost = (helper.target_host_id ?? '').trim().toLowerCase();
+  const host = hostname().trim().toLowerCase();
+  const shortHost = host.split('.', 1)[0] ?? host;
+  const configuredHost = (process.env.OTA_LOCAL_HOST_ID ?? '').trim().toLowerCase();
+  const localTargets = new Set(['local', 'localhost', host, shortHost]);
+  if (configuredHost) localTargets.add(configuredHost);
+  return localTargets.has(targetHost) && helper.target_user === currentLocalUser();
+}
+
+function currentLocalUser(): string {
+  try { return userInfo().username; }
+  catch { return ''; }
 }
 
 function systemdAction(mode: string): 'start' | 'stop' | 'restart' {

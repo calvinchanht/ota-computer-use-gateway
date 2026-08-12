@@ -1,5 +1,5 @@
 import { mkdtemp, readFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { tmpdir, userInfo } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { workspaceHelperList, workspaceHelperRun, workspaceHelperStatus, workspaceHelperUpsert } from '../src/tools/workspaceHelpers.js';
@@ -72,7 +72,7 @@ describe('workspace helpers', () => {
       mode: 'start',
       kind: 'ssh_systemd_user_service',
       target_host_id: 'cortex',
-      target_user: 'molt',
+      target_user: userInfo().username,
       service_unit: 'threaddex-mickey-browser.service'
     });
     await expect(workspaceHelperRun(config, workspace, 'mickey_chrome', 'start')).rejects.toThrow(/local-user only/);
