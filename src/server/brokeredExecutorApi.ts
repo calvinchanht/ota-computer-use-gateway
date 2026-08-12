@@ -116,7 +116,10 @@ function isWorkerRoute(parts: string[]): boolean {
 
 function withExecutorId(body: unknown, executorId: string): Record<string, unknown> {
   const source = body && typeof body === 'object' ? body as Record<string, unknown> : {};
-  return { ...source, executor_id: source.executor_id ?? executorId };
+  if (source.executor_id !== undefined && source.executor_id !== executorId) {
+    throw Object.assign(new Error('worker executor_id must match authenticated path executor'), { code: 'operation_not_allowed' });
+  }
+  return { ...source, executor_id: executorId };
 }
 
 function bearerTokenMatches(req: IncomingMessage, expected: string): boolean {

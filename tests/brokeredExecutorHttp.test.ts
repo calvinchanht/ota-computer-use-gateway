@@ -13,6 +13,7 @@ let tempRoot: string | undefined;
 afterEach(async () => {
   delete process.env.TEST_OTA_TOKEN;
   delete process.env.MICKEY_FAKE_EXECUTOR_TOKEN;
+  delete process.env.CATALYST_FAKE_EXECUTOR_TOKEN;
   if (server) await new Promise<void>((resolve, reject) => server!.close((error) => error ? reject(error) : resolve()));
   server = undefined;
   if (tempRoot) await rm(tempRoot, { recursive: true, force: true });
@@ -83,6 +84,52 @@ describe('brokered executor HTTP routes', () => {
     expect(result.status).toBe(200);
     await expect(result.json()).resolves.toMatchObject({ ok: true, state: 'succeeded', artifacts: [{ mime_type: 'image/png' }] });
   });
+
+  it('binds worker credentials to the executor id in the authenticated URL path', async () => {
+    process.env.TEST_OTA_TOKEN = 'main-secret';
+    process.env.MICKEY_FAKE_EXECUTOR_TOKEN = 'executor-a-secret';
+    process.env.CATALYST_FAKE_EXECUTOR_TOKEN = 'executor-b-secret';
+    const baseUrl = await start(defaultConfig(true, true, true));
+    const mainHeaders = { authorization: 'Bearer main-secret' };
+    const submit = await post(`${baseUrl}/api/v1/executor-jobs`, {
+      requester_agent_id: 'genesis', target_agent_id: 'catalyst', executor_id: 'catalyst-fake-windows', executor_kind: 'windows_computer_use',
+      operation_name: 'windows.screenshot', operation_arguments: {}, idempotency_key: 'cross-executor-isolation'
+    }, mainHeaders);
+    expect(submit.status).toBe(200);
+    const jobId = submit.body.job.broker_job_id;
+    const aHeaders = { authorization: 'Bearer executor-a-secret' };
+    const bHeaders = { authorization: 'Bearer executor-b-secret' };
+
+    const forgedHeartbeat = await post(`${baseUrl}/api/v1/executors/mickey-fake-windows/heartbeat`, {
+      executor_id: 'catalyst-fake-windows', executor_kind: 'windows_computer_use', contract_version: BROKERED_EXECUTOR_CONTRACT_VERSION, supported_operations: ['windows.screenshot']
+    }, aHeaders);
+    expect(forgedHeartbeat.status).toBe(403);
+    expect(forgedHeartbeat.body).toMatchObject({ error: 'operation_not_allowed' });
+
+    const forgedClaim = await post(`${baseUrl}/api/v1/executors/mickey-fake-windows/claim`, {
+      executor_id: 'catalyst-fake-windows', executor_kind: 'windows_computer_use'
+    }, aHeaders);
+    expect(forgedClaim.status).toBe(403);
+
+    const bClaim = await post(`${baseUrl}/api/v1/executors/catalyst-fake-windows/claim`, { executor_kind: 'windows_computer_use' }, bHeaders);
+    expect(bClaim.status).toBe(200);
+    expect(bClaim.body.job).toMatchObject({ broker_job_id: jobId, executor_id: 'catalyst-fake-windows', state: 'claimed' });
+
+    const forgedComplete = await post(`${baseUrl}/api/v1/executors/mickey-fake-windows/jobs/${jobId}/complete`, {
+      executor_id: 'catalyst-fake-windows', lease_owner: bClaim.body.job.lease_owner,
+      result: { status: 'succeeded', result: { forged: true }, artifacts: [], audit: {} }
+    }, aHeaders);
+    expect(forgedComplete.status).toBe(403);
+    const stillClaimed = await fetch(`${baseUrl}/api/v1/executor-jobs/${jobId}`, { headers: mainHeaders });
+    await expect(stillClaimed.json()).resolves.toMatchObject({ job: { state: 'claimed', executor_id: 'catalyst-fake-windows' } });
+
+    const bComplete = await post(`${baseUrl}/api/v1/executors/catalyst-fake-windows/jobs/${jobId}/complete`, {
+      lease_owner: bClaim.body.job.lease_owner,
+      result: { status: 'succeeded', result: { owner: 'catalyst' }, artifacts: [], audit: {} }
+    }, bHeaders);
+    expect(bComplete.status).toBe(200);
+    expect(bComplete.body.job).toMatchObject({ state: 'succeeded', executor_id: 'catalyst-fake-windows' });
+  });
 });
 
 async function start(config: AppConfig): Promise<string> {
@@ -98,7 +145,7 @@ async function post(url: string, body: unknown, extraHeaders: Record<string, str
   return { status: response.status, body: await response.json() };
 }
 
-function defaultConfig(enabled: boolean, authEnabled = false): AppConfig {
+function defaultConfig(enabled: boolean, authEnabled = false, twoExecutors = false): AppConfig {
   tempRoot = path.join(tmpdir(), `ota-brokered-executor-${Math.random().toString(36).slice(2)}`);
   return {
     server: {
@@ -119,7 +166,10 @@ function defaultConfig(enabled: boolean, authEnabled = false): AppConfig {
       include_action_schema: false,
       default_ttl_ms: 60000,
       default_lease_ms: 30000,
-      executors: enabled ? [{ executor_id: 'mickey-fake-windows', executor_kind: 'windows_computer_use', agent_id: 'mickey', enabled: true, allowed_operations: ['windows.status', 'windows.list_monitors', 'windows.list_windows', 'windows.screenshot'], default_lease_ms: 30000, max_ttl_ms: 60000, worker_bearer_token_env: 'MICKEY_FAKE_EXECUTOR_TOKEN' }] : []
+      executors: enabled ? [
+        { executor_id: 'mickey-fake-windows', executor_kind: 'windows_computer_use', agent_id: 'mickey', enabled: true, allowed_operations: ['windows.status', 'windows.list_monitors', 'windows.list_windows', 'windows.screenshot'], default_lease_ms: 30000, max_ttl_ms: 60000, worker_bearer_token_env: 'MICKEY_FAKE_EXECUTOR_TOKEN' },
+        ...(twoExecutors ? [{ executor_id: 'catalyst-fake-windows', executor_kind: 'windows_computer_use', agent_id: 'catalyst', enabled: true, allowed_operations: ['windows.screenshot'], default_lease_ms: 30000, max_ttl_ms: 60000, worker_bearer_token_env: 'CATALYST_FAKE_EXECUTOR_TOKEN' }] : [])
+      ] : []
     },
     security: { max_file_bytes: 100000, max_response_bytes: 100000, max_request_bytes: 100000, max_search_results: 10, max_exec_ms: 120000 }
   };
