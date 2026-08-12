@@ -27,20 +27,20 @@ export function auditHttpRequest(
   options: HttpAuditOptions = {}
 ): void {
   if (!workspace || !req.url?.startsWith('/mcp')) return;
+  const request = snapshotRequest(req);
   res.once('finish', () => {
-    void writeHttpAudit(workspace, entryFor(req, res, startedAt)).catch((error: unknown) => {
+    const entry: HttpAuditEntry = { ...request, status_code: res.statusCode, duration_ms: Date.now() - startedAt };
+    void writeHttpAudit(workspace, entry).catch((error: unknown) => {
       options.onWriteError?.(error);
     });
   });
 }
 
-function entryFor(req: IncomingMessage, res: ServerResponse, startedAt: number): HttpAuditEntry {
+function snapshotRequest(req: IncomingMessage): Omit<HttpAuditEntry, 'status_code' | 'duration_ms'> {
   return {
     timestamp: new Date().toISOString(),
     method: req.method,
     path: requestPath(req),
-    status_code: res.statusCode,
-    duration_ms: Date.now() - startedAt,
     client: clientKey(req),
     content_length: headerValue(req.headers['content-length']),
     headers: safeRequestHeaders(req)

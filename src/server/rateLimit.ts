@@ -34,7 +34,7 @@ function proxyClientKey(req: IncomingMessage): string | null {
 }
 
 function socketClientKey(req: IncomingMessage): string {
-  return req.socket.remoteAddress ?? 'unknown';
+  return (req.socket as IncomingMessage['socket'] | null | undefined)?.remoteAddress ?? 'unknown';
 }
 
 function firstForwardedFor(value: string | string[] | undefined): string | null {

@@ -22,6 +22,20 @@ describe('HTTP request audit', () => {
     expect(raw).not.toContain('redacted');
   });
 
+  it('snapshots client metadata before Node detaches the request socket', async () => {
+    const workspace = await fixtureWorkspace();
+    const req = request('/mcp');
+    const res = response(413);
+    auditHttpRequest(workspace, req, res, Date.now());
+    (req as any).socket = null;
+    res.emit('finish');
+    await delay(20);
+
+    const raw = await readFile(path.join(workspace.realRoot, '.agent/audit/http_requests.jsonl'), 'utf8');
+    const entry = JSON.parse(raw.trim());
+    expect(entry).toMatchObject({ path: '/mcp', status_code: 413, client: '127.0.0.1' });
+  });
+
   it('ignores non-MCP requests', async () => {
     const workspace = await fixtureWorkspace();
     const res = response(200);

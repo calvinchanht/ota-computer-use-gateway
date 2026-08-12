@@ -38,6 +38,12 @@ describe('HTTP rate limiter', () => {
     expect(limiter.check(trusted, request('127.0.0.1', '198.51.100.8'), 1001)).toBe(true);
     expect(limiter.check(trusted, request('127.0.0.1', '198.51.100.7'), 1002)).toBe(true);
   });
+
+  it('handles a detached request socket without throwing', () => {
+    const req = { headers: {}, socket: null } as any;
+    expect(clientKey(req)).toBe('unknown');
+  });
+
 });
 
 function request(remoteAddress: string, forwardedFor?: string, cfConnectingIp?: string) {
