@@ -856,7 +856,7 @@ function toolExposureError(tool: string): string {
 function windowsScreenshotParams(workspace: Workspace, args: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { workspace_id: workspace.id, agent_id: workspace.id };
   if (args.visual_followup !== undefined) out.visual_followup = recordArg(args.visual_followup, 'visual_followup');
-  for (const key of ['job_id', 'threaddex_job_id', 'threaddex_base_url']) {
+  for (const key of ['job_id', 'threaddex_job_id']) {
     if (typeof args[key] === 'string') out[key] = args[key];
   }
   return out;

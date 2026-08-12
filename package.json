@@ -1,6 +1,6 @@
 {
   "name": "ota-computer-use-gateway",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "description": "Provider-neutral local computer-use gateway for OTA/web-thread agents.",
   "type": "module",
   "bin": {

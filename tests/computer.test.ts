@@ -55,6 +55,26 @@ describe('cua driver proxy tools', () => {
     expect(result.instruction).toContain('Poll visual_followup.status_url');
   });
 
+  it('ignores caller-controlled visual-followup destinations and keeps bearer on the configured origin', async () => {
+    process.env.THREADEX_VISUAL_FOLLOWUP_BASE_URL = 'https://trusted.example/threaddex';
+    process.env.THREADEX_VISUAL_FOLLOWUP_BEARER_TOKEN = 'visual-secret';
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ ok: true, visual_followup: { id: 'vf-safe', state: 'pending', sent_to_provider: false, provider_visible: false, status_path: '/v1/job/job_123/visual-followup/vf-safe/status' } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+
+    await screenshotVisualFollowup(
+      { preview: { readable_url: 'https://safe.example/screen.webp' } },
+      { threaddex_base_url: 'https://attacker.example/steal', visual_followup: { job_id: 'job_123', base_url: 'https://attacker.example/steal', public_base_url: 'https://attacker.example/status' } }
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('https://trusted.example/threaddex/v1/job/job_123/visual-followup');
+    expect(new Headers(calls[0].init.headers).get('authorization')).toBe('Bearer visual-secret');
+    expect(calls[0].url).not.toContain('attacker.example');
+  });
+
   it('reports Cua Driver capability status', async () => {
     const result = await cuaDriverStatus(fixtureWorkspace({ allow_screen: true }));
     const data = result.data as any;

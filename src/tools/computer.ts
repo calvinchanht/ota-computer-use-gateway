@@ -8,6 +8,7 @@ import { ok } from '../core/result.js';
 import { signedArtifactUrl } from '../server/artifactSignatures.js';
 import { platformInfo } from '../core/platform.js';
 import type { Workspace } from '../core/workspaces.js';
+import { agentPath } from '../core/agentDir.js';
 import { callThreaddexLifecycle, isThreaddexLifecycleMethod } from './threaddexLifecycle.js';
 
 const execFileAsync = promisify(execFile);
@@ -539,14 +540,23 @@ function visualFollowupInput(params: Record<string, unknown>, readableUrl: strin
   const visual = isRecord(params.visual_followup) ? params.visual_followup : {};
   const job_id = stringValue(visual.job_id) ?? stringValue(params.threaddex_job_id) ?? stringValue(params.job_id);
   const agent_id = stringValue(visual.agent_id) ?? stringValue(params.agent_id) ?? stringValue(params.workspace_id);
-  const base_url = stripTrailingSlash(stringValue(visual.base_url) ?? stringValue(params.threaddex_base_url) ?? process.env.THREADEX_VISUAL_FOLLOWUP_BASE_URL ?? process.env.THREADEX_JOB_API_BASE_URL ?? 'http://127.0.0.1:33988');
-  const public_base_url = stripTrailingSlash(stringValue(visual.public_base_url) ?? process.env.THREADEX_VISUAL_FOLLOWUP_PUBLIC_BASE_URL ?? '');
+  const base_url = configuredVisualFollowupBaseUrl();
+  const public_base_url = stripTrailingSlash(process.env.THREADEX_VISUAL_FOLLOWUP_PUBLIC_BASE_URL ?? '');
   const idempotency_key = stringValue(visual.idempotency_key) ?? `cua-screenshot:${job_id ?? agent_id ?? 'unknown'}:${createHash('sha256').update(readableUrl).digest('hex').slice(0, 16)}`;
   const source = stringValue(visual.source) ?? stringValue(params.source) ?? 'cua_driver';
   const mime = stringValue(visual.mime) ?? stringValue(params.mime) ?? 'image/webp';
   const prompt_text = stringValue(visual.prompt_text) ?? stringValue(params.prompt_text) ?? defaultVisualPrompt(job_id, readableUrl);
   const attachment_path = stringValue(visual.attachment_path) ?? stringValue(params.attachment_path);
   return { job_id, agent_id, base_url, public_base_url, idempotency_key, source, mime, prompt_text, attachment_path };
+}
+
+function configuredVisualFollowupBaseUrl(): string {
+  const configured = process.env.THREADEX_VISUAL_FOLLOWUP_BASE_URL ?? process.env.THREADEX_JOB_API_BASE_URL ?? 'http://127.0.0.1:33988';
+  const url = new URL(configured);
+  if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password || url.search || url.hash) {
+    throw new Error('configured Threaddex visual-followup base URL is invalid');
+  }
+  return stripTrailingSlash(url.toString());
 }
 
 function defaultVisualPrompt(jobId: string | undefined, readableUrl: string): string {
@@ -658,11 +668,11 @@ async function writeBase64ScreenshotArtifact(workspace: Workspace, base64: strin
 }
 
 function screenshotArtifactDir(workspace: Workspace) {
-  return path.join(workspace.realAgentDir, 'artifacts', 'screenshots');
+  return agentPath(workspace, 'artifacts', 'screenshots');
 }
 
 function windowStateArtifactDir(workspace: Workspace) {
-  return path.join(workspace.realAgentDir, 'artifacts', 'window-state');
+  return agentPath(workspace, 'artifacts', 'window-state');
 }
 
 function screenshotArtifactPaths(workspace: Workspace) {

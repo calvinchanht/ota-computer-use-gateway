@@ -1,5 +1,5 @@
 import { mkdir, appendFile } from 'node:fs/promises';
-import path from 'node:path';
+import { agentPath } from './agentDir.js';
 import type { Workspace } from './workspaces.js';
 
 export type AuditEntry = {
@@ -13,7 +13,7 @@ export type AuditEntry = {
 
 export async function audit(workspace: Workspace | null, entry: AuditEntry): Promise<void> {
   if (!workspace) return;
-  const dir = path.join(workspace.realAgentDir ?? path.join(workspace.realRoot, '.agent'), 'audit');
+  const dir = agentPath(workspace, 'audit');
   await mkdir(dir, { recursive: true });
-  await appendFile(path.join(dir, 'tool_calls.jsonl'), JSON.stringify(entry) + '\n');
+  await appendFile(agentPath(workspace, 'audit', 'tool_calls.jsonl'), JSON.stringify(entry) + '\n');
 }

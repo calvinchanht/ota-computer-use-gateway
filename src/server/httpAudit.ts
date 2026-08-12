@@ -1,5 +1,5 @@
 import { mkdir, appendFile } from 'node:fs/promises';
-import path from 'node:path';
+import { agentPath } from '../core/agentDir.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Workspace } from '../core/workspaces.js';
 import { clientKey } from './rateLimit.js';
@@ -48,9 +48,9 @@ function entryFor(req: IncomingMessage, res: ServerResponse, startedAt: number):
 }
 
 async function writeHttpAudit(workspace: Workspace, entry: HttpAuditEntry): Promise<void> {
-  const dir = path.join(workspace.realAgentDir ?? path.join(workspace.realRoot, '.agent'), 'audit');
+  const dir = agentPath(workspace, 'audit');
   await mkdir(dir, { recursive: true });
-  await appendFile(path.join(dir, 'http_requests.jsonl'), JSON.stringify(entry) + '\n');
+  await appendFile(agentPath(workspace, 'audit', 'http_requests.jsonl'), JSON.stringify(entry) + '\n');
 }
 
 function requestPath(req: IncomingMessage): string | undefined {

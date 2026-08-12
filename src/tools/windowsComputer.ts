@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { ok } from '../core/result.js';
 import { platformInfo } from '../core/platform.js';
 import type { Workspace } from '../core/workspaces.js';
+import { agentPath } from '../core/agentDir.js';
 import { signedArtifactUrl } from '../server/artifactSignatures.js';
 import { screenshotVisualFollowup } from './computer.js';
 
@@ -455,7 +456,7 @@ function screenObjFn() {
 }
 
 function screenshotArtifactDir(workspace: Workspace) {
-  return path.join(workspace.realAgentDir, 'artifacts', 'windows-screenshots');
+  return agentPath(workspace, 'artifacts', 'windows-screenshots');
 }
 
 function screenshotPaths(workspace: Workspace) {
