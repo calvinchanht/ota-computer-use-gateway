@@ -56,6 +56,47 @@ describe('context tools', () => {
     expect(history.continuity['HANDOFF.md']).toContain('handoff note');
   });
 
+  it('matches the accepted role-oriented default bootstrap contract', async () => {
+    const workspace = await fixtureWorkspace();
+    await writeFile(path.join(workspace.realRoot, '.agent', 'AGENT_START_HERE.md'), 'Live-refresh mutable identities before action.');
+    await writeFile(path.join(workspace.realRoot, '.agent', 'CURRENT_TASK.md'), '# Current Task\n\nExact mutable current task packet.\n');
+
+    const result = await agentBootstrap(workspace);
+    const data = result.data as Record<string, any>;
+    const forbidden = new Set(['recent_handoff', 'recent_progress', 'recent_checkpoints']);
+    const found: string[] = [];
+    walkKeys(data, 'data', forbidden, found);
+    expect(found).toEqual([]);
+
+    const nextActionStrings: string[] = [];
+    collectStrings(data.next_actions, nextActionStrings);
+    expect(nextActionStrings.some((value) => /\b(?:recent_handoff|recent_progress|recent_checkpoints)\b/i.test(value))).toBe(false);
+
+    const declaredRole = data.role ?? data.orientation_role ?? data.role_profile ?? data.main_loop?.role;
+    expect(declaredRole).toBeUndefined();
+    expect(nonEmpty(data.current_task)).toBe(true);
+    for (const role of ['implementation', 'review', 'decision', 'operator']) {
+      const hasPacket = ['current_task', 'task', 'task_packet', 'assignment', 'provider_thread_prompt', 'agent_start_here']
+        .some((key) => nonEmpty(data[key]));
+      expect(hasPacket, `${role} requires a non-empty current task/assignment packet`).toBe(true);
+    }
+  });
+
+  it('rejects the accepted polluted bootstrap fixture on both history checks', () => {
+    const polluted = {
+      current_task: 'current project snapshot',
+      recent_progress: 'historical execution log',
+      next_actions: ['Read recent_progress before doing anything.']
+    };
+    const forbidden = new Set(['recent_handoff', 'recent_progress', 'recent_checkpoints']);
+    const found: string[] = [];
+    walkKeys(polluted, 'data', forbidden, found);
+    expect(found).toEqual(['data.recent_progress']);
+    const strings: string[] = [];
+    collectStrings(polluted.next_actions, strings);
+    expect(strings.some((value) => /\b(?:recent_handoff|recent_progress|recent_checkpoints)\b/i.test(value))).toBe(true);
+  });
+
   it('records progress and handoff notes', async () => {
     const workspace = await fixtureWorkspace();
     await recordProgress(workspace, 'Progress', 'made progress');
@@ -94,4 +135,30 @@ async function fixtureWorkspace(): Promise<Workspace> {
     browser: { profiles: [] },
     commands: {}
   };
+}
+
+function walkKeys(value: unknown, prefix: string, forbidden: Set<string>, found: string[]) {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => walkKeys(item, `${prefix}[${index}]`, forbidden, found));
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (forbidden.has(key)) found.push(`${prefix}.${key}`);
+    walkKeys(child, `${prefix}.${key}`, forbidden, found);
+  }
+}
+
+function collectStrings(value: unknown, found: string[]) {
+  if (typeof value === 'string') { found.push(value); return; }
+  if (Array.isArray(value)) { value.forEach((item) => collectStrings(item, found)); return; }
+  if (value && typeof value === 'object') Object.values(value as Record<string, unknown>).forEach((item) => collectStrings(item, found));
+}
+
+function nonEmpty(value: unknown) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0;
+  return true;
 }
