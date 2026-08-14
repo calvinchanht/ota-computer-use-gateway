@@ -188,6 +188,14 @@ export const configSchema = z.object({
     max_request_bytes: z.number().int().positive().default(1000000),
     max_search_results: z.number().int().positive().default(50),
     max_exec_ms: z.number().int().positive().default(120000),
+    // Provider compatibility/sanitization controls. All default off by policy.
+    // conservative_censoring is an umbrella for lower-trust lanes and enables every
+    // restrictive content/result/environment behavior below.
+    conservative_censoring: z.boolean().optional(),
+    secret_value_redaction: z.boolean().optional(),
+    result_sanitization: z.boolean().optional(),
+    secret_content_heuristics: z.boolean().optional(),
+    environment_filtering: z.boolean().optional(),
     max_process_ms: z.number().int().positive().optional()
   }).prefault({})
 });
@@ -196,5 +204,25 @@ export type AppConfig = z.infer<typeof configSchema>;
 export type WorkspaceConfig = z.infer<typeof workspaceSchema>;
 
 export function configuredMaxProcessMs(config: AppConfig): number {
-  return config.security.max_process_ms ?? DEFAULT_MAX_PROCESS_MS;
+  return config.security?.max_process_ms ?? DEFAULT_MAX_PROCESS_MS;
+}
+
+export function conservativeCensoringEnabled(config: AppConfig): boolean {
+  return config.security?.conservative_censoring === true;
+}
+
+export function secretValueRedactionEnabled(config: AppConfig): boolean {
+  return conservativeCensoringEnabled(config) || config.security?.secret_value_redaction === true;
+}
+
+export function resultSanitizationEnabled(config: AppConfig): boolean {
+  return conservativeCensoringEnabled(config) || config.security?.result_sanitization === true;
+}
+
+export function secretContentHeuristicsEnabled(config: AppConfig): boolean {
+  return conservativeCensoringEnabled(config) || config.security?.secret_content_heuristics === true;
+}
+
+export function environmentFilteringEnabled(config: AppConfig): boolean {
+  return conservativeCensoringEnabled(config) || config.security?.environment_filtering === true;
 }

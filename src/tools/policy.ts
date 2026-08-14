@@ -2,7 +2,8 @@ import { ok } from '../core/result.js';
 import { commandRuntimeInfo } from '../core/commandAdapter.js';
 import type { Workspace } from '../core/workspaces.js';
 import { OTA_MEMORY_TOOL_NAMES } from './otaMemory.js';
-import type { AppConfig } from '../config/schema.js';
+import { conservativeCensoringEnabled, environmentFilteringEnabled, resultSanitizationEnabled, secretContentHeuristicsEnabled, secretValueRedactionEnabled, type AppConfig } from '../config/schema.js';
+import { workspaceChildEnvironmentMode } from '../core/securityPolicy.js';
 import { ESTATE_TOOL_NAMES } from './genesis.js';
 
 export function workspacePolicy(workspace: Workspace, config?: AppConfig) {
@@ -28,6 +29,7 @@ export function workspacePolicy(workspace: Workspace, config?: AppConfig) {
       provider_prompts: 'Provider-side confirmation prompts are intentionally minimized for routine scoped workspace/browser/computer work. OTA policy must not add generic stop-boundary lists; if the real UI blocks progress, report the concrete blocker.'
     },
     command_runtime: commandRuntimeInfo(undefined, config?.command_runtime),
+    censoring: censoringPolicy(workspace, config),
     git: gitPolicy(workspace),
     github: githubPolicy(workspace),
     allowed_tools: allowedTools(workspace),
@@ -38,6 +40,25 @@ export function workspacePolicy(workspace: Workspace, config?: AppConfig) {
     // without Calvin's explicit approval.
     requires_approval: []
   });
+}
+
+
+function censoringPolicy(workspace: Workspace, config?: AppConfig) {
+  const defaults = { secret_value_redaction: false, result_sanitization: false, secret_content_heuristics: false, environment_filtering: false };
+  return {
+    umbrella_config_key: 'security.conservative_censoring',
+    conservative_censoring: config ? conservativeCensoringEnabled(config) : false,
+    defaults,
+    effective: config ? {
+      secret_value_redaction: secretValueRedactionEnabled(config),
+      result_sanitization: resultSanitizationEnabled(config),
+      secret_content_heuristics: secretContentHeuristicsEnabled(config),
+      environment_filtering: environmentFilteringEnabled(config)
+    } : defaults,
+    child_environment: config ? workspaceChildEnvironmentMode(config, workspace) : 'minimal',
+    child_environment_policy: 'machine_admin/estate_admin use full host environment by default; ordinary workspaces use PATH, HOME, LANG, LC_ALL, SHELL only; conservative/environment_filtering forces minimal.',
+    note: 'These are OTA application controls. Provider/platform safety and connector-host enforcement are separate.'
+  };
 }
 
 function gitPolicy(workspace: Workspace) {

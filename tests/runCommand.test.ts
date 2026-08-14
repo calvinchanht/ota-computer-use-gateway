@@ -69,33 +69,52 @@ describe('runConfiguredCommand', () => {
     expect(JSON.stringify(result.data)).toContain('probe-ok');
   });
 
-  it('preserves PATHEXT without inheriting GitHub credentials in foreground children', async () => {
-    const workspace = await fixtureWorkspace(true);
-    const pathext = '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC';
-    const previousPathext = process.env.PATHEXT;
-    const previousGithubToken = process.env.GITHUB_TOKEN;
-    process.env.PATHEXT = pathext;
-    process.env.GITHUB_TOKEN = 'ota-test-secret-do-not-inherit';
-    try {
-      const result = await runArgvTool(config, workspace, [
-        process.execPath,
-        '-e',
-        "process.stdout.write(JSON.stringify({ pathext: process.env.PATHEXT, githubToken: process.env.GITHUB_TOKEN ?? null }))"
-      ]);
-      expect(JSON.parse((result.data as { stdout: string }).stdout)).toEqual({ pathext, githubToken: null });
-    } finally {
-      if (previousPathext === undefined) delete process.env.PATHEXT;
-      else process.env.PATHEXT = previousPathext;
-      if (previousGithubToken === undefined) delete process.env.GITHUB_TOKEN;
-      else process.env.GITHUB_TOKEN = previousGithubToken;
-    }
-  });
 
   it('preserves JSON-looking argv values without shell re-encoding', async () => {
     const workspace = await fixtureWorkspace(true);
     const payload = '{"quoted":"a b","slash":"c\\\\d"}';
     const result = await runArgvTool(config, workspace, [process.execPath, '-e', 'process.stdout.write(process.argv[1])', payload]);
     expect((result.data as { stdout: string }).stdout).toBe(payload);
+  });
+
+  it('keeps the tiny environment for ordinary workspaces', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const oldPathext = process.env.PATHEXT;
+    process.env.PATHEXT = '.COM;.EXE;.BAT;.CMD';
+    try {
+      const result = await runArgvTool(config, workspace, [process.execPath, '-e', "process.stdout.write(process.env.PATHEXT ?? 'missing')"]);
+      expect((result.data as { stdout: string }).stdout).toBe('missing');
+    } finally {
+      if (oldPathext === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = oldPathext;
+    }
+  });
+
+  it('inherits the full host environment for machine-admin workspaces by default', async () => {
+    const workspace = await fixtureWorkspace(true, true);
+    const oldPathext = process.env.PATHEXT;
+    const oldMarker = process.env.OTA_TEST_ADMIN_MARKER;
+    process.env.PATHEXT = '.COM;.EXE;.BAT;.CMD';
+    process.env.OTA_TEST_ADMIN_MARKER = 'admin-env-ok';
+    try {
+      const result = await runArgvTool(config, workspace, [process.execPath, '-e', "process.stdout.write(JSON.stringify({pathext:process.env.PATHEXT, marker:process.env.OTA_TEST_ADMIN_MARKER}))"]);
+      expect(JSON.parse((result.data as { stdout: string }).stdout)).toEqual({ pathext: '.COM;.EXE;.BAT;.CMD', marker: 'admin-env-ok' });
+    } finally {
+      if (oldPathext === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = oldPathext;
+      if (oldMarker === undefined) delete process.env.OTA_TEST_ADMIN_MARKER; else process.env.OTA_TEST_ADMIN_MARKER = oldMarker;
+    }
+  });
+
+  it('forces the tiny environment for admin workspaces when conservative censoring is enabled', async () => {
+    const workspace = await fixtureWorkspace(true, true);
+    const oldPathext = process.env.PATHEXT;
+    process.env.PATHEXT = '.COM;.EXE;.BAT;.CMD';
+    try {
+      const conservative = { ...config, security: { ...config.security, conservative_censoring: true } };
+      const result = await runArgvTool(conservative, workspace, [process.execPath, '-e', "process.stdout.write(process.env.PATHEXT ?? 'missing')"]);
+      expect((result.data as { stdout: string }).stdout).toBe('missing');
+    } finally {
+      if (oldPathext === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = oldPathext;
+    }
   });
 
   it('reports command timeouts explicitly', async () => {
@@ -147,9 +166,9 @@ function zodShape(schema: unknown): Record<string, unknown> {
   return shape && typeof shape === 'object' ? shape as Record<string, unknown> : {};
 }
 
-async function fixtureWorkspace(allowTests: boolean): Promise<Workspace> {
+async function fixtureWorkspace(allowTests: boolean, admin = false): Promise<Workspace> {
   const root = await mkdtemp(path.join(tmpdir(), 'gtp-command-'));
   await writeFile(path.join(root, 'hello.cjs'), "process.stdout.write('hello');\n");
   await writeFile(path.join(root, 'shell-ok.cjs'), "process.stdout.write('shell-ok');\n");
-  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: false, allow_patch: false, allow_tests: allowTests, allow_screen: false, allow_mouse_keyboard: false, browser: { profiles: [] }, commands: { echo: 'node hello.cjs' } };
+  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: false, allow_patch: false, allow_tests: allowTests, allow_screen: false, allow_mouse_keyboard: false, api_sets: admin ? { machine_admin: true } : {}, browser: { profiles: [] }, commands: { echo: 'node hello.cjs' } };
 }

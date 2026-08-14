@@ -33,23 +33,31 @@ describe('process tools', () => {
     await expect(waitForOutput(processId, 'background-ok')).resolves.toContain('background-ok');
   });
 
-  it('preserves PATHEXT without inheriting GitHub credentials in managed children', async () => {
+  it('keeps the tiny environment for ordinary managed children', async () => {
     const workspace = await fixtureWorkspace(true);
-    const pathext = '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC';
     const previousPathext = process.env.PATHEXT;
-    const previousGithubToken = process.env.GITHUB_TOKEN;
-    process.env.PATHEXT = pathext;
-    process.env.GITHUB_TOKEN = 'ota-test-secret-do-not-inherit';
+    const previousMarker = process.env.OTA_TEST_ADMIN_MARKER;
+    process.env.PATHEXT = '.COM;.EXE;.BAT;.CMD';
+    process.env.OTA_TEST_ADMIN_MARKER = 'managed-admin-ok';
     try {
-      const started = await processStartArgv(config, workspace, [process.execPath, '-e', "process.stdout.write(JSON.stringify({ pathext: process.env.PATHEXT, githubToken: process.env.GITHUB_TOKEN ?? null }))"]);
-      const processId = String(started.data?.process_id);
-      const output = await waitForOutput(processId, pathext);
-      expect(JSON.parse(output)).toEqual({ pathext, githubToken: null });
+      const started = await processStartArgv(config, workspace, [process.execPath, '-e', "process.stdout.write(JSON.stringify({ pathext: process.env.PATHEXT ?? null, marker: process.env.OTA_TEST_ADMIN_MARKER ?? null }))"]);
+      const output = await waitForOutput(String(started.data?.process_id), '"marker":null');
+      expect(JSON.parse(output)).toEqual({ pathext: null, marker: null });
     } finally {
-      if (previousPathext === undefined) delete process.env.PATHEXT;
-      else process.env.PATHEXT = previousPathext;
-      if (previousGithubToken === undefined) delete process.env.GITHUB_TOKEN;
-      else process.env.GITHUB_TOKEN = previousGithubToken;
+      if (previousPathext === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = previousPathext;
+      if (previousMarker === undefined) delete process.env.OTA_TEST_ADMIN_MARKER; else process.env.OTA_TEST_ADMIN_MARKER = previousMarker;
+    }
+  });
+
+  it('inherits the full host environment for machine-admin managed children', async () => {
+    const workspace = await fixtureWorkspace(true, true);
+    const previousMarker = process.env.OTA_TEST_ADMIN_MARKER;
+    process.env.OTA_TEST_ADMIN_MARKER = 'managed-admin-ok';
+    try {
+      const started = await processStartArgv(config, workspace, [process.execPath, '-e', "process.stdout.write(process.env.OTA_TEST_ADMIN_MARKER ?? 'missing')"]);
+      await expect(waitForOutput(String(started.data?.process_id), 'managed-admin-ok')).resolves.toContain('managed-admin-ok');
+    } finally {
+      if (previousMarker === undefined) delete process.env.OTA_TEST_ADMIN_MARKER; else process.env.OTA_TEST_ADMIN_MARKER = previousMarker;
     }
   });
 
@@ -156,13 +164,13 @@ describe('process tools', () => {
   });
 });
 
-async function fixtureWorkspace(allowTests: boolean): Promise<Workspace> {
+async function fixtureWorkspace(allowTests: boolean, admin = false): Promise<Workspace> {
   const root = await mkdtemp(path.join(tmpdir(), 'gtp-process-'));
   await writeFile(path.join(root, 'background.cjs'), "process.stdout.write('background-ok');\n");
   await writeFile(path.join(root, 'stdin.cjs'), 'process.stdin.pipe(process.stdout);\n');
   await writeFile(path.join(root, 'tail.cjs'), "process.stdout.write('first'); setTimeout(() => process.stdout.write('second'), 50);\n");
   await writeFile(path.join(root, 'wait.cjs'), 'setTimeout(() => {}, 30000);\n');
-  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: false, allow_patch: false, allow_tests: allowTests, allow_screen: false, allow_mouse_keyboard: false, browser: { profiles: [] }, commands: {} };
+  return { id: 'test', name: 'Test', root, realRoot: root, allow_read: true, allow_write: false, allow_patch: false, allow_tests: allowTests, allow_screen: false, allow_mouse_keyboard: false, api_sets: admin ? { machine_admin: true } : {}, browser: { profiles: [] }, commands: {} };
 }
 
 async function waitForOutput(processId: string, expected: string, cursor?: number): Promise<string> {

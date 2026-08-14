@@ -92,34 +92,8 @@ export async function windowsWindowScreenshotSequence(workspace: Workspace, hwnd
   const requestedDurationMs = interval * (frameCount - 1);
   if (requestedDurationMs > MAX_SEQUENCE_DURATION_MS) throw new Error(`screenshot sequence duration must be at most ${MAX_SEQUENCE_DURATION_MS}ms`);
   ensureWindows();
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const started = Date.now();
-  const frames: Array<Record<string, unknown>> = [];
-  const attachmentPaths: string[] = [];
-  let firstPayload: Record<string, unknown> | undefined;
-  await mkdir(screenshotArtifactDir(workspace), { recursive: true });
-  for (let index = 0; index < frameCount; index++) {
-    const targetAt = started + (index * interval);
-    const waitMs = targetAt - Date.now();
-    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
-    const paths = screenshotSequenceFramePaths(workspace, stamp, index + 1);
-    const data = await psObject(windowScreenshotScript(paths.full, target));
-    const preview = await writePreview(paths.full, paths.preview);
-    const pair = artifactPair(workspace, paths.full, preview);
-    const capturedAt = typeof data.captured_at === 'string' ? data.captured_at : new Date().toISOString();
-    const frame = {
-      frame: `frame_${String(index + 1).padStart(2, '0')}`,
-      index: index + 1,
-      captured_at: capturedAt,
-      elapsed_ms: Date.now() - started,
-      bounds: data.bounds,
-      capture_method: data.capture_method,
-      artifact: sequenceArtifactResponse(pair)
-    };
-    frames.push(frame);
-    attachmentPaths.push(paths.preview);
-    if (!firstPayload) firstPayload = { ...data, artifact: pair, preview: pair.preview, full: pair.full };
-  }
+  const { frames, attachmentPaths, firstPayload } = await captureWindowScreenshotSequence(workspace, target, interval, frameCount, started);
   const promptText = `Analyze these ${frameCount} ordered screenshot frames as one temporal sequence. Frames are attached in frame_01 through frame_${String(frameCount).padStart(2, '0')} order at ${interval}ms requested intervals. Compare motion, transitions, transient UI, and drift. Reference image: ${String((firstPayload?.preview as Record<string, unknown> | undefined)?.readable_url ?? '')}`;
   const visualFollowup = firstPayload
     ? await screenshotVisualFollowup(firstPayload, { ...params, kind: 'screenshot_sequence', source: 'windows_computer', attachment_paths: attachmentPaths, prompt_text: promptText })
@@ -133,6 +107,35 @@ export async function windowsWindowScreenshotSequence(workspace: Workspace, hwnd
     frames,
     visual_followup: windowsVisualFollowupResponse(visualFollowup)
   });
+}
+
+
+async function captureWindowScreenshotSequence(workspace: Workspace, target: number, interval: number, frameCount: number, started: number) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const frames: Array<Record<string, unknown>> = [];
+  const attachmentPaths: string[] = [];
+  let firstPayload: Record<string, unknown> | undefined;
+  await mkdir(screenshotArtifactDir(workspace), { recursive: true });
+  for (let index = 0; index < frameCount; index++) {
+    const waitMs = started + (index * interval) - Date.now();
+    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+    const paths = screenshotSequenceFramePaths(workspace, stamp, index + 1);
+    const data = await psObject(windowScreenshotScript(paths.full, target));
+    const preview = await writePreview(paths.full, paths.preview);
+    const pair = artifactPair(workspace, paths.full, preview);
+    frames.push({
+      frame: `frame_${String(index + 1).padStart(2, '0')}`,
+      index: index + 1,
+      captured_at: typeof data.captured_at === 'string' ? data.captured_at : new Date().toISOString(),
+      elapsed_ms: Date.now() - started,
+      bounds: data.bounds,
+      capture_method: data.capture_method,
+      artifact: sequenceArtifactResponse(pair)
+    });
+    attachmentPaths.push(paths.preview);
+    if (!firstPayload) firstPayload = { ...data, artifact: pair, preview: pair.preview, full: pair.full };
+  }
+  return { frames, attachmentPaths, firstPayload };
 }
 
 function windowsScreenshotResponse(data: Record<string, unknown>, visualFollowup: unknown) {

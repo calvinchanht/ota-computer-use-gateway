@@ -6,6 +6,7 @@ import { ok } from '../core/result.js';
 import { truncateText } from '../core/text.js';
 import { redactGitOutputForDisplay } from './git.js';
 import type { AppConfig } from '../config/schema.js';
+import { redactSecretValuesEnabled, sanitizeResultsEnabled, workspaceChildEnvironmentMode } from '../core/securityPolicy.js';
 import type { Workspace } from '../core/workspaces.js';
 
 export async function githubCliTool(config: AppConfig, workspace: Workspace, cmd: string[], cwdPath = '.', timeoutMs = 60000, maxOutputChars = 20000) {
@@ -17,8 +18,8 @@ export async function githubCliTool(config: AppConfig, workspace: Workspace, cmd
   const result = await runCommand(githubExecutable(workspace), cmd.map(String), cwd.absolute, timeout, {
     GH_TOKEN: token,
     GITHUB_TOKEN: token
-  });
-  const output = redactGithubOutput(`${result.stdout}${result.stderr}`, token);
+  }, workspaceChildEnvironmentMode(config, workspace));
+  const output = redactGithubOutput(`${result.stdout}${result.stderr}`, token, sanitizeResultsEnabled(config), redactSecretValuesEnabled(config));
   const limited = truncateText(output, Math.min(Math.max(1, maxOutputChars), 50000));
   return ok('github command finished', {
     command: ['gh', ...cmd],
@@ -50,6 +51,7 @@ function defaultTokenPath(workspace: Workspace): string {
   return path.join(workspace.realRoot, 'secrets', `${workspace.id}_github_pat.txt`);
 }
 
-function redactGithubOutput(text: string, token: string): string {
-  return redactGitOutputForDisplay(text).replaceAll(token, '[GITHUB_TOKEN_REDACTED]');
+function redactGithubOutput(text: string, token: string, sanitizeResults: boolean, redactSecretValue: boolean): string {
+  const sanitized = redactGitOutputForDisplay(text, sanitizeResults);
+  return redactSecretValue ? sanitized.replaceAll(token, '[GITHUB_TOKEN_REDACTED]') : sanitized;
 }

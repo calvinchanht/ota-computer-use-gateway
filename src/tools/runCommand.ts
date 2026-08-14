@@ -6,6 +6,7 @@ import { resolveInside } from '../core/paths.js';
 import { truncateText } from '../core/text.js';
 import { jobLifecycleCommandWarnings, commandTextFromArgv } from './jobLifecycleGuard.js';
 import { configuredMaxProcessMs, type AppConfig } from '../config/schema.js';
+import { workspaceChildEnvironmentMode } from '../core/securityPolicy.js';
 import type { Workspace } from '../core/workspaces.js';
 
 const MAX_OUTPUT_BYTES = 50000;
@@ -15,7 +16,7 @@ export async function runConfiguredCommand(config: AppConfig, workspace: Workspa
   const command = workspace.commands[commandId];
   if (!command) throw new Error(`unknown command id: ${commandId}`);
   const warnings = jobLifecycleCommandWarnings(command);
-  const result = await runShellCommand(config, command, workspace.realRoot);
+  const result = await runShellCommand(config, command, workspace.realRoot, 120000, workspace);
   const output = truncateText(result.stdout + result.stderr, MAX_OUTPUT_BYTES);
   const response = ok('configured command finished', { command_id: commandId, exit_code: result.code, timed_out: result.timed_out, output: output.text, truncated: output.truncated });
   response.warnings = warnings;
@@ -25,7 +26,7 @@ export async function runConfiguredCommand(config: AppConfig, workspace: Workspa
 export async function runShellTool(config: AppConfig, workspace: Workspace, command: string) {
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   const warnings = jobLifecycleCommandWarnings(command);
-  const result = await runShellCommand(config, command, workspace.realRoot, config.security.max_exec_ms);
+  const result = await runShellCommand(config, command, workspace.realRoot, config.security.max_exec_ms, workspace);
   const output = truncateText(result.stdout + result.stderr, MAX_OUTPUT_BYTES);
   const response = ok('command finished', { exit_code: result.code, timed_out: result.timed_out, output: output.text, truncated: output.truncated });
   response.warnings = warnings;
@@ -39,7 +40,7 @@ export async function runArgvTool(config: AppConfig, workspace: Workspace, cmd: 
   const warnings = jobLifecycleCommandWarnings(commandTextFromArgv([command, ...args]));
   const cwd = await resolveInside(workspace, cwdPath, config);
   const timeout = Math.min(Math.max(1, timeoutMs), config.security.max_exec_ms);
-  const result = await runCommand(command, args, cwd.absolute, timeout);
+  const result = await runCommand(command, args, cwd.absolute, timeout, {}, workspaceChildEnvironmentMode(config, workspace));
   const stdout = truncateText(result.stdout, Math.min(Math.max(1, maxStdoutBytes), MAX_OUTPUT_BYTES));
   const stderr = truncateText(result.stderr, Math.min(Math.max(1, maxStderrBytes), MAX_OUTPUT_BYTES));
   const response = ok('command finished', { command: cmd, cwd: cwd.relative, timeout_ms: timeout, timed_out: result.timed_out, exit_code: result.code, stdout: stdout.text, stderr: stderr.text, stdout_truncated: stdout.truncated, stderr_truncated: stderr.truncated });
@@ -55,13 +56,13 @@ export async function runArgvTailTool(config: AppConfig, workspace: Workspace, c
   const cwd = await resolveInside(workspace, cwdPath, config);
   const limit = configuredMaxProcessMs(config);
   const timeout = Math.min(Math.max(1, timeoutMs ?? limit), limit);
-  const item = startManagedArgvProcess(command, args, cwd.absolute, timeout, cmd.join(' '));
+  const item = startManagedArgvProcess(command, args, cwd.absolute, timeout, cmd.join(' '), workspaceChildEnvironmentMode(config, workspace));
   const response = ok('command started for tailing', { ...describeManagedProcess(item), command_argv: cmd, cwd: cwd.relative, timeout_ms: timeout, tail_supported: true, read_with: 'read_process', initial_cursor: 0 });
   response.warnings = warnings;
   return response;
 }
 
-async function runShellCommand(config: AppConfig, command: string, cwd: string, timeoutMs = 120000) {
+async function runShellCommand(config: AppConfig, command: string, cwd: string, timeoutMs = 120000, workspace?: Workspace) {
   const invocation = shellInvocation(command, undefined, config.command_runtime);
-  return runCommand(invocation.command, invocation.args, cwd, timeoutMs);
+  return runCommand(invocation.command, invocation.args, cwd, timeoutMs, {}, workspace ? workspaceChildEnvironmentMode(config, workspace) : 'minimal');
 }

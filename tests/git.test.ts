@@ -17,17 +17,19 @@ const config: AppConfig = {
 };
 
 describe('git display hygiene', () => {
-  it('removes credentials from remote URLs', () => {
-    expect(sanitizeGitRemoteForDisplay('https://user:secret@github.com/owner/repo.git'))
-      .toBe('https://github.com/owner/repo.git');
+  it('leaves Git/URL results unsanitized by default', () => {
+    const remote = 'https://user:secret@github.com/owner/repo.git';
+    const output = 'token ghp_abc123TOKEN remote https://x-access-token:secret@github.com/owner/repo.git';
+    expect(sanitizeGitRemoteForDisplay(remote)).toBe(remote);
+    expect(redactGitOutputForDisplay(output)).toBe(output);
   });
 
-  it('redacts GitHub token material from command output', () => {
+  it('restores Git/URL result sanitization when explicitly enabled', () => {
     const output = 'token ghp_abc123TOKEN remote https://x-access-token:secret@github.com/owner/repo.git';
-    expect(redactGitOutputForDisplay(output)).not.toContain('ghp_abc123TOKEN');
-    expect(redactGitOutputForDisplay(output)).not.toContain('secret@');
-    expect(redactGitOutputForDisplay(output)).toContain('[GITHUB_TOKEN_REDACTED]');
-    expect(redactGitOutputForDisplay(output)).toContain('https://github.com/owner/repo.git');
+    expect(sanitizeGitRemoteForDisplay('https://user:secret@github.com/owner/repo.git', true)).toBe('https://github.com/owner/repo.git');
+    expect(redactGitOutputForDisplay(output, true)).not.toContain('ghp_abc123TOKEN');
+    expect(redactGitOutputForDisplay(output, true)).not.toContain('secret@');
+    expect(redactGitOutputForDisplay(output, true)).toContain('[GITHUB_TOKEN_REDACTED]');
   });
 
   it('identifies non-repo push targets', async () => {
@@ -58,7 +60,7 @@ describe('git display hygiene', () => {
     expect(result.data).toMatchObject({ status: 'failed', failure_class: 'ref_mismatch' });
   });
 
-  it('runs github argv through configured PAT-backed wrapper without leaking token', async () => {
+  it('leaves GitHub command results unsanitized by default', async () => {
     const repo = await fixtureRepo();
     const ws = workspace(repo.root, repo.tokenFile);
     ws.git = { ...ws.git, github_cli_wrapper: process.execPath };
@@ -66,7 +68,18 @@ describe('git display hygiene', () => {
     const script = "process.stdout.write(`${process.env.GH_TOKEN} ${process.argv.slice(1).join('|')}`)";
     const result = await githubCliTool(config, ws, ['-e', script, 'issue', 'list'], '.');
     expect(result.data).toMatchObject({ exit_code: 0, auth_lane: 'configured_wrapper' });
+    expect(JSON.stringify(result.data)).toContain('github_pat_TESTSECRET');
     expect(JSON.stringify(result.data)).toContain('issue|list');
+  });
+
+  it('redacts the configured GitHub token when secret-value redaction is explicitly enabled', async () => {
+    const repo = await fixtureRepo();
+    const ws = workspace(repo.root, repo.tokenFile);
+    ws.git = { ...ws.git, github_cli_wrapper: process.execPath };
+    await writeFile(repo.tokenFile, 'github_pat_TESTSECRET\n');
+    const secured = { ...config, security: { ...config.security, secret_value_redaction: true } };
+    const script = "process.stdout.write(process.env.GH_TOKEN ?? '')";
+    const result = await githubCliTool(secured, ws, ['-e', script], '.');
     expect(JSON.stringify(result.data)).not.toContain('github_pat_TESTSECRET');
     expect(JSON.stringify(result.data)).toContain('[GITHUB_TOKEN_REDACTED]');
   });
@@ -166,7 +179,7 @@ describe('git display hygiene', () => {
       const body = await response.json() as { ok: boolean; data: { output: string } };
       expect(body.ok).toBe(true);
       expect(body.data.output).toContain('issue|view|40');
-      expect(body.data.output).not.toContain('github_pat_TESTSECRET');
+      expect(body.data.output).toContain('github_pat_TESTSECRET');
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
       await rm(repo.root, { recursive: true, force: true });

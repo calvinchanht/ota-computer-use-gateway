@@ -48,7 +48,7 @@ function helperStatusTool() {
 function helperUpsertTool() {
   return {
     title: 'Workspace helper upsert',
-    description: 'Create or update one workspace helper definition from constrained template fields. This does not accept arbitrary shell code, arbitrary script paths, or user-supplied executable text. The server validates helper_id, mode, template kind, repo, host, service, local checks, output bounds, audit context, workspace scope, and secret redaction boundaries.',
+    description: 'Create or update one workspace helper definition from constrained template fields. This does not accept arbitrary shell code, arbitrary script paths, or user-supplied executable text. The server validates helper_id, mode, template kind, repo, host, service, local checks, output bounds, audit context, workspace scope, and the configured result-sanitization policy.',
     inputSchema: {
       workspace_id: z.string(),
       definition: z.object({
@@ -75,7 +75,7 @@ function helperUpsertTool() {
 function helperRunTool() {
   return {
     title: 'Workspace helper run',
-    description: 'Run one server-approved workspace helper by helper_id and mode. Helpers are selected from a fixed local registry with constrained template kinds and schemas. This tool cannot run arbitrary commands, arbitrary file paths, or user-supplied scripts. It is for bounded maintenance of the user-owned authenticated workspace and assigned hosts, with bounded output and secret redaction.',
+    description: 'Run one server-approved workspace helper by helper_id and mode. Helpers are selected from a fixed local registry with constrained template kinds and schemas. This tool cannot run arbitrary commands, arbitrary file paths, or user-supplied scripts. It is for bounded maintenance of the user-owned authenticated workspace and assigned hosts, with bounded output; result sanitization follows the configured policy.',
     inputSchema: { workspace_id: z.string(), helper_id: helperIdSchema, mode: modeSchema, args: z.record(z.string(), z.unknown()).default({}) },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
   };

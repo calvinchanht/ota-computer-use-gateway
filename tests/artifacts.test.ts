@@ -14,6 +14,12 @@ describe('artifact tools', () => {
     expect(listed.artifacts[0].title).toBe('Summary');
   });
 
+  it('allows secret-like artifact terminology by default and can opt into legacy rejection', async () => {
+    const workspace = await fixtureWorkspace();
+    await expect(recordArtifact(workspace, 'reports/token-notes.md', 'GITHUB_TOKEN notes', 'markdown', 'PAT rotation notes')).resolves.toBeTruthy();
+    await expect(recordArtifact(workspace, 'reports/token-notes-2.md', 'GITHUB_TOKEN notes', 'markdown', 'PAT rotation notes', true)).rejects.toThrow('secrets');
+  });
+
   it('rejects paths outside the workspace', async () => {
     const workspace = await fixtureWorkspace();
     await expect(recordArtifact(workspace, '../secret.txt', 'Bad')).rejects.toThrow('inside the workspace');

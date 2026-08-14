@@ -21,8 +21,8 @@ export async function listArtifacts(workspace: Workspace) {
   return ok(`listed ${index.artifacts.length} artifacts`, { workspace_id: workspace.id, artifacts: index.artifacts });
 }
 
-export async function recordArtifact(workspace: Workspace, artifactPath: string, title: string, kind = 'file', description = '') {
-  validateArtifactInput(artifactPath, title, kind, description);
+export async function recordArtifact(workspace: Workspace, artifactPath: string, title: string, kind = 'file', description = '', conservativeCensoring = false) {
+  validateArtifactInput(artifactPath, title, kind, description, conservativeCensoring);
   await ensureAgentDir(workspace);
   const index = await readArtifactIndex(workspace);
   const artifact = artifactEntry(artifactPath, title, kind, description);
@@ -43,11 +43,11 @@ function artifactEntry(artifactPath: string, title: string, kind: string, descri
   return { id: artifactId(normalized), path: normalized, title: title.trim(), kind: kind.trim(), description: description.trim(), created_at: new Date().toISOString() };
 }
 
-function validateArtifactInput(artifactPath: string, title: string, kind: string, description: string) {
+function validateArtifactInput(artifactPath: string, title: string, kind: string, description: string, conservativeCensoring: boolean) {
   if (!title.trim() || title.length > 200) throw new Error('artifact title must be 1-200 characters');
   if (!kind.trim() || kind.length > 80) throw new Error('artifact kind must be 1-80 characters');
   if (description.length > 2000) throw new Error('artifact description exceeds 2000 characters');
-  if (looksSecret(`${title}\n${kind}\n${description}`)) throw new Error('artifact metadata appears to contain secrets');
+  if (conservativeCensoring && looksSecret(`${title}\n${kind}\n${description}`, true)) throw new Error('artifact metadata appears to contain secrets');
   normalizeArtifactPath(artifactPath);
 }
 

@@ -6,9 +6,14 @@ import { memoryWrite } from '../src/tools/memory.js';
 import type { Workspace } from '../src/core/workspaces.js';
 
 describe('memoryWrite', () => {
-  it('rejects secret-like memory', async () => {
+  it('allows secret-like terminology by default', async () => {
     const workspace = await fixtureWorkspace();
-    await expect(memoryWrite(workspace, 'note', 'bad', 'GITHUB_TOKEN=abc')).rejects.toThrow('secrets');
+    await expect(memoryWrite(workspace, 'note', 'compat', 'GITHUB_TOKEN=placeholder')).resolves.toBeTruthy();
+  });
+
+  it('restores secret-like content rejection when conservative censoring is enabled', async () => {
+    const workspace = await fixtureWorkspace();
+    await expect(memoryWrite(workspace, 'note', 'bad', 'GITHUB_TOKEN=abc', [], true)).rejects.toThrow('secrets');
   });
 });
 

@@ -97,6 +97,12 @@ describe('context tools', () => {
     expect(strings.some((value) => /\b(?:recent_handoff|recent_progress|recent_checkpoints)\b/i.test(value))).toBe(true);
   });
 
+  it('allows secret-like terminology in continuity by default and can opt into legacy rejection', async () => {
+    const workspace = await fixtureWorkspace();
+    await expect(recordProgress(workspace, 'PAT migration', 'GITHUB_TOKEN placeholder')).resolves.toBeTruthy();
+    await expect(recordProgress(workspace, 'PAT migration blocked', 'GITHUB_TOKEN=abc', false, true)).rejects.toThrow('secrets');
+  });
+
   it('records progress and handoff notes', async () => {
     const workspace = await fixtureWorkspace();
     await recordProgress(workspace, 'Progress', 'made progress');

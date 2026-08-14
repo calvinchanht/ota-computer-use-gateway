@@ -7,6 +7,7 @@ import { ok } from '../core/result.js';
 import { resolveInside } from '../core/paths.js';
 import { truncateText } from '../core/text.js';
 import type { AppConfig } from '../config/schema.js';
+import { workspaceChildEnvironmentMode } from '../core/securityPolicy.js';
 import type { Workspace } from '../core/workspaces.js';
 
 const REGISTRY_PATH = '.agent/workspace-helpers.json';
@@ -122,7 +123,7 @@ async function runRepoBuildTest(config: AppConfig, workspace: Workspace, helper:
   const results = [];
   for (const check of checks) {
     const script = check === 'test' ? 'test' : check;
-    const result = await runCommand('npm', ['run', script], repo.absolute, Math.min(config.security.max_exec_ms, 120000));
+    const result = await runCommand('npm', ['run', script], repo.absolute, Math.min(config.security.max_exec_ms, 120000), {}, workspaceChildEnvironmentMode(config, workspace));
     const stdout = truncateText(result.stdout, MAX_OUTPUT_BYTES);
     const stderr = truncateText(result.stderr, MAX_OUTPUT_BYTES);
     results.push({ check, exit_code: result.code, timed_out: result.timed_out, stdout: stdout.text, stderr: stderr.text, stdout_truncated: stdout.truncated, stderr_truncated: stderr.truncated });
@@ -141,8 +142,9 @@ async function runSystemdUserService(config: AppConfig, workspace: Workspace, he
   if (!isLocalHelperTarget(helper)) throw new Error('systemd helper execution is currently local-user only');
   const action = systemdAction(helper.mode);
   const unit = helper.service_unit ?? '';
-  const run = await runCommand('systemctl', ['--user', action, unit], workspace.realRoot, Math.min(config.security.max_exec_ms, 120000), systemdEnv());
-  const active = await runCommand('systemctl', ['--user', 'is-active', unit], workspace.realRoot, 15000, systemdEnv());
+  const environmentMode = workspaceChildEnvironmentMode(config, workspace);
+  const run = await runCommand('systemctl', ['--user', action, unit], workspace.realRoot, Math.min(config.security.max_exec_ms, 120000), systemdEnv(), environmentMode);
+  const active = await runCommand('systemctl', ['--user', 'is-active', unit], workspace.realRoot, 15000, systemdEnv(), environmentMode);
   const postChecks = await runPostChecks(helper.post_checks);
   const failed = run.code !== 0 || run.timed_out || postChecks.some((check) => !check.ok);
   return ok(failed ? 'workspace helper finished with failures' : 'workspace helper finished', {
