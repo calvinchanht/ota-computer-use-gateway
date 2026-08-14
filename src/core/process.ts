@@ -20,6 +20,6 @@ export async function runCommand(cmd: string, args: string[], cwd: string, timeo
 }
 
 function safeEnv(): NodeJS.ProcessEnv {
-  const keep = ['PATH', 'Path', 'HOME', 'USERPROFILE', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'SHELL', 'COMSPEC', 'SystemRoot', 'WINDIR'];
+  const keep = ['PATH', 'Path', 'PATHEXT', 'HOME', 'USERPROFILE', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'SHELL', 'COMSPEC', 'SystemRoot', 'WINDIR'];
   return Object.fromEntries(keep.map((key) => [key, process.env[key] ?? '']));
 }

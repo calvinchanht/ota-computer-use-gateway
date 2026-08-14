@@ -69,6 +69,28 @@ describe('runConfiguredCommand', () => {
     expect(JSON.stringify(result.data)).toContain('probe-ok');
   });
 
+  it('preserves PATHEXT without inheriting GitHub credentials in foreground children', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const pathext = '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC';
+    const previousPathext = process.env.PATHEXT;
+    const previousGithubToken = process.env.GITHUB_TOKEN;
+    process.env.PATHEXT = pathext;
+    process.env.GITHUB_TOKEN = 'ota-test-secret-do-not-inherit';
+    try {
+      const result = await runArgvTool(config, workspace, [
+        process.execPath,
+        '-e',
+        "process.stdout.write(JSON.stringify({ pathext: process.env.PATHEXT, githubToken: process.env.GITHUB_TOKEN ?? null }))"
+      ]);
+      expect(JSON.parse((result.data as { stdout: string }).stdout)).toEqual({ pathext, githubToken: null });
+    } finally {
+      if (previousPathext === undefined) delete process.env.PATHEXT;
+      else process.env.PATHEXT = previousPathext;
+      if (previousGithubToken === undefined) delete process.env.GITHUB_TOKEN;
+      else process.env.GITHUB_TOKEN = previousGithubToken;
+    }
+  });
+
   it('preserves JSON-looking argv values without shell re-encoding', async () => {
     const workspace = await fixtureWorkspace(true);
     const payload = '{"quoted":"a b","slash":"c\\\\d"}';
