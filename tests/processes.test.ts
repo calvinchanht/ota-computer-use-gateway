@@ -33,6 +33,26 @@ describe('process tools', () => {
     await expect(waitForOutput(processId, 'background-ok')).resolves.toContain('background-ok');
   });
 
+  it('preserves PATHEXT without inheriting GitHub credentials in managed children', async () => {
+    const workspace = await fixtureWorkspace(true);
+    const pathext = '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC';
+    const previousPathext = process.env.PATHEXT;
+    const previousGithubToken = process.env.GITHUB_TOKEN;
+    process.env.PATHEXT = pathext;
+    process.env.GITHUB_TOKEN = 'ota-test-secret-do-not-inherit';
+    try {
+      const started = await processStartArgv(config, workspace, [process.execPath, '-e', "process.stdout.write(JSON.stringify({ pathext: process.env.PATHEXT, githubToken: process.env.GITHUB_TOKEN ?? null }))"]);
+      const processId = String(started.data?.process_id);
+      const output = await waitForOutput(processId, pathext);
+      expect(JSON.parse(output)).toEqual({ pathext, githubToken: null });
+    } finally {
+      if (previousPathext === undefined) delete process.env.PATHEXT;
+      else process.env.PATHEXT = previousPathext;
+      if (previousGithubToken === undefined) delete process.env.GITHUB_TOKEN;
+      else process.env.GITHUB_TOKEN = previousGithubToken;
+    }
+  });
+
   it('records missing executable spawn errors without crashing the gateway', async () => {
     const workspace = await fixtureWorkspace(true);
     const started = await processStartArgv(config, workspace, [`missing-executable-${Date.now()}`]);
