@@ -35,7 +35,7 @@ function canonicalTools(): string[] {
     'list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify',
     'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch',
     'cua_driver_status', 'computer_screen_click', 'computer_window_click', 'computer_screen_mouse_move', 'computer_window_mouse_move', 'computer_screen_drag', 'computer_window_drag', 'computer_screen_scroll', 'computer_window_scroll', 'cua_driver_call', 'cua_driver_batch',
-    'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_window_screenshot', 'windows_uia_tree', 'windows_uia_read', 'windows_uia_set_value',
+    'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_window_screenshot', 'windows_window_screenshot_sequence', 'windows_uia_tree', 'windows_uia_read', 'windows_uia_set_value',
     'windows_list_windows', 'windows_focus_window', 'windows_place_window', 'windows_launch_app',
     'windows_mouse_move', 'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
     'windows_window_mouse_move', 'windows_window_click', 'windows_window_double_click', 'windows_window_drag', 'windows_window_scroll',
@@ -95,7 +95,7 @@ function capabilitySetExamples() {
 
 function windowsComputerTools() {
   return [
-    'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_window_screenshot', 'windows_uia_tree', 'windows_uia_read', 'windows_uia_set_value',
+    'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_window_screenshot', 'windows_window_screenshot_sequence', 'windows_uia_tree', 'windows_uia_read', 'windows_uia_set_value',
     'windows_list_windows', 'windows_focus_window', 'windows_place_window', 'windows_launch_app',
     'windows_mouse_move', 'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
     'windows_window_mouse_move', 'windows_window_click', 'windows_window_double_click', 'windows_window_drag', 'windows_window_scroll',

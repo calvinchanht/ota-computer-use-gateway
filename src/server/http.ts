@@ -54,6 +54,7 @@ import {
   windowsWindowDrag,
   windowsWindowMouseMove,
   windowsWindowScreenshot,
+  windowsWindowScreenshotSequence,
   windowsWindowScroll,
   type WindowsBatchStep
 } from '../tools/windowsComputer.js';
@@ -793,6 +794,7 @@ function callWindowsApiTool(workspace: Workspace, tool: string, args: Record<str
   if (tool === 'windows_list_windows') return windowsListWindows(workspace);
   if (tool === 'windows_screenshot') return windowsScreenshot(workspace, optionalString(args.monitor) ?? 'primary', windowsScreenshotParams(workspace, args));
   if (tool === 'windows_window_screenshot') return windowsWindowScreenshot(workspace, requiredNumber(args.hwnd, 'hwnd'), windowsScreenshotParams(workspace, args));
+  if (tool === 'windows_window_screenshot_sequence') return windowsWindowScreenshotSequence(workspace, requiredNumber(args.hwnd, 'hwnd'), optionalNumber(args.interval_ms) ?? 250, optionalNumber(args.count) ?? 8, windowsScreenshotParams(workspace, args));
   if (tool === 'windows_uia_tree') return windowsUiaTree(workspace, optionalNumber(args.max_nodes) ?? 120, optionalNumber(args.hwnd));
   if (tool === 'windows_uia_read') return windowsUiaRead(workspace, requiredNumber(args.hwnd, 'hwnd'), args, optionalNumber(args.max_chars) ?? 20000);
   if (tool === 'windows_uia_set_value') return windowsUiaSetValue(workspace, requiredNumber(args.hwnd, 'hwnd'), args, requiredTextArg(args.value, 'value', true));
@@ -802,12 +804,12 @@ function callWindowsApiTool(workspace: Workspace, tool: string, args: Record<str
   if (tool === 'windows_mouse_move') return windowsMouseMove(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'));
   if (tool === 'windows_click') return windowsClick(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left');
   if (tool === 'windows_double_click') return windowsDoubleClick(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left');
-  if (tool === 'windows_drag') return windowsDrag(workspace, requiredNumber(args.from_x, 'from_x'), requiredNumber(args.from_y, 'from_y'), requiredNumber(args.to_x, 'to_x'), requiredNumber(args.to_y, 'to_y'));
+  if (tool === 'windows_drag') return windowsDrag(workspace, requiredNumber(args.from_x, 'from_x'), requiredNumber(args.from_y, 'from_y'), requiredNumber(args.to_x, 'to_x'), requiredNumber(args.to_y, 'to_y'), optionalNumber(args.duration_ms), optionalNumber(args.steps));
   if (tool === 'windows_scroll') return windowsScroll(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), requiredNumber(args.delta, 'delta'));
   if (tool === 'windows_window_mouse_move') return windowsWindowMouseMove(workspace, requiredNumber(args.hwnd, 'hwnd'), requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.coordinate_space) ?? 'client', optionalBoolean(args.focus) ?? false);
   if (tool === 'windows_window_click') return windowsWindowClick(workspace, requiredNumber(args.hwnd, 'hwnd'), requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left', optionalString(args.coordinate_space) ?? 'client', optionalBoolean(args.focus) ?? true);
   if (tool === 'windows_window_double_click') return windowsWindowDoubleClick(workspace, requiredNumber(args.hwnd, 'hwnd'), requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left', optionalString(args.coordinate_space) ?? 'client', optionalBoolean(args.focus) ?? true);
-  if (tool === 'windows_window_drag') return windowsWindowDrag(workspace, requiredNumber(args.hwnd, 'hwnd'), requiredNumber(args.from_x, 'from_x'), requiredNumber(args.from_y, 'from_y'), requiredNumber(args.to_x, 'to_x'), requiredNumber(args.to_y, 'to_y'), optionalString(args.coordinate_space) ?? 'client', optionalBoolean(args.focus) ?? true);
+  if (tool === 'windows_window_drag') return windowsWindowDrag(workspace, requiredNumber(args.hwnd, 'hwnd'), requiredNumber(args.from_x, 'from_x'), requiredNumber(args.from_y, 'from_y'), requiredNumber(args.to_x, 'to_x'), requiredNumber(args.to_y, 'to_y'), optionalString(args.coordinate_space) ?? 'client', optionalBoolean(args.focus) ?? true, optionalNumber(args.duration_ms), optionalNumber(args.steps));
   if (tool === 'windows_window_scroll') return windowsWindowScroll(workspace, requiredNumber(args.hwnd, 'hwnd'), requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), requiredNumber(args.delta, 'delta'), optionalString(args.coordinate_space) ?? 'client', optionalBoolean(args.focus) ?? true);
   if (tool === 'windows_type_text') return windowsTypeText(workspace, requiredString(args.text, 'text'), optionalNumber(args.hwnd));
   if (tool === 'windows_key') return windowsKey(workspace, requiredString(args.key, 'key'), optionalNumber(args.hwnd));

@@ -119,7 +119,7 @@ function windowsComputerTools(workspace: Workspace) {
   const config = workspace.windows_computer;
   const tools = ['windows_computer_status', 'windows_list_monitors'];
   if (config?.allow_screenshot) tools.push('windows_screenshot');
-  if (config?.allow_screenshot && config?.allow_window_management) tools.push('windows_window_screenshot');
+  if (config?.allow_screenshot && config?.allow_window_management) tools.push('windows_window_screenshot', 'windows_window_screenshot_sequence');
   if (config?.allow_uia_tree) tools.push('windows_uia_tree', 'windows_uia_read');
   if (config?.allow_uia_tree && config?.allow_keyboard) tools.push('windows_uia_set_value');
   if (config?.allow_window_management) tools.push('windows_list_windows', 'windows_focus_window', 'windows_place_window');

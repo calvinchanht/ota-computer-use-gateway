@@ -14,6 +14,11 @@ const execFileAsync = promisify(execFile);
 const MAX_POWERSHELL_BUFFER = 8 * 1024 * 1024;
 const MAX_BATCH_STEPS = 50;
 const SCREENSHOT_PREFIX = 'windows-screenshot-';
+const SCREENSHOT_SEQUENCE_PREFIX = 'windows-screenshot-sequence-';
+const DEFAULT_SEQUENCE_COUNT = 8;
+const DEFAULT_SEQUENCE_INTERVAL_MS = 250;
+const MAX_SEQUENCE_COUNT = 8;
+const MAX_SEQUENCE_DURATION_MS = 5000;
 
 export type WindowsBatchStep =
   | { tool: string; args?: Record<string, unknown> }
@@ -75,6 +80,59 @@ export async function windowsWindowScreenshot(workspace: Workspace, hwnd: number
   const payload = { ...data, artifact, preview: artifact.preview, full: artifact.full };
   const visualFollowup = await screenshotVisualFollowup(payload, { ...params, source: 'windows_computer', attachment_path: paths.preview });
   return ok('windows window screenshot', windowsScreenshotResponse(data, visualFollowup));
+}
+
+export async function windowsWindowScreenshotSequence(workspace: Workspace, hwnd: number, intervalMs = DEFAULT_SEQUENCE_INTERVAL_MS, count = DEFAULT_SEQUENCE_COUNT, params: Record<string, unknown> = {}) {
+  ensureEnabled(workspace);
+  ensureCapability(workspace, 'allow_screenshot');
+  ensureCapability(workspace, 'allow_window_management');
+  const target = integer(hwnd, 'hwnd');
+  const interval = boundedInteger(intervalMs, 'interval_ms', 50, MAX_SEQUENCE_DURATION_MS);
+  const frameCount = boundedInteger(count, 'count', 2, MAX_SEQUENCE_COUNT);
+  const requestedDurationMs = interval * (frameCount - 1);
+  if (requestedDurationMs > MAX_SEQUENCE_DURATION_MS) throw new Error(`screenshot sequence duration must be at most ${MAX_SEQUENCE_DURATION_MS}ms`);
+  ensureWindows();
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const started = Date.now();
+  const frames: Array<Record<string, unknown>> = [];
+  const attachmentPaths: string[] = [];
+  let firstPayload: Record<string, unknown> | undefined;
+  await mkdir(screenshotArtifactDir(workspace), { recursive: true });
+  for (let index = 0; index < frameCount; index++) {
+    const targetAt = started + (index * interval);
+    const waitMs = targetAt - Date.now();
+    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+    const paths = screenshotSequenceFramePaths(workspace, stamp, index + 1);
+    const data = await psObject(windowScreenshotScript(paths.full, target));
+    const preview = await writePreview(paths.full, paths.preview);
+    const pair = artifactPair(workspace, paths.full, preview);
+    const capturedAt = typeof data.captured_at === 'string' ? data.captured_at : new Date().toISOString();
+    const frame = {
+      frame: `frame_${String(index + 1).padStart(2, '0')}`,
+      index: index + 1,
+      captured_at: capturedAt,
+      elapsed_ms: Date.now() - started,
+      bounds: data.bounds,
+      capture_method: data.capture_method,
+      artifact: sequenceArtifactResponse(pair)
+    };
+    frames.push(frame);
+    attachmentPaths.push(paths.preview);
+    if (!firstPayload) firstPayload = { ...data, artifact: pair, preview: pair.preview, full: pair.full };
+  }
+  const promptText = `Analyze these ${frameCount} ordered screenshot frames as one temporal sequence. Frames are attached in frame_01 through frame_${String(frameCount).padStart(2, '0')} order at ${interval}ms requested intervals. Compare motion, transitions, transient UI, and drift. Reference image: ${String((firstPayload?.preview as Record<string, unknown> | undefined)?.readable_url ?? '')}`;
+  const visualFollowup = firstPayload
+    ? await screenshotVisualFollowup(firstPayload, { ...params, kind: 'screenshot_sequence', source: 'windows_computer', attachment_paths: attachmentPaths, prompt_text: promptText })
+    : { state: 'not_available', sent_to_provider: false, provider_visible: false, reason: 'sequence_capture_empty' };
+  return ok('windows window screenshot sequence', {
+    hwnd: target,
+    count: frameCount,
+    interval_ms: interval,
+    requested_duration_ms: requestedDurationMs,
+    capture_elapsed_ms: Date.now() - started,
+    frames,
+    visual_followup: windowsVisualFollowupResponse(visualFollowup)
+  });
 }
 
 function windowsScreenshotResponse(data: Record<string, unknown>, visualFollowup: unknown) {
@@ -187,13 +245,14 @@ export async function windowsDoubleClick(workspace: Workspace, x: number, y: num
   return ok('windows double click', await psJson(mouseClickScript(point.x, point.y, mouseButton)));
 }
 
-export async function windowsDrag(workspace: Workspace, fromX: number, fromY: number, toX: number, toY: number) {
+export async function windowsDrag(workspace: Workspace, fromX: number, fromY: number, toX: number, toY: number, durationMs?: number, steps?: number) {
   ensureEnabled(workspace);
   ensureCapability(workspace, 'allow_mouse');
   const from = screenPoint(fromX, fromY, 'from');
   const to = screenPoint(toX, toY, 'to');
+  const timing = dragTiming(durationMs, steps);
   ensureWindows();
-  return ok('windows drag', await psJson(mouseDragScript(from.x, from.y, to.x, to.y)));
+  return ok('windows drag', await psJson(mouseDragScript(from.x, from.y, to.x, to.y, timing.duration_ms, timing.steps)));
 }
 
 export async function windowsScroll(workspace: Workspace, x: number, y: number, delta: number) {
@@ -222,10 +281,11 @@ export async function windowsWindowMouseMove(workspace: Workspace, hwnd: number,
   return ok('windows window mouse move', await psJson(windowMoveScript(integer(hwnd, 'hwnd'), finiteNumber(x, 'x'), finiteNumber(y, 'y'), coordinateSpaceName(coordinateSpace), Boolean(focus))));
 }
 
-export async function windowsWindowDrag(workspace: Workspace, hwnd: number, fromX: number, fromY: number, toX: number, toY: number, coordinateSpace = 'client', focus = true) {
+export async function windowsWindowDrag(workspace: Workspace, hwnd: number, fromX: number, fromY: number, toX: number, toY: number, coordinateSpace = 'client', focus = true, durationMs?: number, steps?: number) {
+  const timing = dragTiming(durationMs, steps);
   ensureWindowMouse(workspace, hwnd, fromX, fromY, coordinateSpace);
   const to = screenPoint(toX, toY, 'to');
-  return ok('windows window drag', await psJson(windowDragScript(integer(hwnd, 'hwnd'), finiteNumber(fromX, 'from_x'), finiteNumber(fromY, 'from_y'), to.x, to.y, coordinateSpaceName(coordinateSpace), Boolean(focus))));
+  return ok('windows window drag', await psJson(windowDragScript(integer(hwnd, 'hwnd'), finiteNumber(fromX, 'from_x'), finiteNumber(fromY, 'from_y'), to.x, to.y, coordinateSpaceName(coordinateSpace), Boolean(focus), timing.duration_ms, timing.steps)));
 }
 
 export async function windowsWindowScroll(workspace: Workspace, hwnd: number, x: number, y: number, delta: number, coordinateSpace = 'client', focus = true) {
@@ -296,11 +356,11 @@ async function runNamedTool(workspace: Workspace, tool: string, args: Record<str
   if (tool === 'mouse_move') return windowsMouseMove(workspace, num(args.x), num(args.y));
   if (tool === 'click') return windowsClick(workspace, num(args.x), num(args.y), str(args.button, 'left'));
   if (tool === 'double_click') return windowsDoubleClick(workspace, num(args.x), num(args.y), str(args.button, 'left'));
-  if (tool === 'drag') return windowsDrag(workspace, num(args.from_x), num(args.from_y), num(args.to_x), num(args.to_y));
+  if (tool === 'drag') return windowsDrag(workspace, num(args.from_x), num(args.from_y), num(args.to_x), num(args.to_y), optionalNum(args.duration_ms), optionalNum(args.steps));
   if (tool === 'scroll') return windowsScroll(workspace, num(args.x), num(args.y), num(args.delta));
   if (tool === 'window_click') return windowsWindowClick(workspace, num(args.hwnd), num(args.x), num(args.y), str(args.button, 'left'), str(args.coordinate_space, 'client'), bool(args.focus, true));
   if (tool === 'window_mouse_move') return windowsWindowMouseMove(workspace, num(args.hwnd), num(args.x), num(args.y), str(args.coordinate_space, 'client'), bool(args.focus, false));
-  if (tool === 'window_drag') return windowsWindowDrag(workspace, num(args.hwnd), num(args.from_x), num(args.from_y), num(args.to_x), num(args.to_y), str(args.coordinate_space, 'client'), bool(args.focus, true));
+  if (tool === 'window_drag') return windowsWindowDrag(workspace, num(args.hwnd), num(args.from_x), num(args.from_y), num(args.to_x), num(args.to_y), str(args.coordinate_space, 'client'), bool(args.focus, true), optionalNum(args.duration_ms), optionalNum(args.steps));
   if (tool === 'window_scroll') return windowsWindowScroll(workspace, num(args.hwnd), num(args.x), num(args.y), num(args.delta), str(args.coordinate_space, 'client'), bool(args.focus, true));
   if (tool === 'type_text') return windowsTypeText(workspace, str(args.text), optionalNum(args.hwnd));
   if (tool === 'key') return windowsKey(workspace, str(args.key), optionalNum(args.hwnd));
@@ -399,8 +459,8 @@ function mouseMoveScript(x: number, y: number) {
   return `${formsAssemblies()}; [System.Windows.Forms.Cursor]::Position=New-Object System.Drawing.Point(${int(x)},${int(y)}); @{ x=${int(x)}; y=${int(y)} } | ConvertTo-Json`;
 }
 
-function mouseDragScript(fromX: number, fromY: number, toX: number, toY: number) {
-  return `${mouseTypes()}; drag ${int(fromX)} ${int(fromY)} ${int(toX)} ${int(toY)}; @{ from=@{x=${int(fromX)};y=${int(fromY)}}; to=@{x=${int(toX)};y=${int(toY)}} } | ConvertTo-Json -Depth 4`;
+function mouseDragScript(fromX: number, fromY: number, toX: number, toY: number, durationMs: number, steps: number) {
+  return `${mouseTypes()}; $d=drag ${int(fromX)} ${int(fromY)} ${int(toX)} ${int(toY)} ${int(durationMs)} ${int(steps)}; @{ from=@{x=${int(fromX)};y=${int(fromY)}}; to=@{x=${int(toX)};y=${int(toY)}}; duration_ms=${int(durationMs)}; steps=${int(steps)}; actual_elapsed_ms=$d.actual_elapsed_ms } | ConvertTo-Json -Depth 4`;
 }
 
 function mouseScrollScript(x: number, y: number, delta: number) {
@@ -415,8 +475,8 @@ function windowMoveScript(hwnd: number, x: number, y: number, coordinateSpace: s
   return `${formsAssemblies()}; ${windowCoordinateTypes()}; $p=windowPoint ${int(hwnd)} ${int(x)} ${int(y)} ${q(coordinateSpace)} ${psBool(focus)}; [System.Windows.Forms.Cursor]::Position=New-Object System.Drawing.Point($p.screen.x,$p.screen.y); $p | ConvertTo-Json -Depth 5`;
 }
 
-function windowDragScript(hwnd: number, fromX: number, fromY: number, toX: number, toY: number, coordinateSpace: string, focus: boolean) {
-  return `${mouseTypes()}; ${windowCoordinateTypes()}; $a=windowPoint ${int(hwnd)} ${int(fromX)} ${int(fromY)} ${q(coordinateSpace)} ${psBool(focus)}; $b=windowPoint ${int(hwnd)} ${int(toX)} ${int(toY)} ${q(coordinateSpace)} $false; drag $a.screen.x $a.screen.y $b.screen.x $b.screen.y; @{ hwnd=${int(hwnd)}; coordinate_space=${q(coordinateSpace)}; from=$a; to=$b } | ConvertTo-Json -Depth 6`;
+function windowDragScript(hwnd: number, fromX: number, fromY: number, toX: number, toY: number, coordinateSpace: string, focus: boolean, durationMs: number, steps: number) {
+  return `${mouseTypes()}; ${windowCoordinateTypes()}; $a=windowPoint ${int(hwnd)} ${int(fromX)} ${int(fromY)} ${q(coordinateSpace)} ${psBool(focus)}; $b=windowPoint ${int(hwnd)} ${int(toX)} ${int(toY)} ${q(coordinateSpace)} $false; $d=drag $a.screen.x $a.screen.y $b.screen.x $b.screen.y ${int(durationMs)} ${int(steps)}; @{ hwnd=${int(hwnd)}; coordinate_space=${q(coordinateSpace)}; from=$a; to=$b; duration_ms=${int(durationMs)}; steps=${int(steps)}; actual_elapsed_ms=$d.actual_elapsed_ms } | ConvertTo-Json -Depth 6`;
 }
 
 function windowScrollScript(hwnd: number, x: number, y: number, delta: number, coordinateSpace: string, focus: boolean) {
@@ -463,6 +523,20 @@ function screenshotPaths(workspace: Workspace) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const dir = screenshotArtifactDir(workspace);
   return { full: path.join(dir, `${SCREENSHOT_PREFIX}${stamp}.png`), preview: path.join(dir, `${SCREENSHOT_PREFIX}${stamp}-preview.webp`) };
+}
+
+function screenshotSequenceFramePaths(workspace: Workspace, stamp: string, frame: number) {
+  const label = `frame-${String(frame).padStart(2, '0')}`;
+  const dir = screenshotArtifactDir(workspace);
+  return {
+    full: path.join(dir, `${SCREENSHOT_SEQUENCE_PREFIX}${stamp}-${label}.png`),
+    preview: path.join(dir, `${SCREENSHOT_SEQUENCE_PREFIX}${stamp}-${label}-preview.webp`)
+  };
+}
+
+function sequenceArtifactResponse(pair: ReturnType<typeof artifactPair>) {
+  const compact = (value: Record<string, unknown>) => ({ kind: value.kind, format: value.format, path: value.path, agent_artifact_path: value.agent_artifact_path });
+  return { default: 'preview', preview: compact(pair.preview), full: compact(pair.full) };
 }
 
 async function writePreview(full: string, preview: string) {
@@ -513,7 +587,7 @@ public class Win32Capture {
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdc, uint flags);
   public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
 }
-"@; function captureWindow($hwnd,$file){ $h=[IntPtr]$hwnd; if(-not [Win32Capture]::IsWindow($h)){throw 'hwnd is not a valid window'}; $r=New-Object Win32Capture+RECT; if(-not [Win32Capture]::GetWindowRect($h,[ref]$r)){throw 'GetWindowRect failed'}; $w=$r.Right-$r.Left; $hgt=$r.Bottom-$r.Top; if($w -le 0 -or $hgt -le 0){throw 'window has empty bounds'}; $bmp=New-Object System.Drawing.Bitmap($w,$hgt); $g=[System.Drawing.Graphics]::FromImage($bmp); $dc=$g.GetHdc(); try{$ok=[Win32Capture]::PrintWindow($h,$dc,2)}finally{$g.ReleaseHdc($dc)}; if(-not $ok){$g.CopyFromScreen($r.Left,$r.Top,0,0,$bmp.Size)}; $bmp.Save($file,[System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose(); @{ hwnd=$hwnd; bounds=@{x=$r.Left;y=$r.Top;width=$w;height=$hgt}; capture_method=$(if($ok){'print_window'}else{'screen_fallback'}); path=$file } }`;
+"@; function captureWindow($hwnd,$file){ $h=[IntPtr]$hwnd; if(-not [Win32Capture]::IsWindow($h)){throw 'hwnd is not a valid window'}; $r=New-Object Win32Capture+RECT; if(-not [Win32Capture]::GetWindowRect($h,[ref]$r)){throw 'GetWindowRect failed'}; $w=$r.Right-$r.Left; $hgt=$r.Bottom-$r.Top; if($w -le 0 -or $hgt -le 0){throw 'window has empty bounds'}; $bmp=New-Object System.Drawing.Bitmap($w,$hgt); $g=[System.Drawing.Graphics]::FromImage($bmp); $dc=$g.GetHdc(); try{$ok=[Win32Capture]::PrintWindow($h,$dc,2)}finally{$g.ReleaseHdc($dc)}; if(-not $ok){$g.CopyFromScreen($r.Left,$r.Top,0,0,$bmp.Size)}; $bmp.Save($file,[System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose(); @{ hwnd=$hwnd; bounds=@{x=$r.Left;y=$r.Top;width=$w;height=$hgt}; capture_method=$(if($ok){'print_window'}else{'screen_fallback'}); captured_at=(Get-Date).ToUniversalTime().ToString('o'); path=$file } }`;
 }
 
 function windowPlacementTypes() {
@@ -587,7 +661,7 @@ using System.Runtime.InteropServices;
 public class Win32Input {
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, int data, UIntPtr extra);
 }
-"@; function click($b){ $down=0x0002; $up=0x0004; if($b -eq 'right'){ $down=0x0008; $up=0x0010 }; [Win32Input]::mouse_event($down,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 40; [Win32Input]::mouse_event($up,0,0,0,[UIntPtr]::Zero) }; function drag($x1,$y1,$x2,$y2){ [System.Windows.Forms.Cursor]::Position=New-Object System.Drawing.Point($x1,$y1); [Win32Input]::mouse_event(0x0002,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80; [System.Windows.Forms.Cursor]::Position=New-Object System.Drawing.Point($x2,$y2); Start-Sleep -Milliseconds 80; [Win32Input]::mouse_event(0x0004,0,0,0,[UIntPtr]::Zero) }`;
+"@; function click($b){ $down=0x0002; $up=0x0004; if($b -eq 'right'){ $down=0x0008; $up=0x0010 }; [Win32Input]::mouse_event($down,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 40; [Win32Input]::mouse_event($up,0,0,0,[UIntPtr]::Zero) }; function drag($x1,$y1,$x2,$y2,$duration,$steps){ $steps=[Math]::Max(1,[int]$steps); $duration=[Math]::Max(0,[int]$duration); $sw=[System.Diagnostics.Stopwatch]::StartNew(); [System.Windows.Forms.Cursor]::Position=New-Object System.Drawing.Point($x1,$y1); [Win32Input]::mouse_event(0x0002,0,0,0,[UIntPtr]::Zero); for($i=1;$i -le $steps;$i++){ $ratio=$i/[double]$steps; $x=[int][Math]::Round($x1+(($x2-$x1)*$ratio)); $y=[int][Math]::Round($y1+(($y2-$y1)*$ratio)); [System.Windows.Forms.Cursor]::Position=New-Object System.Drawing.Point($x,$y); $target=[int][Math]::Round(($duration*$i)/[double]$steps); $sleep=$target-[int]$sw.ElapsedMilliseconds; if($sleep -gt 0){ Start-Sleep -Milliseconds $sleep } }; [Win32Input]::mouse_event(0x0004,0,0,0,[UIntPtr]::Zero); $sw.Stop(); @{ actual_elapsed_ms=[int]$sw.ElapsedMilliseconds } }`;
 }
 
 function windowCoordinateTypes() {
@@ -689,6 +763,12 @@ function optionalSize(width?: number, height?: number) {
   if (parsedWidth !== undefined && parsedWidth <= 0) throw new Error('width must be positive');
   if (parsedHeight !== undefined && parsedHeight <= 0) throw new Error('height must be positive');
   return { width: parsedWidth, height: parsedHeight };
+}
+
+function dragTiming(durationMs?: number, steps?: number) {
+  const duration = durationMs === undefined ? 160 : boundedInteger(durationMs, 'duration_ms', 0, 10000);
+  const stepCount = steps === undefined ? 8 : boundedInteger(steps, 'steps', 1, 200);
+  return { duration_ms: duration, steps: stepCount };
 }
 
 function normalizeUiaSelector(selector: WindowsUiaSelector): Required<WindowsUiaSelector> {

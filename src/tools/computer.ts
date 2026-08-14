@@ -471,9 +471,10 @@ export async function screenshotVisualFollowup(screenshot: Record<string, unknow
       headers: visualFollowupHeaders(),
       body: JSON.stringify({
         idempotency_key: input.idempotency_key,
-        kind: 'screenshot',
+        kind: input.kind,
         source: input.source,
         readable_url: readableUrl,
+        attachment_paths: input.attachment_paths,
         mime: input.mime,
         prompt_text: input.prompt_text
       })
@@ -504,10 +505,11 @@ async function directVisualFollowup(input: ReturnType<typeof visualFollowupInput
       headers: visualFollowupHeaders(),
       body: JSON.stringify({
         idempotency_key: input.idempotency_key,
-        kind: 'screenshot',
+        kind: input.kind,
         source: input.source,
         readable_url: readableUrl,
         attachment_path: input.attachment_path,
+        attachment_paths: input.attachment_paths,
         mime: input.mime,
         prompt_text: input.prompt_text
       })
@@ -542,12 +544,14 @@ function visualFollowupInput(params: Record<string, unknown>, readableUrl: strin
   const agent_id = stringValue(visual.agent_id) ?? stringValue(params.agent_id) ?? stringValue(params.workspace_id);
   const base_url = configuredVisualFollowupBaseUrl();
   const public_base_url = stripTrailingSlash(process.env.THREADEX_VISUAL_FOLLOWUP_PUBLIC_BASE_URL ?? '');
-  const idempotency_key = stringValue(visual.idempotency_key) ?? `cua-screenshot:${job_id ?? agent_id ?? 'unknown'}:${createHash('sha256').update(readableUrl).digest('hex').slice(0, 16)}`;
+  const kind = stringValue(visual.kind) ?? stringValue(params.kind) ?? 'screenshot';
+  const idempotency_key = stringValue(visual.idempotency_key) ?? `cua-${kind}:${job_id ?? agent_id ?? 'unknown'}:${createHash('sha256').update(readableUrl).digest('hex').slice(0, 16)}`;
   const source = stringValue(visual.source) ?? stringValue(params.source) ?? 'cua_driver';
   const mime = stringValue(visual.mime) ?? stringValue(params.mime) ?? 'image/webp';
   const prompt_text = stringValue(visual.prompt_text) ?? stringValue(params.prompt_text) ?? defaultVisualPrompt(job_id, readableUrl);
   const attachment_path = stringValue(visual.attachment_path) ?? stringValue(params.attachment_path);
-  return { job_id, agent_id, base_url, public_base_url, idempotency_key, source, mime, prompt_text, attachment_path };
+  const attachment_paths = stringArrayValue(visual.attachment_paths ?? params.attachment_paths, 8);
+  return { job_id, agent_id, base_url, public_base_url, idempotency_key, kind, source, mime, prompt_text, attachment_path, attachment_paths };
 }
 
 function configuredVisualFollowupBaseUrl(): string {
@@ -595,6 +599,12 @@ function nestedString(value: Record<string, unknown>, pathParts: string[]): stri
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function stringArrayValue(value: unknown, maxItems: number): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim());
+  return items.length ? items.slice(0, maxItems) : undefined;
 }
 
 function stripTrailingSlash(value: string): string {

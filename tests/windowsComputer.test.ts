@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
-import { windowsBatch, windowsClick, windowsClipboardGet, windowsFocusWindow, windowsLaunchApp, windowsPlaceWindow, windowsScreenshot, windowsTypeText, windowsUiaRead, windowsUiaSetValue, windowsUiaTree, windowsWindowClick, windowsWindowScreenshot } from '../src/tools/windowsComputer.js';
+import { windowsBatch, windowsClick, windowsClipboardGet, windowsDrag, windowsFocusWindow, windowsLaunchApp, windowsPlaceWindow, windowsScreenshot, windowsTypeText, windowsUiaRead, windowsUiaSetValue, windowsUiaTree, windowsWindowClick, windowsWindowDrag, windowsWindowScreenshot, windowsWindowScreenshotSequence } from '../src/tools/windowsComputer.js';
 
 describe('windows computer-use capability gates', () => {
   it('rejects screenshots when screenshot authority is disabled', async () => {
     await expect(windowsScreenshot(fixtureWorkspace({ allow_screenshot: false }))).rejects.toThrow('allow_screenshot');
     await expect(windowsWindowScreenshot(fixtureWorkspace({ allow_screenshot: false }), 1)).rejects.toThrow('allow_screenshot');
+    await expect(windowsWindowScreenshotSequence(fixtureWorkspace({ allow_screenshot: false }), 1)).rejects.toThrow('allow_screenshot');
   });
 
   it('rejects mouse actions when mouse authority is disabled', async () => {
@@ -29,6 +30,19 @@ describe('windows computer-use capability gates', () => {
     await expect(windowsClick(fixtureWorkspace(), Number.NaN, 10)).rejects.toThrow('x must be a finite number');
     await expect(windowsClick(fixtureWorkspace(), 10, 10, 'middle')).rejects.toThrow('button must be left or right');
     await expect(windowsWindowClick(fixtureWorkspace(), 1, 10, 10, 'left', 'screen')).rejects.toThrow('coordinate_space must be client or window');
+  });
+
+  it('validates controlled drag timing before host execution', async () => {
+    await expect(windowsDrag(fixtureWorkspace(), 0, 0, 10, 10, -1, 8)).rejects.toThrow('duration_ms must be between 0 and 10000');
+    await expect(windowsDrag(fixtureWorkspace(), 0, 0, 10, 10, 100, 0)).rejects.toThrow('steps must be between 1 and 200');
+    await expect(windowsWindowDrag(fixtureWorkspace(), 1, 0, 0, 10, 10, 'client', true, 100, 201)).rejects.toThrow('steps must be between 1 and 200');
+  });
+
+  it('validates screenshot sequence bounds before host execution', async () => {
+    await expect(windowsWindowScreenshotSequence(fixtureWorkspace(), 1, 49, 8)).rejects.toThrow('interval_ms must be between 50 and 5000');
+    await expect(windowsWindowScreenshotSequence(fixtureWorkspace(), 1, 250, 1)).rejects.toThrow('count must be between 2 and 8');
+    await expect(windowsWindowScreenshotSequence(fixtureWorkspace(), 1, 250, 9)).rejects.toThrow('count must be between 2 and 8');
+    await expect(windowsWindowScreenshotSequence(fixtureWorkspace(), 1, 1000, 8)).rejects.toThrow('screenshot sequence duration must be at most 5000ms');
   });
 
   it('rejects malformed window and UIA arguments before host execution', async () => {
