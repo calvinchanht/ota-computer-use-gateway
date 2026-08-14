@@ -35,26 +35,26 @@ const CORE_DOCS = [
   'AGENT_DIRECTORY.md'
 ];
 
-export async function genesisBootstrap() {
+export async function genesisBootstrap(sanitizeResults = false) {
   const root = continuityRoot();
-  const docs = await readDocs(CORE_DOCS, 2500);
+  const docs = await readDocs(CORE_DOCS, 2500, sanitizeResults);
   return ok('estate bootstrap', {
     lane: 'estate control plane',
-    posture: 'read-heavy coarse control-plane reports; no secrets, destructive ops, external messages, account/security changes, or service restarts',
+    posture: 'read-heavy coarse control-plane reports; destructive ops, external messages, account/security changes, and service restarts are outside these report tools',
     workflow_guidance: [
       'Use estate_overview first for broad orientation.',
       'Use estate_agent_deep_dive for one named agent.',
       'Use estate_host_deep_dive for one host/machine profile.',
       'Use estate_safe_diagnostic for bounded non-mutating diagnostic summaries.',
-      'Do not ask for raw secrets or bearer tokens; these tools intentionally do not return them.'
+      'Application-level result sanitization is configurable; provider/platform policy remains separate.'
     ],
     continuity_root: root,
     docs
   });
 }
 
-export async function genesisEstateOverview() {
-  const docs = await readDocs(['CONTROL_PLANE_INDEX.md', 'ESTATE_RUNTIME_TABLE.md', 'HOST_RUNTIME_TABLE.md', 'AGENT_DIRECTORY.md'], 6000);
+export async function genesisEstateOverview(sanitizeResults = false) {
+  const docs = await readDocs(['CONTROL_PLANE_INDEX.md', 'ESTATE_RUNTIME_TABLE.md', 'HOST_RUNTIME_TABLE.md', 'AGENT_DIRECTORY.md'], 6000, sanitizeResults);
   const agents = await listCardNames(agentCardDirs());
   const hosts = await listCardNames(hostCardDirs());
   return ok('estate overview', {
@@ -66,70 +66,70 @@ export async function genesisEstateOverview() {
   });
 }
 
-export async function genesisAgentDeepDive(agent: string) {
+export async function genesisAgentDeepDive(agent: string, sanitizeResults = false) {
   const name = safeSlug(agent, 'agent');
   const card = await readFirstExisting(agentCardDirs().flatMap((dir) => [
     path.join(dir, `${name}.md`),
     path.join(dir, `${name.toLowerCase()}.md`)
-  ]), MAX_EXCERPT_CHARS);
+  ]), MAX_EXCERPT_CHARS, sanitizeResults);
   if (!card) throw new Error(`unknown or undocumented agent card: ${name}`);
   return ok('estate agent deep dive', {
     agent: name,
     card,
-    note: 'Agent deep dives are continuity-backed and intentionally omit secret values.'
+    note: sanitizeResults ? 'Agent deep dive result sanitization is enabled.' : 'Agent deep dive result sanitization is disabled.'
   });
 }
 
-export async function genesisHostDeepDive(host: string) {
+export async function genesisHostDeepDive(host: string, sanitizeResults = false) {
   const name = safeSlug(host, 'host');
   const candidates = await hostCandidates(name);
-  const card = await readFirstExisting(candidates, MAX_EXCERPT_CHARS);
+  const card = await readFirstExisting(candidates, MAX_EXCERPT_CHARS, sanitizeResults);
   if (!card) throw new Error(`unknown or undocumented host card: ${name}`);
   return ok('estate host deep dive', {
     host: name,
     card,
-    note: 'Host deep dives are continuity-backed and intentionally omit secret values.'
+    note: sanitizeResults ? 'Host deep dive result sanitization is enabled.' : 'Host deep dive result sanitization is disabled.'
   });
 }
 
-export async function genesisSafeDiagnostic(scope = 'estate', target?: string) {
+export async function genesisSafeDiagnostic(scope = 'estate', target?: string, sanitizeResults = false) {
   const normalizedScope = safeScope(scope);
-  if (normalizedScope === 'agent') return genesisAgentDeepDive(requiredTarget(target, 'agent'));
-  if (normalizedScope === 'host') return genesisHostDeepDive(requiredTarget(target, 'host'));
-  const docs = await readDocs(['CURRENT_STATE.md', 'CONTROL_PLANE_INDEX.md', 'ESTATE_RUNTIME_TABLE.md'], 5000);
+  if (normalizedScope === 'agent') return genesisAgentDeepDive(requiredTarget(target, 'agent'), sanitizeResults);
+  if (normalizedScope === 'host') return genesisHostDeepDive(requiredTarget(target, 'host'), sanitizeResults);
+  const docs = await readDocs(['CURRENT_STATE.md', 'CONTROL_PLANE_INDEX.md', 'ESTATE_RUNTIME_TABLE.md'], 5000, sanitizeResults);
   return ok('estate safe diagnostic', {
     scope: normalizedScope,
     target: target ?? null,
     docs,
-    boundaries: ['read-only continuity summary', 'no secrets', 'no SSH/live command execution', 'no service mutation'],
+    boundaries: ['read-only continuity summary', 'no SSH/live command execution', 'no service mutation'],
     recommended_next_calls: ['estate_agent_deep_dive', 'estate_host_deep_dive']
   });
 }
 
-async function readDocs(names: string[], chars: number) {
+async function readDocs(names: string[], chars: number, sanitizeResults: boolean) {
   const root = continuityRoot();
   const out = [];
   for (const name of names) {
     const file = path.join(root, name);
-    const doc = await readExcerpt(file, chars).catch(() => null);
+    const doc = await readExcerpt(file, chars, sanitizeResults).catch(() => null);
     if (doc) out.push(doc);
   }
   return out;
 }
 
-async function readFirstExisting(files: string[], chars: number) {
+async function readFirstExisting(files: string[], chars: number, sanitizeResults: boolean) {
   for (const file of files) {
-    const doc = await readExcerpt(file, chars).catch(() => null);
+    const doc = await readExcerpt(file, chars, sanitizeResults).catch(() => null);
     if (doc) return doc;
   }
   return null;
 }
 
-async function readExcerpt(file: string, chars: number) {
+async function readExcerpt(file: string, chars: number, sanitizeResults: boolean) {
   const info = await stat(file);
   if (!info.isFile()) throw new Error('not a file');
   const raw = await readFile(file, 'utf8');
-  const excerpt = sanitize(raw).slice(0, Math.min(chars, MAX_EXCERPT_CHARS));
+  const excerpt = sanitize(raw, sanitizeResults).slice(0, Math.min(chars, MAX_EXCERPT_CHARS));
   return { path: file, chars: raw.length, excerpt, truncated: raw.length > excerpt.length };
 }
 
@@ -170,7 +170,8 @@ function hostCardDirs() {
   return [path.join(root, 'machine-profiles'), root];
 }
 
-function sanitize(text: string) {
+function sanitize(text: string, enabled = false) {
+  if (!enabled) return text;
   return text
     .replace(/(bearer|token|secret|password|pat|api[_-]?key)(\s*[:=]\s*)[^\s`]+/gi, '$1$2[REDACTED]')
     .replace(/Authorization:\s*Bearer\s+[^\s`]+/gi, 'Authorization: Bearer [REDACTED]');

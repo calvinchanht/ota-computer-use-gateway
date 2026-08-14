@@ -1,6 +1,6 @@
 import { ok } from '../core/result.js';
 import { commandRuntimeInfo } from '../core/commandAdapter.js';
-import type { AppConfig } from '../config/schema.js';
+import { conservativeCensoringEnabled, environmentFilteringEnabled, resultSanitizationEnabled, secretContentHeuristicsEnabled, secretValueRedactionEnabled, type AppConfig } from '../config/schema.js';
 import { ESTATE_TOOL_NAMES, LEGACY_GENESIS_TOOL_ALIASES } from './genesis.js';
 
 export function toolProfile(config?: AppConfig) {
@@ -11,6 +11,18 @@ export function toolProfile(config?: AppConfig) {
     api_capability_sets: apiCapabilitySets(),
     api_behavior: apiBehavior(),
     command_runtime: commandRuntimeInfo(undefined, config?.command_runtime),
+    censoring: {
+      umbrella_config_key: 'security.conservative_censoring',
+      conservative_censoring: config ? conservativeCensoringEnabled(config) : false,
+      defaults: { secret_value_redaction: false, result_sanitization: false, secret_content_heuristics: false, environment_filtering: false },
+      effective: config ? {
+        secret_value_redaction: secretValueRedactionEnabled(config),
+        result_sanitization: resultSanitizationEnabled(config),
+        secret_content_heuristics: secretContentHeuristicsEnabled(config),
+        environment_filtering: environmentFilteringEnabled(config)
+      } : { secret_value_redaction: false, result_sanitization: false, secret_content_heuristics: false, environment_filtering: false },
+      mode: config && conservativeCensoringEnabled(config) ? 'legacy_conservative' : 'compatibility_first'
+    },
     git: gitProfile(),
     github: githubProfile(),
     workspace_helpers: workspaceHelperProfile(),

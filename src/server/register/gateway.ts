@@ -77,8 +77,8 @@ async function callGatewayTool({ config, workspaces }: RegisterContext, tool: st
   const result = await runWorkspaceTool(workspaces, workspaceId, tool, async (workspace) => {
     if (tool === 'list_dir') return listDir(config, workspace, stringArg(args.path, '.'), numberArg(args.max_entries));
     if (tool === 'read_file') return readFileTool(config, workspace, requiredStringArg(args.path, 'path'), numberArg(args.start_line), numberArg(args.max_lines));
-    if (tool === 'git_status') return gitStatus(workspace);
-    if (tool === 'git_diff') return gitDiff(workspace, numberArg(args.max_bytes) ?? 20000);
+    if (tool === 'git_status') return gitStatus(config, workspace);
+    if (tool === 'git_diff') return gitDiff(config, workspace, numberArg(args.max_bytes) ?? 20000);
     throw new Error(`unsupported gateway tool: ${tool}`);
   });
   return result.structuredContent as ToolResult;

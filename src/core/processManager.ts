@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { shellInvocation } from './commandAdapter.js';
 import { truncateText } from './text.js';
 import type { CommandRuntime } from './commandAdapter.js';
+import { childProcessEnvironment } from './processEnvironment.js';
+import type { ChildEnvironmentMode } from './securityPolicy.js';
 
 export type ManagedProcess = {
   id: string;
@@ -21,13 +23,13 @@ export type ManagedProcess = {
 const processes = new Map<string, ManagedProcess>();
 const MAX_BUFFER_BYTES = 100000;
 
-export function startManagedProcess(command: string, cwd: string, timeoutMs: number, runtime?: CommandRuntime): ManagedProcess {
+export function startManagedProcess(command: string, cwd: string, timeoutMs: number, runtime?: CommandRuntime, environmentMode: ChildEnvironmentMode = 'minimal'): ManagedProcess {
   const invocation = shellInvocation(command, undefined, runtime);
-  return startManagedArgvProcess(invocation.command, invocation.args, cwd, timeoutMs, command);
+  return startManagedArgvProcess(invocation.command, invocation.args, cwd, timeoutMs, command, environmentMode);
 }
 
-export function startManagedArgvProcess(command: string, args: string[], cwd: string, timeoutMs: number, displayCommand?: string): ManagedProcess {
-  const child = spawn(command, args, { cwd, env: safeEnv(), detached: process.platform !== 'win32' });
+export function startManagedArgvProcess(command: string, args: string[], cwd: string, timeoutMs: number, displayCommand?: string, environmentMode: ChildEnvironmentMode = 'minimal'): ManagedProcess {
+  const child = spawn(command, args, { cwd, env: childProcessEnvironment(environmentMode), detached: process.platform !== 'win32' });
   const item = newProcess(displayCommand ?? [command, ...args].join(' '), cwd, child);
   processes.set(item.id, item);
   attachOutput(item);
@@ -166,12 +168,6 @@ function appendBounded(existing: string, data: Buffer): string {
   if (buffer.length <= MAX_BUFFER_BYTES) return merged;
   return buffer.subarray(buffer.length - MAX_BUFFER_BYTES).toString('utf8');
 }
-
-function safeEnv(): NodeJS.ProcessEnv {
-  const keep = ['PATH', 'Path', 'PATHEXT', 'HOME', 'USERPROFILE', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'SHELL', 'COMSPEC', 'SystemRoot', 'WINDIR'];
-  return Object.fromEntries(keep.map((key) => [key, process.env[key] ?? '']));
-}
-
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -4,12 +4,13 @@ import { truncateText } from '../core/text.js';
 import { safeJsonParse } from '../core/json.js';
 import { resolveInside } from '../core/paths.js';
 import type { AppConfig } from '../config/schema.js';
+import { workspaceChildEnvironmentMode } from '../core/securityPolicy.js';
 import type { Workspace } from '../core/workspaces.js';
 
 export async function searchFiles(config: AppConfig, workspace: Workspace, query: string, requestedPath = '.') {
   const resolved = await resolveInside(workspace, requestedPath, config);
   const max = String(config.security.max_search_results);
-  const result = await runCommand('rg', ['--line-number', '--max-count', '3', '--max-filesize', '200K', '-m', max, query, resolved.absolute], workspace.realRoot);
+  const result = await runCommand('rg', ['--line-number', '--max-count', '3', '--max-filesize', '200K', '-m', max, query, resolved.absolute], workspace.realRoot, 10000, {}, workspaceChildEnvironmentMode(config, workspace));
   const lines = result.stdout.split('\n').filter(Boolean).slice(0, config.security.max_search_results);
   const limited = truncateText(JSON.stringify(lines), config.security.max_response_bytes);
   const matches = safeJsonParse<string[]>(limited.text.endsWith(']') ? limited.text : '[]', []);

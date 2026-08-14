@@ -3,6 +3,7 @@ import { runWorkspaceTool } from '../../core/toolRunner.js';
 import { otaMemoryCall, type OtaMemoryOperation } from '../../tools/otaMemory.js';
 import { READ_ONLY, TOOL_RESULT_OUTPUT_SCHEMA, WRITE_FILE } from './annotations.js';
 import type { RegisterContext } from './types.js';
+import { redactSecretValuesEnabled, sanitizeResultsEnabled } from '../../core/securityPolicy.js';
 
 const sessionSchema = z.object({
   session_id: z.string().optional(), provider: z.string().optional(),
@@ -42,7 +43,7 @@ export function registerOtaMemoryTools(context: RegisterContext): void {
 }
 
 function memoryCall(context: RegisterContext, name: string, operation: OtaMemoryOperation, args: Record<string, unknown>) {
-  return runWorkspaceTool(context.workspaces, String(args.workspace_id), name, (workspace) => otaMemoryCall(workspace, operation, args));
+  return runWorkspaceTool(context.workspaces, String(args.workspace_id), name, (workspace) => otaMemoryCall(workspace, operation, args, sanitizeResultsEnabled(context.config) || redactSecretValuesEnabled(context.config)));
 }
 
 function beginTurnSpec() {

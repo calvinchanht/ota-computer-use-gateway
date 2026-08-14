@@ -42,31 +42,31 @@ export async function agentBootstrap(workspace: Workspace) {
   });
 }
 
-export async function recordProgress(workspace: Workspace, title: string, body: string, handoff = false) {
-  await appendCheckedNote(workspace, handoff ? 'HANDOFF.md' : 'PROGRESS.md', title, body);
+export async function recordProgress(workspace: Workspace, title: string, body: string, handoff = false, conservativeCensoring = false) {
+  await appendCheckedNote(workspace, handoff ? 'HANDOFF.md' : 'PROGRESS.md', title, body, conservativeCensoring);
   return ok('progress note recorded', { file: handoff ? 'HANDOFF.md' : 'PROGRESS.md', title, handoff });
 }
 
-export async function recordDecision(workspace: Workspace, title: string, body: string) {
-  await appendCheckedNote(workspace, 'DECISIONS.md', title, body);
+export async function recordDecision(workspace: Workspace, title: string, body: string, conservativeCensoring = false) {
+  await appendCheckedNote(workspace, 'DECISIONS.md', title, body, conservativeCensoring);
   return ok('decision recorded', { file: 'DECISIONS.md', title });
 }
 
-export async function recordHandoff(workspace: Workspace, title: string, body: string) {
-  await appendCheckedNote(workspace, 'HANDOFF.md', title, body);
+export async function recordHandoff(workspace: Workspace, title: string, body: string, conservativeCensoring = false) {
+  await appendCheckedNote(workspace, 'HANDOFF.md', title, body, conservativeCensoring);
   return ok('handoff recorded', { file: 'HANDOFF.md', title });
 }
 
-export async function updateCurrentTask(workspace: Workspace, title: string, body: string) {
-  checkSecrets(title, body);
+export async function updateCurrentTask(workspace: Workspace, title: string, body: string, conservativeCensoring = false) {
+  checkSecrets(title, body, conservativeCensoring);
   await ensureAgentDir(workspace);
   await writeFile(agentPath(workspace, 'CURRENT_TASK.md'), formatCurrentTask(title, body));
   return ok('current task updated', { file: 'CURRENT_TASK.md', title });
 }
 
-export async function checkpointThread(workspace: Workspace, title: string, summary: string, nextSteps: string[] = []) {
+export async function checkpointThread(workspace: Workspace, title: string, summary: string, nextSteps: string[] = [], conservativeCensoring = false) {
   const body = formatCheckpoint(summary, nextSteps);
-  await appendCheckedNote(workspace, 'CHECKPOINTS.md', title, body);
+  await appendCheckedNote(workspace, 'CHECKPOINTS.md', title, body, conservativeCensoring);
   return ok('thread checkpoint recorded', { file: 'CHECKPOINTS.md', title, next_steps: nextSteps.length });
 }
 
@@ -124,7 +124,7 @@ function chatThreadOperatingModel() {
 function capabilityDiscovery(workspace: Workspace) {
   return {
     rule: 'Before claiming you lack workspace, file, process, browser, memory, skill, or artifact capability, call get_workspace_policy and get_tool_profile and inspect the API tool list available in this chat.',
-    workspace_access_model: workspace.api_sets?.machine_admin && workspace.filesystem?.machine_admin_host_scope ? 'You do not have raw SSH by default, but this lane has machine_admin host-scope filesystem policy. Existing file tools may use explicit absolute host paths inside host_root; relative paths still resolve from the configured workspace root. Never paste raw secrets.' : 'You do not have raw SSH by default. You do have scoped access to the configured workspace root through API tools when policy allows them. Use workspace_inventory for broad metadata discovery, especially when direct path listing is blocked by provider-side safety heuristics.',
+    workspace_access_model: workspace.api_sets?.machine_admin && workspace.filesystem?.machine_admin_host_scope ? 'You do not have raw SSH by default, but this lane has machine_admin host-scope filesystem policy. Existing file tools may use explicit absolute host paths inside host_root; relative paths still resolve from the configured workspace root. Application-level censoring follows the workspace security settings; provider/platform policy is separate.' : 'You do not have raw SSH by default. You do have scoped access to the configured workspace root through API tools when policy allows them. Use workspace_inventory for broad metadata discovery, especially when direct path listing is blocked by provider-side safety heuristics.',
     core_file_tools: workspace.allow_read ? ['workspace_inventory', 'list_dir', 'tree', 'stat_path', 'search_files', 'read_file', 'read_binary_file'] : [],
     write_file_tools: workspace.allow_write ? ['write_file', 'write_binary_file'] : [],
     patch_tools: workspace.allow_patch ? ['edit_file', 'propose_patch', 'apply_patch'] : [],
@@ -177,14 +177,14 @@ async function readAgentMemoryTail(workspace: Workspace) {
   return truncate(text.split('\n').filter(Boolean).slice(-20).join('\n'));
 }
 
-async function appendCheckedNote(workspace: Workspace, file: string, title: string, body: string) {
-  checkSecrets(title, body);
+async function appendCheckedNote(workspace: Workspace, file: string, title: string, body: string, conservativeCensoring: boolean) {
+  checkSecrets(title, body, conservativeCensoring);
   await ensureAgentDir(workspace);
   await appendFile(agentPath(workspace, file), formatNote(title, body));
 }
 
-function checkSecrets(title: string, body: string) {
-  if (looksSecret(`${title}\n${body}`)) throw new Error('context note appears to contain secrets');
+function checkSecrets(title: string, body: string, conservativeCensoring: boolean) {
+  if (conservativeCensoring && looksSecret(`${title}\n${body}`, true)) throw new Error('context note appears to contain secrets');
 }
 
 function truncate(text: string) {

@@ -1,10 +1,12 @@
 import { spawn } from 'node:child_process';
+import { childProcessEnvironment } from './processEnvironment.js';
+import type { ChildEnvironmentMode } from './securityPolicy.js';
 
 export type CommandResult = { code: number | null; stdout: string; stderr: string; timed_out: boolean };
 
-export async function runCommand(cmd: string, args: string[], cwd: string, timeoutMs = 10000, env: NodeJS.ProcessEnv = {}): Promise<CommandResult> {
+export async function runCommand(cmd: string, args: string[], cwd: string, timeoutMs = 10000, env: NodeJS.ProcessEnv = {}, environmentMode: ChildEnvironmentMode = 'minimal'): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { cwd, env: { ...safeEnv(), ...env } });
+    const child = spawn(cmd, args, { cwd, env: childProcessEnvironment(environmentMode, env) });
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -17,9 +19,4 @@ export async function runCommand(cmd: string, args: string[], cwd: string, timeo
     child.on('error', reject);
     child.on('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr, timed_out: timedOut }); });
   });
-}
-
-function safeEnv(): NodeJS.ProcessEnv {
-  const keep = ['PATH', 'Path', 'PATHEXT', 'HOME', 'USERPROFILE', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'SHELL', 'COMSPEC', 'SystemRoot', 'WINDIR'];
-  return Object.fromEntries(keep.map((key) => [key, process.env[key] ?? '']));
 }

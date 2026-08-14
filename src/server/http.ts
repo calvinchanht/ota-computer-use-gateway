@@ -5,6 +5,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AppConfig } from '../config/schema.js';
+import { contentHeuristicsEnabled, redactSecretValuesEnabled, sanitizeResultsEnabled } from '../core/securityPolicy.js';
 import { buildWorkspaces, getWorkspace, type Workspace } from '../core/workspaces.js';
 import { audit } from '../core/audit.js';
 import { fail, type ToolResult } from '../core/result.js';
@@ -24,7 +25,7 @@ import {
   normalizeEstateToolName
 } from '../tools/genesis.js';
 import { agentBootstrap, checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../tools/context.js';
-import { getProjectContext, memoryWrite } from '../tools/memory.js';
+import { getProjectContext, memorySearch, memoryWrite } from '../tools/memory.js';
 import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
 import { computerScreenClick, computerScreenDrag, computerScreenMouseMove, computerScreenScroll, computerWindowClick, computerWindowDrag, computerWindowMouseMove, computerWindowScroll, cuaDriverBatch, cuaDriverCall, cuaDriverStatus, type CuaDriverBatchStep } from '../tools/computer.js';
 import {
@@ -703,17 +704,17 @@ function callWorkspaceApiTool(config: AppConfig, workspace: Workspace, tool: str
     ?? callLargeFileApiTool(config, workspace, tool, args)
     ?? callProcessApiTool(config, workspace, tool, args)
     ?? callWorkspaceHelperApiTool(config, workspace, tool, args)
-    ?? callOtaMemoryApiTool(workspace, tool, args);
+    ?? callOtaMemoryApiTool(config, workspace, tool, args);
 }
 
-function callOtaMemoryApiTool(workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
+function callOtaMemoryApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
   const operations: Record<string, OtaMemoryOperation> = {
     memory_begin_turn: 'memory.begin_turn',
     memory_commit_turn: 'memory.commit_turn',
     memory_flush_session: 'memory.flush_session'
   };
   const operation = operations[tool];
-  return operation ? otaMemoryCall(workspace, operation, args) : undefined;
+  return operation ? otaMemoryCall(workspace, operation, args, sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config)) : undefined;
 }
 
 function callFileApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
@@ -732,8 +733,8 @@ function callFileApiTool(config: AppConfig, workspace: Workspace, tool: string, 
 }
 
 function callGitContextApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
-  if (tool === 'git_status') return gitStatus(workspace);
-  if (tool === 'git_diff') return gitDiff(workspace, optionalNumber(args.max_bytes) ?? 20000);
+  if (tool === 'git_status') return gitStatus(config, workspace);
+  if (tool === 'git_diff') return gitDiff(config, workspace, optionalNumber(args.max_bytes) ?? 20000);
   if (tool === 'git_push_current_branch') return gitPushCurrentBranch(config, workspace, optionalString(args.repo_path) ?? '.', optionalString(args.remote) ?? 'origin', optionalString(args.branch));
   if (tool === 'git_lfs_publish_current_branch') return gitLfsPublishCurrentBranch(config, workspace, optionalString(args.repo_path) ?? '.', optionalString(args.remote) ?? 'origin', optionalString(args.branch), optionalString(args.force_with_lease_sha));
   if (tool === 'git') return gitCliTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 60000, optionalNumber(args.max_output_chars) ?? optionalNumber(args.max_stdout_bytes) ?? 20000);
@@ -741,19 +742,20 @@ function callGitContextApiTool(config: AppConfig, workspace: Workspace, tool: st
   if (tool === 'get_agent_bootstrap') return agentBootstrap(workspace);
   if (tool === 'get_context_snapshot') return contextSnapshot(workspace);
   if (tool === 'get_project_context') return getProjectContext(workspace);
-  if (tool === 'record_progress') return recordProgress(workspace, requiredString(args.title, 'title'), requiredString(args.body, 'body'), Boolean(args.handoff));
-  if (tool === 'record_decision') return recordDecision(workspace, requiredString(args.title, 'title'), requiredString(args.body, 'body'));
-  if (tool === 'record_handoff') return recordHandoff(workspace, requiredString(args.title, 'title'), requiredString(args.body, 'body'));
-  if (tool === 'update_current_task') return updateCurrentTask(workspace, requiredString(args.title, 'title'), requiredString(args.body, 'body'));
-  if (tool === 'checkpoint_thread') return checkpointThread(workspace, requiredString(args.title, 'title'), requiredString(args.summary, 'summary'), optionalStringArray(args.next_steps));
-  if (tool === 'memory_write') return memoryWrite(workspace, requiredString(args.type, 'type'), requiredString(args.title, 'title'), requiredString(args.body, 'body'), optionalStringArray(args.tags));
+  if (tool === 'memory_search') return memorySearch(workspace, requiredString(args.query, 'query'), optionalNumber(args.max_results) ?? 10, sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config));
+  if (tool === 'record_progress') return recordProgress(workspace, requiredString(args.title, 'title'), requiredString(args.body, 'body'), Boolean(args.handoff), contentHeuristicsEnabled(config));
+  if (tool === 'record_decision') return recordDecision(workspace, requiredString(args.title, 'title'), requiredString(args.body, 'body'), contentHeuristicsEnabled(config));
+  if (tool === 'record_handoff') return recordHandoff(workspace, requiredString(args.title, 'title'), requiredString(args.body, 'body'), contentHeuristicsEnabled(config));
+  if (tool === 'update_current_task') return updateCurrentTask(workspace, requiredString(args.title, 'title'), requiredString(args.body, 'body'), contentHeuristicsEnabled(config));
+  if (tool === 'checkpoint_thread') return checkpointThread(workspace, requiredString(args.title, 'title'), requiredString(args.summary, 'summary'), optionalStringArray(args.next_steps), contentHeuristicsEnabled(config));
+  if (tool === 'memory_write') return memoryWrite(workspace, requiredString(args.type, 'type'), requiredString(args.title, 'title'), requiredString(args.body, 'body'), optionalStringArray(args.tags), contentHeuristicsEnabled(config));
   if (tool === 'list_artifacts') return listArtifacts(workspace);
-  if (tool === 'record_artifact') return recordArtifact(workspace, requiredString(args.path, 'path'), requiredString(args.title, 'title'), optionalString(args.kind) ?? 'file', optionalString(args.description) ?? '');
-  if (tool === 'estate_bootstrap') return genesisBootstrap();
-  if (tool === 'estate_overview') return genesisEstateOverview();
-  if (tool === 'estate_agent_deep_dive') return genesisAgentDeepDive(requiredString(args.agent, 'agent'));
-  if (tool === 'estate_host_deep_dive') return genesisHostDeepDive(requiredString(args.host, 'host'));
-  if (tool === 'estate_safe_diagnostic') return genesisSafeDiagnostic(optionalString(args.scope) ?? 'estate', optionalString(args.target));
+  if (tool === 'record_artifact') return recordArtifact(workspace, requiredString(args.path, 'path'), requiredString(args.title, 'title'), optionalString(args.kind) ?? 'file', optionalString(args.description) ?? '', contentHeuristicsEnabled(config));
+  if (tool === 'estate_bootstrap') return genesisBootstrap(sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config));
+  if (tool === 'estate_overview') return genesisEstateOverview(sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config));
+  if (tool === 'estate_agent_deep_dive') return genesisAgentDeepDive(requiredString(args.agent, 'agent'), sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config));
+  if (tool === 'estate_host_deep_dive') return genesisHostDeepDive(requiredString(args.host, 'host'), sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config));
+  if (tool === 'estate_safe_diagnostic') return genesisSafeDiagnostic(optionalString(args.scope) ?? 'estate', optionalString(args.target), sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config));
   return undefined;
 }
 

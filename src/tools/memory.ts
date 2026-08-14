@@ -4,17 +4,17 @@ import { ok } from '../core/result.js';
 import { looksSecret, redactSecrets } from '../core/secrets.js';
 import type { Workspace } from '../core/workspaces.js';
 
-export async function memoryWrite(workspace: Workspace, type: string, title: string, body: string, tags: string[] = []) {
-  if (looksSecret(body)) throw new Error('memory body appears to contain secrets');
+export async function memoryWrite(workspace: Workspace, type: string, title: string, body: string, tags: string[] = [], conservativeCensoring = false) {
+  if (conservativeCensoring && looksSecret(body, true)) throw new Error('memory body appears to contain secrets');
   const entry = { ts: new Date().toISOString(), type, title, body, tags };
   await appendMemory(workspace, entry);
   return ok('memory entry appended', { title, type, tags });
 }
 
-export async function memorySearch(workspace: Workspace, query: string, maxResults = 10) {
+export async function memorySearch(workspace: Workspace, query: string, maxResults = 10, sanitizeResults = false) {
   const text = await readMemoryText(workspace);
   const results = text.split('\n').filter((line) => line.toLowerCase().includes(query.toLowerCase())).slice(0, maxResults);
-  return ok(`found ${results.length} memory matches`, { query, results: results.map(redactSecrets) });
+  return ok(`found ${results.length} memory matches`, { query, results: results.map((result) => redactSecrets(result, sanitizeResults)) });
 }
 
 export async function getProjectContext(workspace: Workspace) {

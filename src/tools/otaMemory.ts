@@ -9,12 +9,12 @@ export const OTA_MEMORY_TOOL_NAMES = ['memory_begin_turn', 'memory_commit_turn',
 type JsonObject = Record<string, unknown>;
 type MemoryTarget = { databasePath: string; packageRoot: string; scope: JsonObject };
 
-export async function otaMemoryCall(workspace: Workspace, operation: OtaMemoryOperation, args: JsonObject) {
+export async function otaMemoryCall(workspace: Workspace, operation: OtaMemoryOperation, args: JsonObject, sanitizeResults = false) {
   const config = workspace.ota_memory;
   if (!config?.enabled) throw new Error('OTA-Memory is not configured for this workspace');
   const target = await resolveTarget(workspace, optionalString(args.execution_handle));
   const arguments_ = lifecycleArguments(operation, args, target.scope);
-  const receipt = await invokeAdapter(workspace, operation, target.packageRoot, target.databasePath, arguments_);
+  const receipt = await invokeAdapter(workspace, operation, target.packageRoot, target.databasePath, arguments_, sanitizeResults);
   return ok(`${operation} ${String(receipt.status ?? 'completed')}`, receipt);
 }
 
@@ -91,18 +91,19 @@ function configuredScope(workspace: Workspace, config: NonNullable<Workspace['ot
   };
 }
 
-async function invokeAdapter(workspace: Workspace, operation: OtaMemoryOperation, packageRoot: string, databasePath: string, args: JsonObject): Promise<JsonObject> {
+async function invokeAdapter(workspace: Workspace, operation: OtaMemoryOperation, packageRoot: string, databasePath: string, args: JsonObject, sanitizeResults: boolean): Promise<JsonObject> {
   const config = requiredConfig(workspace);
   const request = JSON.stringify({ operation, database_path: databasePath, arguments: args });
   let output: string;
   try { output = await runPython(config.python_executable, packageRoot, request, config.timeout_ms); }
-  catch (error) { throw new Error(redactAdapterError(error, [packageRoot, databasePath, config.python_executable])); }
+  catch (error) { throw new Error(redactAdapterError(error, [packageRoot, databasePath, config.python_executable], sanitizeResults)); }
   try { return JSON.parse(output) as JsonObject; }
   catch { throw new Error('OTA-Memory adapter returned invalid JSON'); }
 }
 
-function redactAdapterError(error: unknown, paths: string[]): string {
+function redactAdapterError(error: unknown, paths: string[], enabled: boolean): string {
   let message = error instanceof Error ? error.message : String(error);
+  if (!enabled) return message;
   for (const value of paths.filter(Boolean)) message = message.replaceAll(value, '[server-path]');
   return message;
 }

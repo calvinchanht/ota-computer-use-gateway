@@ -3,6 +3,7 @@ import { ok } from '../core/result.js';
 import { resolveInside } from '../core/paths.js';
 import { jobLifecycleCommandWarnings, commandTextFromArgv } from './jobLifecycleGuard.js';
 import { configuredMaxProcessMs, type AppConfig } from '../config/schema.js';
+import { workspaceChildEnvironmentMode } from '../core/securityPolicy.js';
 import type { Workspace } from '../core/workspaces.js';
 
 const MAX_LOG_BYTES = 50000;
@@ -11,7 +12,7 @@ export async function processStart(config: AppConfig, workspace: Workspace, comm
   if (!workspace.allow_tests) throw new Error('workspace does not allow command execution');
   const warnings = jobLifecycleCommandWarnings(command);
   const timeout = configuredMaxProcessMs(config);
-  const item = startManagedProcess(command, workspace.realRoot, timeout, config.command_runtime);
+  const item = startManagedProcess(command, workspace.realRoot, timeout, config.command_runtime, workspaceChildEnvironmentMode(config, workspace));
   const response = ok('process started', { ...describeManagedProcess(item), timeout_ms: timeout });
   response.warnings = warnings;
   return response;
@@ -25,7 +26,7 @@ export async function processStartArgv(config: AppConfig, workspace: Workspace, 
   const cwd = await resolveInside(workspace, cwdPath, config);
   const limit = configuredMaxProcessMs(config);
   const timeout = Math.min(Math.max(1, timeoutMs ?? limit), limit);
-  const item = startManagedArgvProcess(command, args, cwd.absolute, timeout, cmd.join(' '));
+  const item = startManagedArgvProcess(command, args, cwd.absolute, timeout, cmd.join(' '), workspaceChildEnvironmentMode(config, workspace));
   const response = ok('process started', { ...describeManagedProcess(item), command_argv: cmd, cwd: cwd.relative, timeout_ms: timeout, tail_supported: true, read_with: 'read_process', initial_cursor: 0 });
   response.warnings = warnings;
   return response;
