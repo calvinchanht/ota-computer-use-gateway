@@ -33,7 +33,7 @@ describe('process tools', () => {
     await expect(waitForOutput(processId, 'background-ok')).resolves.toContain('background-ok');
   });
 
-  it('keeps the tiny environment for ordinary managed children', async () => {
+  it('keeps only the compatibility environment for ordinary managed children', async () => {
     const workspace = await fixtureWorkspace(true);
     const previousPathext = process.env.PATHEXT;
     const previousMarker = process.env.OTA_TEST_ADMIN_MARKER;
@@ -42,7 +42,7 @@ describe('process tools', () => {
     try {
       const started = await processStartArgv(config, workspace, [process.execPath, '-e', "process.stdout.write(JSON.stringify({ pathext: process.env.PATHEXT ?? null, marker: process.env.OTA_TEST_ADMIN_MARKER ?? null }))"]);
       const output = await waitForOutput(String(started.data?.process_id), '"marker":null');
-      expect(JSON.parse(output)).toEqual({ pathext: null, marker: null });
+      expect(JSON.parse(output)).toEqual({ pathext: '.COM;.EXE;.BAT;.CMD', marker: null });
     } finally {
       if (previousPathext === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = previousPathext;
       if (previousMarker === undefined) delete process.env.OTA_TEST_ADMIN_MARKER; else process.env.OTA_TEST_ADMIN_MARKER = previousMarker;
