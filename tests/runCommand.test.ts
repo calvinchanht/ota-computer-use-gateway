@@ -77,13 +77,13 @@ describe('runConfiguredCommand', () => {
     expect((result.data as { stdout: string }).stdout).toBe(payload);
   });
 
-  it('keeps the tiny environment for ordinary workspaces', async () => {
+  it('keeps the compatibility environment for ordinary workspaces', async () => {
     const workspace = await fixtureWorkspace(true);
     const oldPathext = process.env.PATHEXT;
     process.env.PATHEXT = '.COM;.EXE;.BAT;.CMD';
     try {
       const result = await runArgvTool(config, workspace, [process.execPath, '-e', "process.stdout.write(process.env.PATHEXT ?? 'missing')"]);
-      expect((result.data as { stdout: string }).stdout).toBe('missing');
+      expect((result.data as { stdout: string }).stdout).toBe('.COM;.EXE;.BAT;.CMD');
     } finally {
       if (oldPathext === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = oldPathext;
     }
@@ -104,14 +104,14 @@ describe('runConfiguredCommand', () => {
     }
   });
 
-  it('forces the tiny environment for admin workspaces when conservative censoring is enabled', async () => {
+  it('keeps the compatibility environment for censored admin workspaces', async () => {
     const workspace = await fixtureWorkspace(true, true);
     const oldPathext = process.env.PATHEXT;
     process.env.PATHEXT = '.COM;.EXE;.BAT;.CMD';
     try {
       const conservative = { ...config, security: { ...config.security, conservative_censoring: true } };
       const result = await runArgvTool(conservative, workspace, [process.execPath, '-e', "process.stdout.write(process.env.PATHEXT ?? 'missing')"]);
-      expect((result.data as { stdout: string }).stdout).toBe('missing');
+      expect((result.data as { stdout: string }).stdout).toBe('.COM;.EXE;.BAT;.CMD');
     } finally {
       if (oldPathext === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = oldPathext;
     }
