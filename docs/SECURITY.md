@@ -38,7 +38,7 @@ Annotations are provider hints, not authorization. Capability policy, auth, path
 
 ## Credentials, Git/GitHub, and secret handling
 
-- Git/GitHub credentials are loaded from configured local token files or wrappers and injected only into the child process/auth lane. Do not embed PATs in repository remotes.
+- Git/GitHub credentials are loaded from configured local token files or wrappers and injected only into the child process/auth lane. Do not embed PATs in repository remotes. Exact OTA-known Git/GitHub credential values and derived auth material are masked after execution before tool results are displayed, independently of broad heuristic/result-sanitization switches.
 - Tools may use protected local credentials when the workspace policy grants that capability, but raw credential values must not be returned visibly unless the operator explicitly requests that exact disclosure/use.
 - Audit/result redaction must continue to scrub common credential/token patterns from command/tool output.
 
