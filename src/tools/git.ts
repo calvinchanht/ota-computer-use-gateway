@@ -64,12 +64,12 @@ async function gitLfsPublish(config: AppConfig, workspace: Workspace, context: A
   for (const command of [['lfs', 'version'], ['lfs', 'install', '--local'], ['lfs', 'fsck', '--pointers', 'HEAD'], ['lfs', 'push', context.remote, context.branch]]) {
     const step = await runGitPublishStep(context.executable, command, context.cwd, config.security.max_exec_ms, env, workspaceChildEnvironmentMode(config, workspace), sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config), knownSecretValues);
     steps.push(step);
-    if (step.exit_code !== 0 || step.timed_out) return ok('git LFS publish failed', gitLfsPublishResult(workspace, context, steps, sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config), forceWithLeaseSha, autoSelected));
+    if (step.exit_code !== 0 || step.timed_out) return ok('git LFS publish failed', gitLfsPublishResult(workspace, context, steps, sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config), knownSecretValues, forceWithLeaseSha, autoSelected));
   }
   const push = ['push', context.remote, context.branch];
   if (forceWithLeaseSha) push.splice(1, 0, `--force-with-lease=refs/heads/${context.branch}:${forceWithLeaseSha}`);
   steps.push(await runGitPublishStep(context.executable, push, context.cwd, config.security.max_exec_ms, env, workspaceChildEnvironmentMode(config, workspace), sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config), knownSecretValues));
-  return ok('git LFS publish finished', gitLfsPublishResult(workspace, context, steps, sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config), forceWithLeaseSha, autoSelected));
+  return ok('git LFS publish finished', gitLfsPublishResult(workspace, context, steps, sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config), knownSecretValues, forceWithLeaseSha, autoSelected));
 }
 
 async function initializeLfsForWorktreeAdd(executable: string, cmd: string[], cwd: string, timeout: number, env: Record<string, string>, environmentMode: 'full' | 'minimal', knownSecretValues: string[]): Promise<boolean> {
@@ -151,12 +151,12 @@ async function runGitPublishStep(executable: string, args: string[], cwd: string
   return { command: ['git', ...args], exit_code: result.code, timed_out: result.timed_out, output: output.text, truncated: output.truncated };
 }
 
-function gitLfsPublishResult(workspace: Workspace, context: Awaited<ReturnType<typeof gitPublishContext>>, steps: Awaited<ReturnType<typeof runGitPublishStep>>[], sanitize: boolean, forceWithLeaseSha?: string, autoSelected = false) {
+function gitLfsPublishResult(workspace: Workspace, context: Awaited<ReturnType<typeof gitPublishContext>>, steps: Awaited<ReturnType<typeof runGitPublishStep>>[], sanitize: boolean, knownSecretValues: string[], forceWithLeaseSha?: string, autoSelected = false) {
   const failed = steps.find((step) => step.exit_code !== 0 || step.timed_out);
   return {
     status: failed ? 'failed' : 'pushed', failed_command: failed?.command ?? null,
     repo_path: path.relative(workspace.realRoot, context.cwd) || '.', remote: context.remote,
-    remote_url: sanitizeGitRemoteForDisplay(context.remoteUrl, sanitize), branch: context.branch, sha: context.sha,
+    remote_url: sanitizeGitRemoteForDisplay(context.remoteUrl, sanitize, knownSecretValues), branch: context.branch, sha: context.sha,
     force_with_lease_sha: forceWithLeaseSha ?? null, publish_mode: 'git_lfs', auto_selected: autoSelected,
     steps, auth_lane: 'configured_token_git_config_env'
   };

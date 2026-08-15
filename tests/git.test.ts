@@ -110,6 +110,29 @@ describe('git display hygiene', () => {
     expect(visible).toContain('ghp_UNRELATED_OPAQUE');
   });
 
+  it('masks the configured token in Git LFS remote_url without broad sanitization', async () => {
+    if (spawnSync('git', ['lfs', 'version']).status !== 0) return;
+    const repo = await fixtureRepo();
+    const token = 'ota-known-lfs-secret-value';
+    try {
+      await writeFile(repo.tokenFile, token + '\n');
+      runGit(repo.root, ['lfs', 'install', '--local']);
+      await writeFile(path.join(repo.root, '.gitattributes'), '*.png filter=lfs diff=lfs merge=lfs -text\n');
+      await writeFile(path.join(repo.root, 'card.png'), Buffer.alloc(1024, 3));
+      runGit(repo.root, ['add', '.gitattributes', 'card.png']);
+      runGit(repo.root, ['commit', '-m', 'Add LFS credential masking fixture']);
+      runGit(repo.root, ['remote', 'add', 'origin', `https://x-access-token:${token}@127.0.0.1:9/repo.git`]);
+      const branch = spawnSync('git', ['branch', '--show-current'], { cwd: repo.root, encoding: 'utf8' }).stdout.trim();
+
+      const result = await gitLfsPublishCurrentBranch(config, workspace(repo.root, repo.tokenFile), '.', 'origin', branch);
+      const visible = JSON.stringify(result.data);
+      expect(visible).not.toContain(token);
+      expect((result.data as { remote_url: string }).remote_url).toContain('[GITHUB_TOKEN_REDACTED]');
+    } finally {
+      await rm(repo.root, { recursive: true, force: true });
+    }
+  });
+
   it('reports missing github token without exposing token path', async () => {
     const repo = await fixtureRepo();
     await expect(githubCliTool(config, workspace(repo.root, path.join(repo.root, 'missing-token.txt')), ['issue', 'list'], '.'))
