@@ -57,7 +57,7 @@ const CONTRACTS: Record<string, ContractSpec> = {
   run_command: spec({ workspace_id: 'string required', cmd_array: 'string[] required', cwd: 'string optional', timeout_ms: 'number optional', max_stdout_bytes: 'number optional', max_stderr_bytes: 'number optional', tail: 'boolean optional', cmd: 'legacy string[] alias only' }, { cmd: ['cmd_array'] }),
     git: spec({ workspace_id: 'string required', cmd_array: 'string[] required', cwd: 'string optional', timeout_ms: 'number optional', max_output_chars: 'number optional' }),
     git_lfs_publish_current_branch: spec({ workspace_id: 'string required', repo_path: 'string optional', remote: 'string optional', branch: 'string optional', force_with_lease_sha: 'full 40-character Git SHA optional' }),
-  github: spec({ workspace_id: 'string required', cmd_array: 'string[] required', cwd: 'string optional', timeout_ms: 'number optional', max_output_chars: 'number optional' }),
+  github: spec({ workspace_id: 'string required', cmd_array: 'string[] required', cwd: 'string optional', timeout_ms: 'number optional', max_output_chars: 'number optional', rate_policy: 'object optional; default off; {preflight?, resource?, min_remaining?, retry_mode?, max_wait_ms?}' }),
   start_process: spec({ workspace_id: 'string required', cmd_array: 'string[] preferred', command: 'legacy string optional', cwd: 'string optional', timeout_ms: 'number optional' }),
   read_process: spec({ workspace_id: 'string required', process_id: 'string required', max_bytes: 'number optional', cursor: 'number optional' }),
   write_process: spec({ workspace_id: 'string required', process_id: 'string required', input: 'string required', close_stdin: 'boolean optional' }),

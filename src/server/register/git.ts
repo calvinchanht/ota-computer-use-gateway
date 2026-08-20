@@ -12,7 +12,7 @@ export function registerGitTools({ server, config, workspaces }: RegisterContext
   ));
   server.registerTool('github', githubTool(), async (args) => runWorkspaceTool(
     workspaces, args.workspace_id, 'github',
-    (workspace) => githubCliTool(config, workspace, args.cmd_array, args.cwd, args.timeout_ms, args.max_output_chars)
+    (workspace) => githubCliTool(config, workspace, args.cmd_array, args.cwd, args.timeout_ms, args.max_output_chars, args.rate_policy)
   ));
   server.registerTool('git_status', { title: 'Git status', description: 'Return concise git status.', inputSchema: { workspace_id: z.string() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'git_status', (workspace) => gitStatus(config, workspace)));
   server.registerTool('git_diff', { title: 'Git diff', description: 'Return bounded git diff.', inputSchema: { workspace_id: z.string(), max_bytes: z.number().optional() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'git_diff', (workspace) => gitDiff(config, workspace, args.max_bytes)));
@@ -39,8 +39,17 @@ function gitTool() {
 function githubTool() {
   return {
     title: 'GitHub CLI',
-    description: 'Run GitHub CLI argv through the configured PAT-backed lane; cmd_array starts after gh.',
-    inputSchema: argvToolSchema(),
+    description: 'Run GitHub CLI argv through the configured PAT-backed lane; cmd_array starts after gh. Optional rate_policy adds default-off rate-budget preflight and bounded safe-read retry handling.',
+    inputSchema: {
+      ...argvToolSchema(),
+      rate_policy: z.object({
+        preflight: z.boolean().optional(),
+        resource: z.string().min(1).optional(),
+        min_remaining: z.number().int().nonnegative().optional(),
+        retry_mode: z.enum(['never', 'safe_read_once']).optional(),
+        max_wait_ms: z.number().int().nonnegative().max(60000).optional()
+      }).strict().optional()
+    },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
     annotations: RUN_LOCAL
   };

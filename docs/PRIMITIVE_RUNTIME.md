@@ -132,6 +132,28 @@ If a stale or out-of-range cursor is provided, the gateway clamps it to the curr
 
 OTA does not maintain a GitHub operation allowlist. The `cmd_array` is forwarded to the configured `gh` adapter, and GitHub/PAT scopes decide what is permitted. Agents should call the OTA `github` operation instead of `run_command` with `gh`, `curl`, or ambient `GH_TOKEN`.
 
+GitHub rate-budget handling is optional and default-off. When `rate_policy` is absent, OTA preserves the existing single-invocation argv/result behavior. The optional fields are:
+
+```json
+{
+  "rate_policy": {
+    "preflight": true,
+    "resource": "core",
+    "min_remaining": 1,
+    "retry_mode": "safe_read_once",
+    "max_wait_ms": 1000
+  }
+}
+```
+
+- `preflight` defaults to `false`. When true, OTA invokes the same configured `gh` executable as `gh api rate_limit` and parses the JSON only in memory.
+- `resource` is an open-ended GitHub rate resource name. When a selected resource is present in `resources`, `min_remaining` defaults to `1`; if `remaining < min_remaining`, OTA skips the original argv.
+- `retry_mode` defaults to `never`. `safe_read_once` permits at most one automatic replay, and only for a provably REST `gh api` GET/HEAD. An omitted method is treated as GET only when no `-f`, `-F`, `--field`, `--raw-field`, or `--input` form can imply POST. `--paginate` does not make an otherwise safe read unsafe.
+- GraphQL, native `gh` commands, explicit POST/PATCH/PUT/DELETE or other methods, implicit POST field/input forms, and ambiguous mutation-capable argv are never automatically retried.
+- `max_wait_ms` defaults to `0`, is capped at 60000 ms, and is additionally bounded by the command timeout. Secondary/legacy abuse responses require a concrete parsed retry hint within that bound before a safe read can be replayed once. Primary exhaustion returns reset information without an automatic sleep; ambiguous 403/429 or rate-limit output is `rate_limited_unknown` and remains caller-controlled.
+- Policy-enabled results add `data.rate_budget` with classification `ok`, `primary_exhausted`, `secondary_limited`, `rate_limited_unknown`, or `not_checked`, plus resource/limit/remaining/used/reset/retry hints when available, `source`, `safe_to_replay`, `automatic_retry_count`, and `execution` (`executed` or `skipped_rate_budget`). Preflight output, raw authorization-bearing headers, token material, and configured credential values are never returned.
+- Rate state is not persisted. GitHub remains the authority, while the existing `api.run_id` / quota-saver rule remains unchanged: if an API call returns `running`, poll that run rather than retrying the original request.
+
 `get_tool_profile` and `get_workspace_policy` expose a non-secret GitHub status block:
 
 ```json

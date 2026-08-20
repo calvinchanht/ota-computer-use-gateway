@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -137,6 +137,241 @@ describe('git display hygiene', () => {
     const repo = await fixtureRepo();
     await expect(githubCliTool(config, workspace(repo.root, path.join(repo.root, 'missing-token.txt')), ['issue', 'list'], '.'))
       .rejects.toThrow('github auth diagnostic');
+  });
+
+  it('preflights fixed rate-limit JSON and skips the original argv below the selected floor', async () => {
+    const repo = await fixtureRepo();
+    const fake = await fakeGithubWrapper(repo.root, {
+      preflight: { code: 0, stdout: JSON.stringify({ resources: { core: { limit: 60, used: 60, remaining: 0, reset: 2000000000 } } }) },
+      commands: [{ code: 0, stdout: 'must-not-run' }]
+    });
+    const ws = workspace(repo.root, repo.tokenFile);
+    ws.git = { ...ws.git, github_cli_wrapper: fake.wrapper };
+
+    const result = await githubCliTool(config, ws, ['api', 'repos/owner/repo'], '.', 5000, 20000, {
+      preflight: true,
+      resource: 'core',
+      min_remaining: 1
+    });
+    const data = result.data as { output: string; rate_budget: Record<string, unknown> };
+    expect(result.summary).toBe('github command skipped by rate budget');
+    expect(data.output).toBe('');
+    expect(data.rate_budget).toMatchObject({
+      classification: 'primary_exhausted',
+      resource: 'core',
+      limit: 60,
+      remaining: 0,
+      used: 60,
+      reset_at: '2033-05-18T03:33:20.000Z',
+      automatic_retry_count: 0,
+      execution: 'skipped_rate_budget'
+    });
+    expect(await fakeGithubInvocations(fake.marker)).toEqual([['api', 'rate_limit']]);
+  });
+
+  it('executes the original argv once when the selected preflight budget is sufficient', async () => {
+    const repo = await fixtureRepo();
+    const fake = await fakeGithubWrapper(repo.root, {
+      preflight: { code: 0, stdout: JSON.stringify({ resources: { search: { limit: 30, used: 3, remaining: 27, reset: 2000000000 } } }) },
+      commands: [{ code: 0, stdout: 'search-ok' }]
+    });
+    const ws = workspace(repo.root, repo.tokenFile);
+    ws.git = { ...ws.git, github_cli_wrapper: fake.wrapper };
+
+    const result = await githubCliTool(config, ws, ['api', 'search/issues'], '.', 5000, 20000, {
+      preflight: true,
+      resource: 'search',
+      min_remaining: 5
+    });
+    const data = result.data as { output: string; rate_budget: Record<string, unknown> };
+    expect(data.output).toBe('search-ok');
+    expect(data.rate_budget).toMatchObject({ classification: 'ok', resource: 'search', remaining: 27, execution: 'executed' });
+    expect(await fakeGithubInvocations(fake.marker)).toEqual([['api', 'rate_limit'], ['api', 'search/issues']]);
+  });
+
+  it('classifies synthetic primary exhaustion and never replays it', async () => {
+    const repo = await fixtureRepo();
+    const fake = await fakeGithubWrapper(repo.root, {
+      commands: [
+        { code: 1, stderr: 'gh: API rate limit exceeded for user (HTTP 403)\nX-RateLimit-Reset: 2000000000\n' },
+        { code: 0, stdout: 'must-not-retry' }
+      ]
+    });
+    const ws = workspace(repo.root, repo.tokenFile);
+    ws.git = { ...ws.git, github_cli_wrapper: fake.wrapper };
+
+    const result = await githubCliTool(config, ws, ['api', 'repos/owner/repo'], '.', 5000, 20000, {
+      retry_mode: 'safe_read_once',
+      max_wait_ms: 100
+    });
+    const data = result.data as { rate_budget: Record<string, unknown> };
+    expect(data.rate_budget).toMatchObject({
+      classification: 'primary_exhausted',
+      safe_to_replay: true,
+      automatic_retry_count: 0,
+      reset_at: '2033-05-18T03:33:20.000Z'
+    });
+    expect(await fakeGithubInvocations(fake.marker)).toEqual([['api', 'repos/owner/repo']]);
+  });
+
+  it.each([
+    ['implicit GET', ['api', 'repos/owner/repo']],
+    ['paginated GET', ['api', 'repos/owner/repo/issues', '--paginate']],
+    ['explicit HEAD', ['api', '--method', 'HEAD', 'repos/owner/repo']]
+  ])('retries one provably safe REST %s exactly once on a concrete secondary-limit hint', async (_name, command) => {
+    const repo = await fixtureRepo();
+    const fake = await fakeGithubWrapper(repo.root, {
+      commands: [
+        { code: 1, stderr: 'gh: You have exceeded a secondary rate limit. Retry-After: 0.01 seconds (HTTP 403)\n' },
+        { code: 0, stdout: 'retry-success' }
+      ]
+    });
+    const ws = workspace(repo.root, repo.tokenFile);
+    ws.git = { ...ws.git, github_cli_wrapper: fake.wrapper };
+
+    const result = await githubCliTool(config, ws, command, '.', 5000, 20000, {
+      retry_mode: 'safe_read_once',
+      max_wait_ms: 100
+    });
+    const data = result.data as { output: string; rate_budget: Record<string, unknown> };
+    expect(data.output).toBe('retry-success');
+    expect(data.rate_budget).toMatchObject({
+      classification: 'secondary_limited',
+      retry_after_ms: 10,
+      safe_to_replay: true,
+      automatic_retry_count: 1,
+      execution: 'executed'
+    });
+    expect(await fakeGithubInvocations(fake.marker)).toEqual([command, command]);
+  });
+
+  it.each([
+    ['REST POST', ['api', '--method', 'POST', 'repos/owner/repo']],
+    ['REST PATCH', ['api', '-X', 'PATCH', 'repos/owner/repo']],
+    ['REST PUT', ['api', '--method=PUT', 'repos/owner/repo']],
+    ['REST DELETE', ['api', '-XDELETE', 'repos/owner/repo']],
+    ['implicit -f POST', ['api', 'repos/owner/repo', '-f', 'name=value']],
+    ['implicit -F POST', ['api', 'repos/owner/repo', '-Fname=value']],
+    ['implicit --field POST', ['api', 'repos/owner/repo', '--field=name=value']],
+    ['implicit --raw-field POST', ['api', 'repos/owner/repo', '--raw-field', 'name=value']],
+    ['implicit --input POST', ['api', 'repos/owner/repo', '--input', 'body.json']],
+    ['GraphQL', ['api', 'graphql', '-f', 'query={viewer{login}}']],
+    ['native gh command', ['issue', 'list']]
+  ])('never auto-retries %s after a synthetic secondary-limit response', async (_name, command) => {
+    const repo = await fixtureRepo();
+    const fake = await fakeGithubWrapper(repo.root, {
+      commands: [
+        { code: 1, stderr: 'gh: abuse detection mechanism triggered. Retry-After: 0.01 seconds (HTTP 403)\n' },
+        { code: 0, stdout: 'must-not-retry' }
+      ]
+    });
+    const ws = workspace(repo.root, repo.tokenFile);
+    ws.git = { ...ws.git, github_cli_wrapper: fake.wrapper };
+
+    const result = await githubCliTool(config, ws, command, '.', 5000, 20000, {
+      retry_mode: 'safe_read_once',
+      max_wait_ms: 100
+    });
+    const data = result.data as { rate_budget: Record<string, unknown> };
+    expect(data.rate_budget).toMatchObject({ classification: 'secondary_limited', safe_to_replay: false, automatic_retry_count: 0 });
+    expect(await fakeGithubInvocations(fake.marker)).toEqual([command]);
+  });
+
+  it('classifies ambiguous 429 output as caller-controlled and never blindly replays it', async () => {
+    const repo = await fixtureRepo();
+    const fake = await fakeGithubWrapper(repo.root, {
+      commands: [
+        { code: 1, stderr: 'gh: request failed (HTTP 429)\n' },
+        { code: 0, stdout: 'must-not-retry' }
+      ]
+    });
+    const ws = workspace(repo.root, repo.tokenFile);
+    ws.git = { ...ws.git, github_cli_wrapper: fake.wrapper };
+
+    const result = await githubCliTool(config, ws, ['api', 'repos/owner/repo'], '.', 5000, 20000, {
+      retry_mode: 'safe_read_once',
+      max_wait_ms: 100
+    });
+    const data = result.data as { rate_budget: Record<string, unknown> };
+    expect(data.rate_budget).toMatchObject({ classification: 'rate_limited_unknown', safe_to_replay: true, automatic_retry_count: 0 });
+    expect(await fakeGithubInvocations(fake.marker)).toEqual([['api', 'repos/owner/repo']]);
+  });
+
+  it('preserves the exact legacy result keys when rate_policy is absent', async () => {
+    const repo = await fixtureRepo();
+    const fake = await fakeGithubWrapper(repo.root, { commands: [{ code: 0, stdout: 'legacy-output' }] });
+    const ws = workspace(repo.root, repo.tokenFile);
+    ws.git = { ...ws.git, github_cli_wrapper: fake.wrapper };
+
+    const result = await githubCliTool(config, ws, ['issue', 'list'], '.');
+    const data = result.data as Record<string, unknown>;
+    expect(Object.keys(data).sort()).toEqual(['auth_lane', 'command', 'cwd', 'exit_code', 'output', 'timed_out', 'truncated']);
+    expect(data.output).toBe('legacy-output');
+    expect(data).not.toHaveProperty('rate_budget');
+  });
+
+  it('redacts configured-token and raw authorization-header material from policy-enabled output', async () => {
+    const repo = await fixtureRepo();
+    await writeFile(repo.tokenFile, 'github_pat_RATEPOLICYSECRET\n');
+    const fake = await fakeGithubWrapper(repo.root, {
+      commands: [{ code: 0, stdout: 'github_pat_RATEPOLICYSECRET\nAuthorization: Bearer synthetic-auth-material\nopaque-output' }]
+    });
+    const ws = workspace(repo.root, repo.tokenFile);
+    ws.git = { ...ws.git, github_cli_wrapper: fake.wrapper };
+
+    const result = await githubCliTool(config, ws, ['api', 'repos/owner/repo'], '.', 5000, 20000, {});
+    const data = result.data as { output: string; rate_budget: Record<string, unknown> };
+    expect(data.output).toContain('[GITHUB_TOKEN_REDACTED]');
+    expect(data.output).toContain('Authorization: [AUTHORIZATION_REDACTED]');
+    expect(data.output).toContain('opaque-output');
+    expect(data.output).not.toContain('github_pat_RATEPOLICYSECRET');
+    expect(data.output).not.toContain('synthetic-auth-material');
+    expect(data.rate_budget).toMatchObject({ classification: 'not_checked', execution: 'executed' });
+  });
+
+  it('keeps bounded safe-read retry waits inside the existing quota-saver run contract', async () => {
+    const repo = await fixtureRepo();
+    const fake = await fakeGithubWrapper(repo.root, {
+      commands: [
+        { code: 1, stderr: 'gh: You have exceeded a secondary rate limit. Retry-After: 0.05 seconds (HTTP 403)\n' },
+        { code: 0, stdout: 'async-retry-success' }
+      ]
+    });
+    const server: Server = createServer(createHttpRequestHandler(configForGithub(repo.root, repo.tokenFile, fake.wrapper)));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('expected TCP address');
+      const response = await fetch(`http://127.0.0.1:${address.port}/ota/api/v1/gh`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: 'anna',
+          cmd_array: ['api', 'repos/owner/repo'],
+          timeout_ms: 5000,
+          initial_wait_ms: 0,
+          rate_policy: { retry_mode: 'safe_read_once', max_wait_ms: 100 }
+        })
+      });
+      const queued = await response.json() as { api: { run_id: string; status: string } };
+      expect(response.status).toBe(202);
+      expect(queued.api.status).toBe('running');
+
+      let completed: any;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const polled = await fetch(`http://127.0.0.1:${address.port}/api/v1/runs/${queued.api.run_id}`);
+        completed = await polled.json();
+        if (completed.run?.status === 'completed') break;
+      }
+      expect(completed.run?.status).toBe('completed');
+      expect(completed.run?.response?.data?.output).toBe('async-retry-success');
+      expect(completed.run?.response?.data?.rate_budget).toMatchObject({ automatic_retry_count: 1, safe_to_replay: true });
+      expect(await fakeGithubInvocations(fake.marker)).toEqual([['api', 'repos/owner/repo'], ['api', 'repos/owner/repo']]);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      await rm(repo.root, { recursive: true, force: true });
+    }
   });
 
   it('stages and commits local files with the configured PAT account identity', async () => {
@@ -294,6 +529,26 @@ async function fixtureRepo() {
   return { root, tokenFile };
 }
 
+type FakeGithubResponse = { code?: number; stdout?: string; stderr?: string };
+type FakeGithubScenario = { preflight?: FakeGithubResponse; commands?: FakeGithubResponse[] };
+
+async function fakeGithubWrapper(root: string, scenario: FakeGithubScenario) {
+  const wrapper = path.join(root, 'fake-gh.mjs');
+  const scenarioPath = path.join(root, 'fake-gh-scenario.json');
+  const statePath = path.join(root, 'fake-gh-state.json');
+  const marker = path.join(root, 'fake-gh-invocations.jsonl');
+  await writeFile(scenarioPath, JSON.stringify(scenario));
+  await writeFile(statePath, JSON.stringify({ command_index: 0 }));
+  await writeFile(wrapper, `#!/usr/bin/env node\nimport { appendFileSync, readFileSync, writeFileSync } from 'node:fs';\nconst scenarioPath = ${JSON.stringify(scenarioPath)};\nconst statePath = ${JSON.stringify(statePath)};\nconst markerPath = ${JSON.stringify(marker)};\nconst args = process.argv.slice(2);\nappendFileSync(markerPath, JSON.stringify(args) + '\\n');\nconst scenario = JSON.parse(readFileSync(scenarioPath, 'utf8'));\nlet response;\nif (args[0] === 'api' && args[1] === 'rate_limit') {\n  response = scenario.preflight ?? { code: 0, stdout: '{}' };\n} else {\n  const state = JSON.parse(readFileSync(statePath, 'utf8'));\n  const commands = scenario.commands ?? [];\n  response = commands[Math.min(state.command_index, Math.max(commands.length - 1, 0))] ?? { code: 0, stdout: '' };\n  state.command_index += 1;\n  writeFileSync(statePath, JSON.stringify(state));\n}\nif (response.stdout) process.stdout.write(String(response.stdout));\nif (response.stderr) process.stderr.write(String(response.stderr));\nprocess.exit(Number.isInteger(response.code) ? response.code : 0);\n`);
+  await chmod(wrapper, 0o755);
+  return { wrapper, marker };
+}
+
+async function fakeGithubInvocations(marker: string): Promise<string[][]> {
+  const text = await readFile(marker, 'utf8');
+  return text.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line) as string[]);
+}
+
 function workspace(root: string, tokenFile?: string): Workspace {
   return {
     id: 'test',
@@ -312,11 +567,11 @@ function workspace(root: string, tokenFile?: string): Workspace {
   };
 }
 
-function configForGithub(root: string, tokenFile: string): AppConfig {
+function configForGithub(root: string, tokenFile: string, githubCliWrapper = process.execPath): AppConfig {
   return {
     ...config,
     server: { host: '127.0.0.1', port: 0, auth: { enabled: false, bearer_token_env: 'TEST_TOKEN', allow_loopback_without_auth: true }, rate_limit: { enabled: false, window_ms: 60000, max_requests: 120, trust_proxy_headers: false }, tool_annotations: { mode: 'honest' }, exposed_tools: [] },
-    workspaces: [{ ...workspace(root, tokenFile), id: 'anna', git: { github_token_file: tokenFile, github_cli_wrapper: process.execPath } }],
+    workspaces: [{ ...workspace(root, tokenFile), id: 'anna', git: { github_token_file: tokenFile, github_cli_wrapper: githubCliWrapper } }],
     brokered_executors: { enabled: false, include_action_schema: false, default_ttl_ms: 60000, default_lease_ms: 30000, executors: [] }
   };
 }
