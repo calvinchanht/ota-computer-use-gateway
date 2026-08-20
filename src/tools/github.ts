@@ -115,7 +115,7 @@ function initialRateBudget(policy: NormalizedRatePolicy, safeToReplay: boolean):
 
 function skippedRateBudgetResult(workspace: Workspace, cmd: string[], cwd: string, rateBudget: RateBudget) {
   return ok('github command skipped by rate budget', {
-    command: ['gh', ...cmd], cwd, exit_code: null, timed_out: false, output: '', truncated: false,
+    command: ['gh', ...redactAuthorizationHeaderArgs(cmd)], cwd, exit_code: null, timed_out: false, output: '', truncated: false,
     auth_lane: workspace.git?.github_cli_wrapper ? 'configured_wrapper' : 'configured_token_env',
     rate_budget: { ...rateBudget, execution: 'skipped_rate_budget' }
   });
@@ -265,11 +265,11 @@ function isImplicitPostArg(arg: string): boolean {
 function classifyRateLimit(text: string): RateLimitObservation | undefined {
   const retryAfterMs = retryAfterFromText(text);
   const resetAt = resetAtFromText(text);
-  if (/secondary rate limit|abuse detection mechanism|abuse rate limit/i.test(text)) {
-    return { classification: 'secondary_limited', retry_after_ms: retryAfterMs, reset_at: resetAt };
-  }
   if (/api rate limit exceeded|x-ratelimit-remaining\s*[:=]\s*0|rate limit remaining\s*[:=]\s*0/i.test(text)) {
     return { classification: 'primary_exhausted', reset_at: resetAt, retry_after_ms: retryAfterMs };
+  }
+  if (/secondary rate limit|abuse detection mechanism|abuse rate limit/i.test(text)) {
+    return { classification: 'secondary_limited', retry_after_ms: retryAfterMs, reset_at: resetAt };
   }
   if (/\bHTTP\s+(403|429)\b|\bstatus\s*[:=]?\s*(403|429)\b|rate limit/i.test(text)) {
     return { classification: 'rate_limited_unknown', reset_at: resetAt, retry_after_ms: retryAfterMs };
@@ -336,7 +336,7 @@ async function githubResult(config: AppConfig, workspace: Workspace, cmd: string
   const output = redactGithubOutput(displayOutput, token, sanitizeResultsEnabled(config));
   const limited = truncateText(output, Math.min(Math.max(1, maxOutputChars), 50000));
   return ok('github command finished', {
-    command: ['gh', ...cmd],
+    command: ['gh', ...(protectAuthorizationHeaders ? redactAuthorizationHeaderArgs(cmd) : cmd)],
     cwd,
     exit_code: result.code,
     timed_out: result.timed_out,
@@ -344,6 +344,35 @@ async function githubResult(config: AppConfig, workspace: Workspace, cmd: string
     truncated: limited.truncated,
     auth_lane: workspace.git?.github_cli_wrapper ? 'configured_wrapper' : 'configured_token_env'
   });
+}
+
+function redactAuthorizationHeaderArgs(args: string[]): string[] {
+  const redacted = [...args];
+  for (let index = 0; index < redacted.length; index++) {
+    const arg = redacted[index];
+    if (arg === '-H' || arg === '--header') {
+      if (redacted[index + 1] !== undefined) redacted[index + 1] = redactAuthorizationHeaderValue(redacted[index + 1]);
+      index++;
+      continue;
+    }
+    if (arg.startsWith('--header=')) {
+      redacted[index] = `--header=${redactAuthorizationHeaderValue(arg.slice('--header='.length))}`;
+      continue;
+    }
+    if (arg.startsWith('-H=')) {
+      redacted[index] = `-H=${redactAuthorizationHeaderValue(arg.slice('-H='.length))}`;
+      continue;
+    }
+    if (arg.startsWith('-H') && arg.length > 2) {
+      redacted[index] = `-H${redactAuthorizationHeaderValue(arg.slice(2))}`;
+    }
+  }
+  return redacted;
+}
+
+function redactAuthorizationHeaderValue(value: string): string {
+  const prefix = value.match(/^(\s*(?:proxy-)?authorization\s*:\s*)/i)?.[1];
+  return prefix ? `${prefix}[AUTHORIZATION_REDACTED]` : value;
 }
 
 function redactAuthorizationHeaderLines(text: string): string {

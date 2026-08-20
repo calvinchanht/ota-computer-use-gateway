@@ -148,14 +148,17 @@ describe('git display hygiene', () => {
     const ws = workspace(repo.root, repo.tokenFile);
     ws.git = { ...ws.git, github_cli_wrapper: fake.wrapper };
 
-    const result = await githubCliTool(config, ws, ['api', 'repos/owner/repo'], '.', 5000, 20000, {
+    const command = ['api', 'repos/owner/repo', '--header=Authorization: Bearer synthetic-skip-auth'];
+    const result = await githubCliTool(config, ws, command, '.', 5000, 20000, {
       preflight: true,
       resource: 'core',
       min_remaining: 1
     });
-    const data = result.data as { output: string; rate_budget: Record<string, unknown> };
+    const data = result.data as { command: string[]; output: string; rate_budget: Record<string, unknown> };
     expect(result.summary).toBe('github command skipped by rate budget');
     expect(data.output).toBe('');
+    expect(data.command).toEqual(['gh', 'api', 'repos/owner/repo', '--header=Authorization: [AUTHORIZATION_REDACTED]']);
+    expect(JSON.stringify(data.command)).not.toContain('synthetic-skip-auth');
     expect(data.rate_budget).toMatchObject({
       classification: 'primary_exhausted',
       resource: 'core',
@@ -212,6 +215,36 @@ describe('git display hygiene', () => {
       reset_at: '2033-05-18T03:33:20.000Z'
     });
     expect(await fakeGithubInvocations(fake.marker)).toEqual([['api', 'repos/owner/repo']]);
+  });
+
+  it('gives primary exhaustion precedence over mixed secondary-limit retry evidence and never replays it', async () => {
+    const repo = await fixtureRepo();
+    const fake = await fakeGithubWrapper(repo.root, {
+      commands: [
+        {
+          code: 1,
+          stderr: 'gh: You have exceeded a secondary rate limit. Retry-After: 0.01 seconds (HTTP 403)\nX-RateLimit-Remaining: 0\nX-RateLimit-Reset: 2000000000\n'
+        },
+        { code: 0, stdout: 'must-not-retry' }
+      ]
+    });
+    const ws = workspace(repo.root, repo.tokenFile);
+    ws.git = { ...ws.git, github_cli_wrapper: fake.wrapper };
+
+    const command = ['api', 'repos/owner/repo'];
+    const result = await githubCliTool(config, ws, command, '.', 5000, 20000, {
+      retry_mode: 'safe_read_once',
+      max_wait_ms: 100
+    });
+    const data = result.data as { rate_budget: Record<string, unknown> };
+    expect(data.rate_budget).toMatchObject({
+      classification: 'primary_exhausted',
+      retry_after_ms: 10,
+      safe_to_replay: true,
+      automatic_retry_count: 0,
+      reset_at: '2033-05-18T03:33:20.000Z'
+    });
+    expect(await fakeGithubInvocations(fake.marker)).toEqual([command]);
   });
 
   it.each([
@@ -297,17 +330,43 @@ describe('git display hygiene', () => {
     expect(await fakeGithubInvocations(fake.marker)).toEqual([['api', 'repos/owner/repo']]);
   });
 
-  it('preserves the exact legacy result keys when rate_policy is absent', async () => {
+  it('preserves the exact legacy result keys and command echo when rate_policy is absent', async () => {
     const repo = await fixtureRepo();
     const fake = await fakeGithubWrapper(repo.root, { commands: [{ code: 0, stdout: 'legacy-output' }] });
     const ws = workspace(repo.root, repo.tokenFile);
     ws.git = { ...ws.git, github_cli_wrapper: fake.wrapper };
 
-    const result = await githubCliTool(config, ws, ['issue', 'list'], '.');
+    const command = ['api', 'repos/owner/repo', '--header=Authorization: Bearer synthetic-legacy-auth'];
+    const result = await githubCliTool(config, ws, command, '.');
     const data = result.data as Record<string, unknown>;
     expect(Object.keys(data).sort()).toEqual(['auth_lane', 'command', 'cwd', 'exit_code', 'output', 'timed_out', 'truncated']);
+    expect(data.command).toEqual(['gh', ...command]);
+    expect(JSON.stringify(data.command)).toContain('synthetic-legacy-auth');
     expect(data.output).toBe('legacy-output');
     expect(data).not.toHaveProperty('rate_budget');
+    expect(await fakeGithubInvocations(fake.marker)).toEqual([command]);
+  });
+
+  it.each([
+    ['short split', ['-H', 'Authorization: Bearer synthetic-short-split'], 'synthetic-short-split'],
+    ['long split', ['--header', 'authorization: token synthetic-long-split'], 'synthetic-long-split'],
+    ['long equals', ['--header=Authorization: Bearer synthetic-long-equals'], 'synthetic-long-equals'],
+    ['short equals', ['-H=Authorization: Bearer synthetic-short-equals'], 'synthetic-short-equals'],
+    ['short attached', ['-HProxy-Authorization: Bearer synthetic-short-attached'], 'synthetic-short-attached']
+  ])('redacts policy-enabled %s authorization header argv from returned command without changing execution argv', async (_name, headerArgs, marker) => {
+    const repo = await fixtureRepo();
+    const fake = await fakeGithubWrapper(repo.root, { commands: [{ code: 0, stdout: 'policy-output' }] });
+    const ws = workspace(repo.root, repo.tokenFile);
+    ws.git = { ...ws.git, github_cli_wrapper: fake.wrapper };
+
+    const command = ['api', 'repos/owner/repo', ...(headerArgs as string[])];
+    const result = await githubCliTool(config, ws, command, '.', 5000, 20000, {});
+    const data = result.data as { command: string[]; rate_budget: Record<string, unknown> };
+    const visibleCommand = JSON.stringify(data.command);
+    expect(visibleCommand).toContain('[AUTHORIZATION_REDACTED]');
+    expect(visibleCommand).not.toContain(marker as string);
+    expect(data.rate_budget).toMatchObject({ classification: 'not_checked', execution: 'executed' });
+    expect(await fakeGithubInvocations(fake.marker)).toEqual([command]);
   });
 
   it('redacts configured-token and raw authorization-header material from policy-enabled output', async () => {
