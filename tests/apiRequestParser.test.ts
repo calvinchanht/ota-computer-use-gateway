@@ -95,6 +95,30 @@ describe('HTTP API request normalizer', () => {
     });
   });
 
+  it('accepts github rate_policy while rejecting unrelated github arguments', () => {
+    const accepted = validateApiToolArguments('github', {
+      workspace_id: 'axiom',
+      cmd_array: ['api', 'repos/owner/repo'],
+      rate_policy: { preflight: true, resource: 'core', retry_mode: 'safe_read_once', max_wait_ms: 1000 }
+    });
+    expect(accepted).toMatchObject({ ok: true, contract: { operation: 'github' } });
+
+    const rejected = validateApiToolArguments('github', {
+      workspace_id: 'axiom',
+      cmd_array: ['api', 'repos/owner/repo'],
+      rate_policy: { preflight: true },
+      retry_policy: { count: 3 }
+    });
+    expect(rejected).toMatchObject({
+      ok: false,
+      status: 400,
+      body: {
+        error_code: 'unsupported_parameters',
+        unsupported_parameters: [{ path: 'arguments.retry_policy' }]
+      }
+    });
+  });
+
 
   it('builds redacted OTA misuse events for invalid API tool shape errors', () => {
     const safe = parseApiToolRequestSafe({ arguments: { workspace_id: 'genesis' } });
