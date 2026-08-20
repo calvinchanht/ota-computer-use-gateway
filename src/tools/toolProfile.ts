@@ -154,7 +154,7 @@ function apiBehavior() {
   return {
     estate_admin: { tools: [...ESTATE_TOOL_NAMES], posture: 'read-heavy coarse estate reports with no secret return' },
     run_recovery: 'Every HTTP JSON API tool/batch response includes api.run_id. Use get_gateway_run / GET /api/v1/runs/{run_id} to recover status/results instead of blindly retrying.',
-    idempotency: 'For writes, browser actions, commands, checkpoints, and other non-idempotent operations, send a stable idempotency_key so retries do not duplicate work.',
+    idempotency: 'When a tool schema exposes idempotency_key, send a stable value so retries do not duplicate work. run_command and other direct command tools currently do not expose caller-supplied idempotency_key; recover async command results with api.run_id and do not blindly retry the original command.',
     async_polling: {
       running_status: 'api.status=running',
       operation_status_field: 'api.operation_status',
