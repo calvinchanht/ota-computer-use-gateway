@@ -10,6 +10,8 @@ describe('toolProfile', () => {
     expect(result.data?.aliases).toMatchObject({ Bash: 'run_command' });
     expect(result.data?.deprecated_tools).toMatchObject({ exec: 'run_command' });
     expect(result.data?.api_behavior).toMatchObject({ async_polling: { default_poll_after_ms: 5000 } });
+    expect(result.data?.api_behavior?.idempotency).toContain('When a tool schema exposes idempotency_key');
+    expect(result.data?.api_behavior?.idempotency).toContain('run_command and other direct command tools currently do not expose caller-supplied idempotency_key');
     expect(result.data?.command_runtime).toMatchObject({ run_command_mode: 'argv_first_http' });
     expect(result.data?.github).toMatchObject({
       preferred_surface: 'ota_github_operation',
