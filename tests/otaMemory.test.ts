@@ -26,10 +26,12 @@ describe('OTA-Memory lifecycle adapter', () => {
     const fixture = await memoryFixture();
     const workspace = [...(await buildWorkspaces(fixture.config)).values()][0];
     const result = await otaMemoryCall(workspace, 'memory.begin_turn', {
-      request_id: 'begin-1', intent: 'resume work', scope: { project_id: 'attacker' }, database_path: 'C:\\other.sqlite3'
+      request_id: 'begin-1', intent: 'resume work', scope: { project_id: 'attacker', agent_id: 'attacker' },
+      owner_agent_id: 'attacker', database_path: 'C:\\other.sqlite3'
     });
-    const receipt = result.data as { operation: string; boundary: Record<string, unknown> };
+    const receipt = result.data as { operation: string; owner_agent_id: string; boundary: Record<string, unknown> };
     expect(receipt.operation).toBe('memory.begin_turn');
+    expect(receipt.owner_agent_id).toBe('anna');
     expect(receipt.boundary).toMatchObject({ project_id: 'anna-project', workspace_id: 'anna', agent_id: 'anna' });
     expect(JSON.stringify(result)).not.toContain('other.sqlite3');
   });
@@ -108,7 +110,7 @@ function fakeAdapter(marker: string): string {
     'import json, sys',
     'request = json.load(sys.stdin)',
     'args = request["arguments"]',
-    `result = {"contract_version":"lifecycle-v1","operation":request["operation"],"request_id":args["request_id"],"status":"ok","memory_used":False,"boundary":args["scope"],"adapter_marker":${JSON.stringify(marker)},"receipt":{},"warnings":[],"errors":[]}`,
+    `result = {"contract_version":"lifecycle-v1","operation":request["operation"],"owner_agent_id":request["owner_agent_id"],"request_id":args["request_id"],"status":"ok","memory_used":False,"boundary":args["scope"],"adapter_marker":${JSON.stringify(marker)},"receipt":{},"warnings":[],"errors":[]}`,
     'print(json.dumps(result))',
     ''
   ].join('\n');

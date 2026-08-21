@@ -14,7 +14,8 @@ export async function otaMemoryCall(workspace: Workspace, operation: OtaMemoryOp
   if (!config?.enabled) throw new Error('OTA-Memory is not configured for this workspace');
   const target = await resolveTarget(workspace, optionalString(args.execution_handle));
   const arguments_ = lifecycleArguments(operation, args, target.scope);
-  const receipt = await invokeAdapter(workspace, operation, target.packageRoot, target.databasePath, arguments_, sanitizeResults);
+  const ownerAgentId = requiredString(target.scope.agent_id, 'ota_memory.agent_id');
+  const receipt = await invokeAdapter(workspace, operation, target.packageRoot, target.databasePath, ownerAgentId, arguments_, sanitizeResults);
   return ok(`${operation} ${String(receipt.status ?? 'completed')}`, receipt);
 }
 
@@ -91,9 +92,13 @@ function configuredScope(workspace: Workspace, config: NonNullable<Workspace['ot
   };
 }
 
-async function invokeAdapter(workspace: Workspace, operation: OtaMemoryOperation, packageRoot: string, databasePath: string, args: JsonObject, sanitizeResults: boolean): Promise<JsonObject> {
+async function invokeAdapter(workspace: Workspace, operation: OtaMemoryOperation, packageRoot: string, databasePath: string, ownerAgentId: string, args: JsonObject, sanitizeResults: boolean): Promise<JsonObject> {
   const config = requiredConfig(workspace);
-  const request = JSON.stringify({ operation, database_path: databasePath, arguments: args });
+  const request = JSON.stringify({
+    operation, database_path: databasePath,
+    owner_agent_id: ownerAgentId,
+    arguments: args
+  });
   let output: string;
   try { output = await runPython(config.python_executable, packageRoot, request, config.timeout_ms); }
   catch (error) { throw new Error(redactAdapterError(error, [packageRoot, databasePath, config.python_executable], sanitizeResults)); }
