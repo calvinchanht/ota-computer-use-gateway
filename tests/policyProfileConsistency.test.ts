@@ -8,6 +8,7 @@ describe('policy and tool profile consistency', () => {
     const policy = workspacePolicy(fixtureWorkspace()).data;
     const profile = toolProfile().data;
     for (const tool of profile?.canonical_tools ?? []) {
+      if (tool === 'memory_search' || tool === 'memory_write') continue;
       expect(policy?.allowed_tools, tool).toContain(tool);
     }
   });
@@ -19,9 +20,13 @@ describe('policy and tool profile consistency', () => {
 
     const enabled = workspacePolicy(fixtureWorkspace()).data;
     expect(enabled?.allowed_tools).toEqual(expect.arrayContaining(memoryTools));
+    expect(enabled?.allowed_tools).not.toContain('memory_search');
+    expect(enabled?.allowed_tools).not.toContain('memory_write');
 
     const disabled = workspacePolicy(fixtureWorkspace({ ota_memory: { enabled: false } as any })).data;
     for (const tool of memoryTools) expect(disabled?.allowed_tools).not.toContain(tool);
+    expect(disabled?.allowed_tools).toContain('memory_search');
+    expect(disabled?.allowed_tools).toContain('memory_write');
   });
 
   it('does not advertise deprecated aliases in workspace policy', () => {

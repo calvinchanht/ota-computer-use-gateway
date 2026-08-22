@@ -7,8 +7,13 @@ import type { RegisterContext } from './types.js';
 import { contentHeuristicsEnabled, redactSecretValuesEnabled, sanitizeResultsEnabled } from '../../core/securityPolicy.js';
 
 export function registerMemoryTools(context: RegisterContext): void {
-  registerMemorySearch(context);
-  registerMemoryWrite(context);
+  const hasLegacyMemoryWorkspace = [...context.workspaces.values()].some(
+    (workspace) => !workspace.ota_memory?.enabled
+  );
+  if (hasLegacyMemoryWorkspace) {
+    registerMemorySearch(context);
+    registerMemoryWrite(context);
+  }
   registerProjectContext(context);
   registerContextSnapshot(context);
   registerAgentBootstrap(context);

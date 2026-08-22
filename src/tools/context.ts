@@ -4,6 +4,7 @@ import { agentPath, ensureAgentDir, readAgentFile } from '../core/agentDir.js';
 import { ok } from '../core/result.js';
 import { looksSecret } from '../core/secrets.js';
 import type { Workspace } from '../core/workspaces.js';
+import { OTA_MEMORY_TOOL_NAMES } from './otaMemory.js';
 
 const ROOT_CONTEXT = ['AGENTS.md', 'AGENTS.override.md', 'README.md'];
 const AGENT_CONTEXT = [
@@ -130,7 +131,11 @@ function capabilityDiscovery(workspace: Workspace) {
     patch_tools: workspace.allow_patch ? ['edit_file', 'propose_patch', 'apply_patch'] : [],
     process_tools: workspace.allow_tests ? ['run_command', 'start_process', 'read_process', 'list_processes', 'write_process', 'stop_process'] : [],
     autonomy_guidance: 'Routine scoped workspace/computer actions do not require operator confirmation when the configured workspace policy grants the capability. Do not refuse just because a path name looks sensitive; workspace policy may intentionally grant full read/write/list access inside the workspace root, including secrets/ when needed for the task. Never paste bearer tokens, PATs, OAuth tokens, private keys, or raw credential contents into chat/external systems unless the operator explicitly asks for that exact disclosure/use.',
-    continuity_tools: ['get_agent_bootstrap', 'get_context_snapshot', 'get_project_context', 'memory_search', 'memory_write', 'record_progress', 'record_decision', 'update_current_task', 'record_handoff', 'checkpoint_thread'],
+    continuity_tools: [
+      'get_agent_bootstrap', 'get_context_snapshot', 'get_project_context',
+      ...(workspace.ota_memory?.enabled ? [...OTA_MEMORY_TOOL_NAMES] : ['memory_search', 'memory_write']),
+      'record_progress', 'record_decision', 'update_current_task', 'record_handoff', 'checkpoint_thread'
+    ],
     skill_tools: ['list_skills', 'read_skill'],
     artifact_tools: ['list_artifacts', 'record_artifact'],
     browser_tools: workspace.allow_screen || workspace.allow_mouse_keyboard ? ['list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_cdp_call', 'browser_cdp_batch', 'browser_cdp_browser_call', 'browser_cdp_browser_batch'] : [],

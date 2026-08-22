@@ -51,6 +51,8 @@ describe('OTA-Memory lifecycle adapter', () => {
 
     const server = await createServer(fixture.config);
     const tools = (server as unknown as { _registeredTools: Record<string, { inputSchema: unknown }> })._registeredTools;
+    expect(tools.memory_search).toBeUndefined();
+    expect(tools.memory_write).toBeUndefined();
     const shape = zodShape(tools.memory_begin_turn.inputSchema);
     expect(Object.keys(shape)).toContain('execution_handle');
     expect(Object.keys(shape)).not.toContain('database_path');
