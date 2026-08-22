@@ -62,6 +62,12 @@ describe('OTA-Memory lifecycle adapter', () => {
       content: 'Provider write smoke passed.', reason: 'explicit provider smoke' }]).success).toBe(true);
     expect(candidates.safeParse([{ candidate_key: 'provider-smoke',
       content: 'Provider write smoke passed.', reason: 'explicit provider smoke' }]).success).toBe(false);
+    expect(candidates.safeParse([{
+      candidate_key: 'replace-current', kind: 'supersession',
+      target: { record_type: 'observation', record_id: 'obs_current' },
+      replacement: { kind: 'observation', content: 'New current checkpoint.' },
+      reason: 'replace stale checkpoint'
+    }]).success).toBe(true);
   });
 });
 

@@ -24,7 +24,19 @@ const evidenceCandidate = z.object({
   candidate_key: z.string().min(1), kind: z.literal('tool_evidence'), summary: z.string().min(1),
   reason: z.string().min(1), source_refs: z.record(z.string(), z.unknown())
 }).passthrough();
-const replacementCandidate = z.union([observationCandidate, outcomeCandidate, evidenceCandidate]);
+const replacementObservation = z.object({
+  kind: z.literal('observation'), content: z.string().min(1),
+  reason: z.string().min(1).optional(), source_refs: sourceRefs
+}).passthrough();
+const replacementOutcome = z.object({
+  kind: z.literal('outcome'), summary: z.string().min(1),
+  reason: z.string().min(1).optional(), event_type: z.string().optional(), source_refs: sourceRefs
+}).passthrough();
+const replacementEvidence = z.object({
+  kind: z.literal('tool_evidence'), summary: z.string().min(1),
+  reason: z.string().min(1).optional(), source_refs: z.record(z.string(), z.unknown())
+}).passthrough();
+const replacementCandidate = z.union([replacementObservation, replacementOutcome, replacementEvidence]);
 const commitCandidate = z.discriminatedUnion('kind', [
   observationCandidate, outcomeCandidate, evidenceCandidate,
   z.object({ candidate_key: z.string().min(1), kind: z.literal('correction'), target: memoryTarget,
