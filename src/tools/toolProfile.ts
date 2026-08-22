@@ -2,6 +2,7 @@ import { ok } from '../core/result.js';
 import { commandRuntimeInfo } from '../core/commandAdapter.js';
 import { conservativeCensoringEnabled, environmentFilteringEnabled, resultSanitizationEnabled, secretContentHeuristicsEnabled, secretValueRedactionEnabled, type AppConfig } from '../config/schema.js';
 import { ESTATE_TOOL_NAMES, LEGACY_GENESIS_TOOL_ALIASES } from './genesis.js';
+import { OTA_MEMORY_TOOL_NAMES } from './otaMemory.js';
 
 export function toolProfile(config?: AppConfig) {
   return ok('tool profile', {
@@ -29,7 +30,7 @@ export function toolProfile(config?: AppConfig) {
     optional_integrations: {
       ota_memory: {
         config_key: 'workspaces[].ota_memory',
-        tools: ['memory_begin_turn', 'memory_commit_turn', 'memory_flush_session'],
+        tools: [...OTA_MEMORY_TOOL_NAMES],
         scope: 'server-owned database, project, workspace, agent, user, and privacy identity'
       }
     },
@@ -44,6 +45,7 @@ export function toolProfile(config?: AppConfig) {
 function canonicalTools(): string[] {
   return [
     ...ESTATE_TOOL_NAMES,
+    ...OTA_MEMORY_TOOL_NAMES,
     'list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify',
     'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch',
     'cua_driver_status', 'computer_screen_click', 'computer_window_click', 'computer_screen_mouse_move', 'computer_window_mouse_move', 'computer_screen_drag', 'computer_window_drag', 'computer_screen_scroll', 'computer_window_scroll', 'cua_driver_call', 'cua_driver_batch',

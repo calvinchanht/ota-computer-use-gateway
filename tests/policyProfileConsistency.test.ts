@@ -12,6 +12,18 @@ describe('policy and tool profile consistency', () => {
     }
   });
 
+  it('keeps canonical OTA-Memory tools conditional on workspace enablement', () => {
+    const profile = toolProfile().data;
+    const memoryTools = ['memory_begin_turn', 'memory_commit_turn', 'memory_flush_session'];
+    expect(profile?.canonical_tools).toEqual(expect.arrayContaining(memoryTools));
+
+    const enabled = workspacePolicy(fixtureWorkspace()).data;
+    expect(enabled?.allowed_tools).toEqual(expect.arrayContaining(memoryTools));
+
+    const disabled = workspacePolicy(fixtureWorkspace({ ota_memory: { enabled: false } as any })).data;
+    for (const tool of memoryTools) expect(disabled?.allowed_tools).not.toContain(tool);
+  });
+
   it('does not advertise deprecated aliases in workspace policy', () => {
     const policy = workspacePolicy(fixtureWorkspace()).data;
     const profile = toolProfile().data;
@@ -174,6 +186,19 @@ function fixtureWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     browser: { profiles: [] },
     commands: { test: 'npm test' },
     filesystem: { machine_admin_host_scope: true, host_root: '/' },
+    ota_memory: {
+      enabled: true,
+      python_executable: 'python',
+      package_root: '/tmp/ota-memory',
+      database_path: '/tmp/ota-memory.sqlite3',
+      project_id: 'test',
+      workspace_id: 'test',
+      agent_id: 'test',
+      user_id: '',
+      scope_type: 'project',
+      privacy: 'project_only',
+      timeout_ms: 30000
+    },
     ...overrides
   };
 }
