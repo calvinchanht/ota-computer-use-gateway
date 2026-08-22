@@ -397,8 +397,12 @@ function ensureWindowMouse(workspace: Workspace, hwnd: unknown, x: unknown, y: u
   ensureWindows();
 }
 
+export function windowsPowerShellJsonScript(script: string) {
+  return `$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); $OutputEncoding=[Console]::OutputEncoding; ${script}`;
+}
+
 async function psJson(script: string): Promise<unknown> {
-  const encoded = Buffer.from(`$ProgressPreference='SilentlyContinue'; ${script}`, 'utf16le').toString('base64');
+  const encoded = Buffer.from(windowsPowerShellJsonScript(script), 'utf16le').toString('base64');
   const { stdout, stderr } = await execFileAsync('powershell.exe', ['-NoProfile', '-Sta', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], { timeout: 30000, maxBuffer: MAX_POWERSHELL_BUFFER });
   const text = stdout.trim();
   if (!text) throw new Error(`PowerShell command returned no JSON${stderr.trim() ? `: ${stderr.trim()}` : ''}`);
