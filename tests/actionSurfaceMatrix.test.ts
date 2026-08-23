@@ -52,15 +52,14 @@ describe('role x host OS action surface matrix', () => {
     ]));
   });
 
-  it('keeps lifecycle memory tools registered even through a stale exposed-tools snapshot', async () => {
+  it('does not let stale exposed-tools snapshots hide canonical role actions', async () => {
     const workspace = fullWorkspace({ ota_memory: { enabled: false } as any });
     const cfg = config(workspace);
     cfg.server.exposed_tools = ['read_file'];
     const server = await createServer(cfg);
     const registered = Object.keys((server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools);
-    expect(registered).toContain('read_file');
+    expect(registered).toEqual(expect.arrayContaining([...CANONICAL_PROVIDER_TOOL_NAMES]));
     expect(registered).toEqual(expect.arrayContaining([...MEMORY_LIFECYCLE_TOOL_NAMES]));
-    expect(registered).not.toContain('windows_screenshot');
   });
 
   it('keeps the stable OTA-Memory lifecycle interface on every profile before and after backend cutover', () => {
