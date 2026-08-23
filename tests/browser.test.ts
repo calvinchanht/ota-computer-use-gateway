@@ -151,6 +151,25 @@ describe('browser CDP proxy tools', () => {
     expect(sends[0]).toContain('Browser.getVersion');
   });
 
+  it('forces Target.createTarget into a separate unfocused browser window', async () => {
+    mockFetch({ webSocketDebuggerUrl: 'ws://cdp/browser' });
+    const sends = mockWebSocket({ targetId: 'new-page' });
+    await browserCdpBrowserCall(controlWorkspace(), 'Target.createTarget', {
+      url: 'https://example.com/',
+      newWindow: false,
+      focus: true,
+      hidden: true
+    });
+    const sent = JSON.parse(sends[0]);
+    expect(sent.method).toBe('Target.createTarget');
+    expect(sent.params).toMatchObject({
+      url: 'https://example.com/',
+      newWindow: true,
+      focus: false,
+      hidden: false
+    });
+  });
+
   it('proxies browser-level CDP batches through the scoped browser websocket', async () => {
     mockFetch({ webSocketDebuggerUrl: 'ws://cdp/browser' });
     const sends = mockWebSocket({ ok: true });
