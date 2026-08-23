@@ -1,8 +1,10 @@
+import { createServer as createHttpServer } from 'node:http';
 import { describe, expect, it } from 'vitest';
 import type { AppConfig } from '../src/config/schema.js';
 import type { PlatformKind } from '../src/core/platform.js';
 import type { Workspace } from '../src/core/workspaces.js';
 import { createServer } from '../src/server/create.js';
+import { createHttpRequestHandler } from '../src/server/http.js';
 import { BROWSER_TOOL_NAMES, CANONICAL_PROVIDER_TOOL_NAMES, MAC_COMPUTER_TOOL_NAMES, MEMORY_LIFECYCLE_TOOL_NAMES, WINDOWS_COMPUTER_TOOL_NAMES } from '../src/tools/actionSurface.js';
 import { allowedTools, effectiveApiSets, workspacePolicy } from '../src/tools/policy.js';
 
@@ -18,11 +20,13 @@ describe('role x host OS action surface matrix', () => {
     }
   });
 
-  it('registers every canonical provider action in MCP', async () => {
+  it('registers the complete OS-effective workspace policy surface in MCP', async () => {
     const workspace = fullWorkspace({ ota_memory: { enabled: false } as any });
     const server = await createServer(config(workspace));
     const registered = Object.keys((server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools);
-    for (const tool of CANONICAL_PROVIDER_TOOL_NAMES) expect(registered, tool).toContain(tool);
+    const expected = allowedTools(workspace);
+    for (const tool of expected) expect(registered, tool).toContain(tool);
+    for (const tool of [...MAC_COMPUTER_TOOL_NAMES, ...WINDOWS_COMPUTER_TOOL_NAMES]) expect(registered).not.toContain(tool);
   });
 
   it('makes macOS and Windows computer roles host-specific while browser stays cross-platform', () => {
@@ -52,14 +56,46 @@ describe('role x host OS action surface matrix', () => {
     ]));
   });
 
-  it('does not let stale exposed-tools snapshots hide canonical role actions', async () => {
+  it('does not let stale exposed-tools snapshots add or hide canonical role actions', async () => {
     const workspace = fullWorkspace({ ota_memory: { enabled: false } as any });
     const cfg = config(workspace);
-    cfg.server.exposed_tools = ['read_file'];
+    cfg.server.exposed_tools = ['read_file', 'windows_screenshot'];
     const server = await createServer(cfg);
     const registered = Object.keys((server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools);
-    expect(registered).toEqual(expect.arrayContaining([...CANONICAL_PROVIDER_TOOL_NAMES]));
+    expect(registered).toEqual(expect.arrayContaining(allowedTools(workspace)));
     expect(registered).toEqual(expect.arrayContaining([...MEMORY_LIFECYCLE_TOOL_NAMES]));
+    expect(registered).not.toContain('windows_screenshot');
+  });
+
+  it('lets workspace policy, not stale server.exposed_tools, govern canonical HTTP tools', async () => {
+    const workspace = fullWorkspace({
+      api_sets: { workspace: true, browser: false, computer: false, computer_windows: false, machine_admin: false, estate_admin: false }
+    });
+    const cfg = config(workspace);
+    cfg.server.exposed_tools = ['read_file', 'windows_screenshot'];
+    const server = createHttpServer(createHttpRequestHandler(cfg));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('expected TCP address');
+      const endpoint = `http://127.0.0.1:${address.port}/api/v1/tool`;
+      const policyResponse = await fetch(endpoint, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ tool: 'get_workspace_policy', arguments: { workspace_id: 'test' } })
+      });
+      const policy = await policyResponse.json() as { ok: boolean; summary?: string };
+      expect(policy.ok, policy.summary).toBe(true);
+
+      const wrongOsResponse = await fetch(endpoint, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ tool: 'windows_screenshot', arguments: { workspace_id: 'test' } })
+      });
+      const wrongOs = await wrongOsResponse.json() as { ok: boolean; summary?: string };
+      expect(wrongOs.ok).toBe(false);
+      expect(wrongOs.summary).toMatch(/workspace api_sets profile|requires Windows/i);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
   });
 
   it('keeps the stable OTA-Memory lifecycle interface on every profile before and after backend cutover', () => {

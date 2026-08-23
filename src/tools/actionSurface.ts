@@ -64,10 +64,6 @@ export const CANONICAL_PROVIDER_TOOL_NAMES = unique([
   ...MEMORY_LIFECYCLE_TOOL_NAMES, ...LEGACY_MEMORY_TOOL_NAMES
 ]);
 
-// Canonical role/OS actions are registered server-wide; workspace policy decides whether a caller may use them.
-// This prevents stale server.exposed_tools snapshots from hiding newly added role-appropriate actions.
-export const ALWAYS_EXPOSED_PROVIDER_TOOL_NAMES = [...CANONICAL_PROVIDER_TOOL_NAMES] as const;
-
 export function capabilityToolGroups() {
   return {
     workspace: [...WORKSPACE_TOOL_NAMES],

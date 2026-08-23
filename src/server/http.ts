@@ -12,6 +12,7 @@ import { fail, type ToolResult } from '../core/result.js';
 import { heartbeat } from '../tools/heartbeat.js';
 import { workspaceStatus } from '../tools/workspace.js';
 import { toolProfile } from '../tools/toolProfile.js';
+import { CANONICAL_PROVIDER_TOOL_NAMES } from '../tools/actionSurface.js';
 import { allowedTools, workspacePolicy } from '../tools/policy.js';
 import { deleteFileTool, deletePathTool, editFileTool, listDir, readBinaryFileTool, readFileTool, statPath, treeTool, workspaceInventory, writeBinaryFileTool, writeFileTool } from '../tools/files.js';
 import { gitCliTool, gitDiff, gitLfsPublishCurrentBranch, gitPushCurrentBranch, gitStatus } from '../tools/git.js';
@@ -698,7 +699,9 @@ async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typ
 }
 
 function serverExposesTool(exposed: string[], tool: string): boolean {
-  return exposed.map(normalizeEstateToolName).includes(normalizeEstateToolName(tool));
+  const normalized = normalizeEstateToolName(tool);
+  if (CANONICAL_PROVIDER_TOOL_NAMES.includes(normalized as typeof CANONICAL_PROVIDER_TOOL_NAMES[number])) return true;
+  return exposed.map(normalizeEstateToolName).includes(normalized);
 }
 
 function callWorkspaceApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
