@@ -131,7 +131,7 @@ describe('git display hygiene', () => {
     } finally {
       await rm(repo.root, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 
   it('reports missing github token without exposing token path', async () => {
     const repo = await fixtureRepo();

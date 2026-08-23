@@ -1,7 +1,7 @@
 import { createServer as createHttpServer } from 'node:http';
 import { describe, expect, it } from 'vitest';
 import type { AppConfig } from '../src/config/schema.js';
-import type { PlatformKind } from '../src/core/platform.js';
+import { platformKind, type PlatformKind } from '../src/core/platform.js';
 import type { Workspace } from '../src/core/workspaces.js';
 import { createServer } from '../src/server/create.js';
 import { createHttpRequestHandler } from '../src/server/http.js';
@@ -24,9 +24,11 @@ describe('role x host OS action surface matrix', () => {
     const workspace = fullWorkspace({ ota_memory: { enabled: false } as any });
     const server = await createServer(config(workspace));
     const registered = Object.keys((server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools);
-    const expected = allowedTools(workspace);
+    const hostPlatform = platformKind();
+    const expected = allowedTools(workspace, hostPlatform);
     for (const tool of expected) expect(registered, tool).toContain(tool);
-    for (const tool of [...MAC_COMPUTER_TOOL_NAMES, ...WINDOWS_COMPUTER_TOOL_NAMES]) expect(registered).not.toContain(tool);
+    const incompatible = hostPlatform === 'macos' ? WINDOWS_COMPUTER_TOOL_NAMES : hostPlatform === 'windows' ? MAC_COMPUTER_TOOL_NAMES : [...MAC_COMPUTER_TOOL_NAMES, ...WINDOWS_COMPUTER_TOOL_NAMES];
+    for (const tool of incompatible) expect(registered).not.toContain(tool);
   });
 
   it('makes macOS and Windows computer roles host-specific while browser stays cross-platform', () => {
@@ -59,12 +61,14 @@ describe('role x host OS action surface matrix', () => {
   it('does not let stale exposed-tools snapshots add or hide canonical role actions', async () => {
     const workspace = fullWorkspace({ ota_memory: { enabled: false } as any });
     const cfg = config(workspace);
-    cfg.server.exposed_tools = ['read_file', 'windows_screenshot'];
+    const hostPlatform = platformKind();
+    const incompatibleTool = hostPlatform === 'windows' ? 'cua_driver_screenshot' : 'windows_screenshot';
+    cfg.server.exposed_tools = ['read_file', incompatibleTool];
     const server = await createServer(cfg);
     const registered = Object.keys((server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools);
-    expect(registered).toEqual(expect.arrayContaining(allowedTools(workspace)));
+    expect(registered).toEqual(expect.arrayContaining(allowedTools(workspace, hostPlatform)));
     expect(registered).toEqual(expect.arrayContaining([...MEMORY_LIFECYCLE_TOOL_NAMES]));
-    expect(registered).not.toContain('windows_screenshot');
+    expect(registered).not.toContain(incompatibleTool);
   });
 
   it('lets workspace policy, not stale server.exposed_tools, govern canonical HTTP tools', async () => {

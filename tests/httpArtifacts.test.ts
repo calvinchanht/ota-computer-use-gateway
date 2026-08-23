@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { AppConfig } from '../src/config/schema.js';
 import { signedArtifactUrl } from '../src/server/artifactSignatures.js';
 import { createHttpRequestHandler } from '../src/server/http.js';
+import { fileSymlinksSupported } from './support/symlinkCapabilities.js';
 
 const roots: string[] = [];
 
@@ -28,7 +29,7 @@ describe('HTTP signed artifact serving', () => {
     } finally { await close(server); }
   });
 
-  it('rejects a signed artifact symlink that escapes the artifact root', async () => {
+  it.skipIf(!fileSymlinksSupported())('rejects a signed artifact symlink that escapes the artifact root', async () => {
     const root = await fixtureRoot();
     const outside = join(root, 'outside.txt');
     await writeFile(outside, 'outside secret');
@@ -49,7 +50,7 @@ describe('HTTP signed artifact serving', () => {
     const outside = join(root, 'outside-artifacts');
     await mkdir(outside);
     await writeFile(join(outside, 'escape.txt'), 'outside secret');
-    await symlink(outside, join(root, '.agent', 'artifacts'));
+    await symlink(outside, join(root, '.agent', 'artifacts'), 'junction');
     const server = createServer(createHttpRequestHandler(config(root)));
     await listen(server);
     try {

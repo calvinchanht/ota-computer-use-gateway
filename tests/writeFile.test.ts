@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { editFileTool, writeFileTool } from '../src/tools/files.js';
 import type { AppConfig } from '../src/config/schema.js';
 import type { Workspace } from '../src/core/workspaces.js';
+import { fileSymlinksSupported } from './support/symlinkCapabilities.js';
 
 const config: AppConfig = {
   server: { host: '127.0.0.1', port: 8765 },
@@ -31,7 +32,7 @@ describe('writeFileTool', () => {
   });
 
 
-  it('does not overwrite a file outside the workspace through a symlink', async () => {
+  it.skipIf(!fileSymlinksSupported())('does not overwrite a file outside the workspace through a symlink', async () => {
     const workspace = await fixtureWorkspace(true);
     const outsideRoot = await mkdtemp(path.join(tmpdir(), 'gtp-write-outside-'));
     const outside = path.join(outsideRoot, 'outside.txt');
