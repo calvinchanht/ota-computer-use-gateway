@@ -4,7 +4,7 @@ import type { Workspace } from '../core/workspaces.js';
 import { ok } from '../core/result.js';
 import { assertInside } from '../core/paths.js';
 
-const REMINDER = 'Use CDP directly through browser_cdp_* tools.';
+const REMINDER = 'Use CDP directly through browser_cdp_* tools. Agent-created pages via Target.createTarget are forced into a separate Chrome window.';
 
 type BrowserProfile = NonNullable<Workspace['browser']>['profiles'][number];
 
@@ -245,8 +245,9 @@ export async function browserUploadFileAndVerify(workspace: Workspace, options: 
 export async function browserCdpBrowserCall(workspace: Workspace, method: string, params: Record<string, unknown> = {}, label?: string) {
   assertBrowserControl(workspace);
   const profile = selectedBrowserProfile(workspace, label);
-  const result = await cdpCommand(await browserWebSocketUrl(profile), boundedCdpMethod(method), boundedCdpParams(params));
-  return ok('browser-level CDP call completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, method, result: boundedJson(result) });
+  const boundedMethod = boundedCdpMethod(method);
+  const result = await cdpCommand(await browserWebSocketUrl(profile), boundedMethod, isolatedPageCreationParams(boundedMethod, boundedCdpParams(params)));
+  return ok('browser-level CDP call completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, method: boundedMethod, result: boundedJson(result) });
 }
 
 export async function browserCdpBrowserBatch(workspace: Workspace, calls: CdpBatchStep[], label?: string) {
@@ -262,8 +263,9 @@ export async function browserCdpBrowserBatch(workspace: Workspace, calls: CdpBat
 export async function browserCdpCall(workspace: Workspace, targetId: string, method: string, params: Record<string, unknown> = {}, label?: string) {
   assertBrowserControl(workspace);
   const { profile, target } = await websocketTarget(workspace, targetId, label);
-  const result = await cdpCommand(target.webSocketDebuggerUrl, boundedCdpMethod(method), boundedCdpParams(params));
-  return ok('browser CDP call completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, target: targetSummary(target), method, result: boundedJson(result) });
+  const boundedMethod = boundedCdpMethod(method);
+  const result = await cdpCommand(target.webSocketDebuggerUrl, boundedMethod, isolatedPageCreationParams(boundedMethod, boundedCdpParams(params)));
+  return ok('browser CDP call completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, target: targetSummary(target), method: boundedMethod, result: boundedJson(result) });
 }
 
 export async function browserCdpBatch(workspace: Workspace, targetId: string, calls: CdpBatchStep[], label?: string) {
@@ -632,6 +634,11 @@ function boundedCdpParams(params: Record<string, unknown>) {
   return params;
 }
 
+function isolatedPageCreationParams(method: string, params: Record<string, unknown>) {
+  if (method !== 'Target.createTarget') return params;
+  return { ...params, newWindow: true };
+}
+
 async function oneCdpBatchCall(url: string, step: CdpBatchStep, index: number, allowPageWait: boolean) {
   if ('delay_ms' in step) {
     const delayMs = boundedDelayMs(step.delay_ms);
@@ -640,7 +647,7 @@ async function oneCdpBatchCall(url: string, step: CdpBatchStep, index: number, a
     return { index, kind: 'delay', delay_ms: delayMs, elapsed_ms: Date.now() - started };
   }
   const method = boundedCdpMethod(step.method);
-  const params = boundedCdpParams(step.params ?? {});
+  const params = isolatedPageCreationParams(method, boundedCdpParams(step.params ?? {}));
   const waitFor = step.wait_for ? boundedWaitFor(step.wait_for, allowPageWait) : undefined;
   const timeoutMs = boundedTimeoutMs(step.timeout_ms ?? 10000);
   const started = Date.now();

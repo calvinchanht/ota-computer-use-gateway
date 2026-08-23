@@ -173,6 +173,7 @@ function apiBehavior() {
       on: 'browser api_set grants direct full scoped CDP execution through browser_cdp_browser_* and browser_cdp_* tools.',
       off: 'no CDP session or browser action should be implied.',
       no_observer_fallback: 'Do not downgrade to an observer/read-only browser mode. If CDP binding fails, report the binding failure explicitly.',
+      page_creation_isolation: 'Create new pages with Target.createTarget. The gateway forces newWindow=true so agent-created pages cannot join and displace an anchored Threaddex/ChatGPT tab in the same Chrome window. Do not use window.open for page creation.',
       convenience_tools: ['browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify']
     },
     browser_targets: {
