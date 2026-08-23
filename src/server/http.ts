@@ -78,7 +78,7 @@ import { reportApiShapeMisuse, reportToolMisuse } from './apiMisuse.js';
 import { handleBrokeredExecutorApi, isBrokeredExecutorWorkerRequestAuthorized } from './brokeredExecutorApi.js';
 import { parseApiBatchRequestSafe, parseApiToolRequestSafe } from './apiRequest.js';
 import { readBoundedJsonBody, RequestBodyTooLargeError } from './requestBody.js';
-import { apiShapeErrorResponse, apiToolContract, invalidJsonResponse, validateApiToolArguments } from './apiContract.js';
+import { apiSchemaDocument, apiShapeErrorResponse, apiToolContract, invalidJsonResponse, validateApiToolArguments } from './apiContract.js';
 import { arrayRecordArg, optionalBoolean, optionalNumber, optionalString, optionalStringArray, optionalWriteMode, recordArg, requiredNumber, requiredString, requiredStringArray, requiredTextArg, runCommandCmdArray, stringRecordArg } from './httpArgs.js';
 
 export { otaMisuseEventForApiShapeError, otaMisuseEventForToolError } from './apiMisuse.js';
@@ -88,6 +88,7 @@ export type { ApiShapeErrorBody } from './apiRequest.js';
 
 const MCP_PATH = '/mcp';
 const API_TOOL_PATH = '/api/v1/tool';
+const API_SCHEMA_PATH = '/api/v1/schema';
 const API_GITHUB_PATHS = new Set(['/api/v1/github', '/api/v1/gh']);
 const API_BATCH_PATH = '/api/v1/batch';
 const API_DEBUG_REQUEST_CONTEXT_PATH = '/api/v1/debug/request_context';
@@ -157,6 +158,7 @@ async function handleRequest(config: AppConfig, rateLimiter: RateLimiter, starte
   const signedArtifact = isApiArtifactPath(req) && hasValidArtifactSignature(req);
   if (!signedArtifact && !isAuthorized(config, req) && !isBrokeredExecutorWorkerRequestAuthorized(config, req)) return sendAuthError(config, res);
   if (!rateLimiter.check(config, req)) return sendJson(res, 429, { error: 'rate_limited' });
+  if (isApiSchema(req)) return sendJson(res, 200, apiSchemaDocument());
   if (isApiDebugRequestContext(req)) return handleApiDebugRequestContext(config, req, res);
   if (isBrokeredExecutorPath(req)) return handleBrokeredExecutorApi(config, req, res);
   if (isApiArtifactPath(req)) return handleApiArtifact(config, req, res);
@@ -267,7 +269,7 @@ function isMcp(req: IncomingMessage): boolean {
 
 function isApi(req: IncomingMessage): boolean {
   const path = req.url?.split('?')[0];
-  return path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || API_GITHUB_PATHS.has(path ?? '') || path === API_BATCH_PATH || isApiRunPath(req) || isApiArtifactPath(req) || isBrokeredExecutorPath(req);
+  return path === API_SCHEMA_PATH || path === API_DEBUG_REQUEST_CONTEXT_PATH || path === API_TOOL_PATH || API_GITHUB_PATHS.has(path ?? '') || path === API_BATCH_PATH || isApiRunPath(req) || isApiArtifactPath(req) || isBrokeredExecutorPath(req);
 }
 
 function isApiArtifactPath(req: IncomingMessage): boolean {
@@ -287,6 +289,10 @@ function isApiRunPath(req: IncomingMessage): boolean {
 
 function isApiDebugRequestContext(req: IncomingMessage): boolean {
   return req.url?.split('?')[0] === API_DEBUG_REQUEST_CONTEXT_PATH;
+}
+
+function isApiSchema(req: IncomingMessage): boolean {
+  return req.url?.split('?')[0] === API_SCHEMA_PATH;
 }
 
 function isApiTool(req: IncomingMessage): boolean {

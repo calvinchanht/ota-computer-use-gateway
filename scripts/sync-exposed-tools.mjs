@@ -13,9 +13,20 @@ async function main() {
   enableApiSets(raw, workspaceId, setList(args['enable-api-sets']));
   const workspace = parsedWorkspace(raw, workspaceId);
   raw.server = raw.server ?? {};
-  raw.server.exposed_tools = allowedTools(workspace).sort();
+  const hostPlatform = normalizeHostPlatform(args['host-platform']);
+  raw.server.exposed_tools = allowedTools(workspace, hostPlatform).sort();
   await writeFile(configPath, YAML.stringify(raw));
-  printSummary(configPath, workspaceId, raw.server.exposed_tools);
+  printSummary(configPath, workspaceId, hostPlatform, raw.server.exposed_tools);
+}
+
+
+function normalizeHostPlatform(value) {
+  if (!value) return undefined;
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === 'mac' || normalized === 'darwin') return 'macos';
+  if (normalized === 'win32') return 'windows';
+  if (['linux', 'macos', 'windows'].includes(normalized)) return normalized;
+  throw new Error(`unsupported --host-platform: ${value}`);
 }
 
 function parseArgs(argv) {
@@ -63,11 +74,12 @@ function parsedWorkspace(raw, workspaceId) {
   return workspace;
 }
 
-function printSummary(configPath, workspaceId, tools) {
+function printSummary(configPath, workspaceId, hostPlatform, tools) {
   console.log(JSON.stringify({
     ok: true,
     config: configPath,
     workspace_id: workspaceId,
+    host_platform: hostPlatform ?? process.platform,
     exposed_tool_count: tools.length,
     exposed_tools: tools
   }, null, 2));

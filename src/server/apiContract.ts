@@ -54,6 +54,19 @@ const CONTRACTS: Record<string, ContractSpec> = {
   browser_tail: spec({ workspace_id: 'string required', profile_label: 'string optional', target_id: 'string required', cursor: 'number optional' }),
   browser_manage_tabs: spec({ workspace_id: 'string required', profile_label: 'string optional', action: 'string required', url_contains: 'string optional', title_contains: 'string optional', target_id: 'string optional', include_urls: 'boolean optional', max_close: 'number optional' }),
   browser_upload_file_and_verify: spec({ workspace_id: 'string required', profile_label: 'string optional', target_id: 'string required', selector: 'string required', path: 'string required', verify_visible_text: 'string optional', timeout_ms: 'number optional' }),
+  infer_file_structure: spec({ workspace_id: 'string required', path: 'string required' }),
+  sample_file: spec({ workspace_id: 'string required', path: 'string required', mode: 'string optional', head_lines: 'integer optional', tail_lines: 'integer optional', random_lines: 'integer optional', max_bytes: 'integer optional' }),
+  read_file_chunk: spec({ workspace_id: 'string required', path: 'string required', offset: 'integer optional', max_bytes: 'integer optional' }),
+  read_file_lines: spec({ workspace_id: 'string required', path: 'string required', start_line: 'integer optional', max_lines: 'integer optional' }),
+  read_around: spec({ workspace_id: 'string required', path: 'string required', line: 'integer required', before: 'integer optional', after: 'integer optional' }),
+  search_file: spec({ workspace_id: 'string required', path: 'string required', query: 'string required', max_matches: 'integer optional', context_lines: 'integer optional' }),
+  table_profile: spec({ workspace_id: 'string required', path: 'string required', columns: 'string[] optional' }),
+  query_table: spec({ workspace_id: 'string required', path: 'string required', select: 'string[] optional', where: 'object optional', sort: 'array optional', limit: 'integer optional', offset: 'integer optional' }),
+  query_table_aggregate: spec({ workspace_id: 'string required', path: 'string required', group_by: 'string[] optional', metrics: 'array optional', where: 'object optional' }),
+  json_profile: spec({ workspace_id: 'string required', path: 'string required', depth: 'integer optional', array_samples: 'integer optional' }),
+  query_json: spec({ workspace_id: 'string required', path: 'string required', query: 'string required', max_bytes: 'integer optional' }),
+  patch_file_lines: spec({ workspace_id: 'string required', path: 'string required', start_line: 'integer required', end_line: 'integer optional', replacement: 'string required', expected_sha256: 'string optional', dry_run: 'boolean optional' }),
+  update_table_rows: spec({ workspace_id: 'string required', path: 'string required', where: 'object optional', set: 'object required', dry_run: 'boolean optional', allow_multiple: 'boolean optional' }),
   run_command: spec({ workspace_id: 'string required', cmd_array: 'string[] required', cwd: 'string optional', timeout_ms: 'number optional', max_stdout_bytes: 'number optional', max_stderr_bytes: 'number optional', tail: 'boolean optional', cmd: 'legacy string[] alias only' }, { cmd: ['cmd_array'] }),
     git: spec({ workspace_id: 'string required', cmd_array: 'string[] required', cwd: 'string optional', timeout_ms: 'number optional', max_output_chars: 'number optional' }),
     git_lfs_publish_current_branch: spec({ workspace_id: 'string required', repo_path: 'string optional', remote: 'string optional', branch: 'string optional', force_with_lease_sha: 'full 40-character Git SHA optional' }),
@@ -80,6 +93,14 @@ const CONTRACTS: Record<string, ContractSpec> = {
   memory_commit_turn: spec({ workspace_id: 'string required', request_id: 'string required', idempotency_key: 'string required', candidates: 'array required', execution_handle: 'opaque string optional', session: 'object optional' }),
   memory_flush_session: spec({ workspace_id: 'string required', request_id: 'string required', idempotency_key: 'string required', execution_handle: 'opaque string optional', session: 'object optional', reason: 'string optional', active_task: 'string optional', transcript_summary: 'string optional', decisions: 'array optional', open_questions: 'array optional', artifacts: 'array optional', risks: 'array optional', next_actions: 'array optional', source_record_refs: 'array optional', budget: 'object optional' })
 };
+
+export function apiSchemaDocument() {
+  return {
+    schema_version: '1.0.0',
+    schema_url: API_SCHEMA_URL,
+    operations: Object.fromEntries(Object.entries(CONTRACTS).map(([operation, contract]) => [operation, contract.expected_shape]))
+  };
+}
 
 export function apiEnvelopeContract(): ApiContract {
   return {

@@ -1,45 +1,68 @@
 import { ok } from '../core/result.js';
 import { commandRuntimeInfo } from '../core/commandAdapter.js';
 import type { Workspace } from '../core/workspaces.js';
-import { OTA_MEMORY_TOOL_NAMES } from './otaMemory.js';
+import { platformKind, type PlatformKind } from '../core/platform.js';
 import { conservativeCensoringEnabled, environmentFilteringEnabled, resultSanitizationEnabled, secretContentHeuristicsEnabled, secretValueRedactionEnabled, type AppConfig } from '../config/schema.js';
 import { workspaceChildEnvironmentMode } from '../core/securityPolicy.js';
-import { ESTATE_TOOL_NAMES } from './genesis.js';
+import { BASE_TOOL_NAMES, BROWSER_TOOL_NAMES, ESTATE_ADMIN_TOOL_NAMES, LEGACY_MEMORY_TOOL_NAMES, MAC_COMPUTER_TOOL_NAMES, MACHINE_ADMIN_TOOL_NAMES, MEMORY_LIFECYCLE_TOOL_NAMES, WINDOWS_COMPUTER_TOOL_NAMES, WORKSPACE_EXEC_TOOL_NAMES, WORKSPACE_PATCH_TOOL_NAMES, WORKSPACE_READ_TOOL_NAMES, WORKSPACE_WRITE_TOOL_NAMES } from './actionSurface.js';
 
-export function workspacePolicy(workspace: Workspace, config?: AppConfig) {
+export function workspacePolicy(workspace: Workspace, config?: AppConfig, platform: PlatformKind = platformKind()) {
+  const configuredSets = resolvedApiSets(workspace);
+  const effectiveSets = effectiveApiSets(workspace, platform);
   return ok('workspace policy', {
     id: workspace.id,
     name: workspace.name,
     root_label: 'configured workspace root',
     filesystem_scope: filesystemScope(workspace),
-    api_sets: resolvedApiSets(workspace),
-    api_set_notes: {
-      workspace: 'OpenClaw-like workspace agent primitives: scoped files, tmp cleanup/delete, artifacts, context, skills, bounded run_command/processes, git/context helpers, and async run recovery.',
-      browser: 'Direct full scoped CDP access to preassigned browser profiles/ports. browser_visible_state/click/upload helpers are convenience tools only, not an observer/read-only fallback.',
-      computer: 'Local GUI/computer-use via Cua Driver: screenshots, windows, accessibility tree, mouse, keyboard, and local app control.',
-      computer_windows: 'Windows desktop computer-use via native APIs. The api_sets.computer_windows macro grants full Windows rights; partial lanes should set windows_computer.enabled plus individual rights.',
-      machine_admin: 'Host/lane administration and configured operations such as run_configured_command, services, config, tunnels, and deployment workflows. When filesystem.machine_admin_host_scope is enabled, existing file tools may resolve explicit absolute host paths inside host_root; no host_* duplicate tools are used.',
-      estate_admin: 'Cross-agent/cross-host estate reports/diagnostics and approved estate runbook operations.'
-    },
-    policy_model: {
-      principle: 'Webchat agents should not be weaker than OpenClaw agents when a capability set is enabled; safety wraps powerful primitives instead of replacing them with toy actions.',
-      workspace_exec: 'Bounded run_command/start_process/read_process/write_process/stop_process are normal workspace-agent primitives when workspace or allow_tests is enabled.',
-      workspace_delete: 'delete_file/delete_path are normal scoped workspace editing tools, suitable for tmp cleanup and routine file management.',
-      machine_admin: 'run_configured_command and service/tunnel/host administration are machine_admin. Existing file tools remain one vocabulary: workspace-only lanes stay root-scoped; machine_admin host-scope lanes may use explicit absolute host paths inside host_root. No hidden path/secret/glob deny layer exists; adding one requires Calvin approval.',
-      provider_prompts: 'Provider-side confirmation prompts are intentionally minimized for routine scoped workspace/browser/computer work. OTA policy must not add generic stop-boundary lists; if the real UI blocks progress, report the concrete blocker.'
-    },
+    host_platform: platform,
+    configured_api_sets: configuredSets,
+    api_sets: effectiveSets,
+    api_set_incompatibilities: apiSetIncompatibilities(configuredSets, platform),
+    api_set_notes: apiSetNotes(),
+    policy_model: policyModel(),
     command_runtime: commandRuntimeInfo(undefined, config?.command_runtime),
     censoring: censoringPolicy(workspace, config),
     git: gitPolicy(workspace),
     github: githubPolicy(workspace),
-    allowed_tools: allowedTools(workspace),
+    allowed_tools: allowedTools(workspace, platform),
     windows_computer_rights: workspace.windows_computer,
+    memory_interface: memoryInterface(workspace),
     // Provider-side confirmation prompts are harmful for OpenClaw-like chat-thread agents.
     // Routine scoped workspace/browser/computer tools are intentionally not listed as blocked
     // or requiring per-call approval. Calvin policy: do not add stop_boundaries or blocked_tools
     // without Calvin's explicit approval.
     requires_approval: []
   });
+}
+
+
+function apiSetNotes() {
+  return {
+    workspace: 'OpenClaw-like workspace agent primitives: scoped files, tmp cleanup/delete, artifacts, context, skills, bounded run_command/processes, git/context helpers, and async run recovery.',
+    browser: 'Direct full scoped CDP access to preassigned browser profiles/ports. browser_visible_state/click/upload helpers are convenience tools only, not an observer/read-only fallback.',
+    computer: 'Local macOS GUI/computer-use via Cua Driver; ignored on non-macOS hosts.',
+    computer_windows: 'Windows desktop computer-use via native APIs; ignored on non-Windows hosts. The macro grants full Windows rights subject to configured per-right controls.',
+    machine_admin: 'Host/lane administration and configured operations. Explicit absolute host paths remain governed by filesystem.machine_admin_host_scope.',
+    estate_admin: 'Cross-agent/cross-host estate reports/diagnostics and approved estate runbook operations.'
+  };
+}
+
+function policyModel() {
+  return {
+    principle: 'Webchat agents should not be weaker than OpenClaw agents when a capability set is enabled; safety wraps powerful primitives instead of replacing them with toy actions.',
+    workspace_exec: 'Bounded run_command/start_process/read_process/write_process/stop_process are normal workspace-agent primitives when workspace or allow_tests is enabled.',
+    workspace_delete: 'delete_file/delete_path are normal scoped workspace editing tools, suitable for tmp cleanup and routine file management.',
+    machine_admin: 'run_configured_command and service/tunnel/host administration are machine_admin. Existing file tools remain one vocabulary: workspace-only lanes stay root-scoped; machine_admin host-scope lanes may use explicit absolute host paths inside host_root. No hidden path/secret/glob deny layer exists; adding one requires Calvin approval.',
+    provider_prompts: 'Provider-side confirmation prompts are intentionally minimized for routine scoped workspace/browser/computer work. OTA policy must not add generic stop-boundary lists; if the real UI blocks progress, report the concrete blocker.'
+  };
+}
+
+function memoryInterface(workspace: Workspace) {
+  return {
+    tools: [...MEMORY_LIFECYCLE_TOOL_NAMES],
+    backend_configured: workspace.ota_memory?.enabled === true,
+    legacy_tools_enabled_until_cutover: workspace.ota_memory?.enabled !== true
+  };
 }
 
 
@@ -115,34 +138,49 @@ export function resolvedApiSets(workspace: Workspace) {
   };
 }
 
-export function allowedTools(workspace: Workspace): string[] {
+export function effectiveApiSets(workspace: Workspace, platform: PlatformKind = platformKind()) {
   const sets = resolvedApiSets(workspace);
-  const base = ['heartbeat', 'workspace_status', 'get_workspace_policy', 'get_tool_profile'];
+  return {
+    ...sets,
+    computer: Boolean(sets.computer && platform === 'macos'),
+    computer_windows: Boolean(sets.computer_windows && platform === 'windows')
+  };
+}
 
-  if (sets.estate_admin) base.push(...ESTATE_TOOL_NAMES);
+export function allowedTools(workspace: Workspace, platform: PlatformKind = platformKind()): string[] {
+  const sets = effectiveApiSets(workspace, platform);
+  const base: string[] = [...BASE_TOOL_NAMES];
 
-
-  if (sets.workspace || workspace.allow_read) base.push('workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'read_file_chunk', 'read_file_lines', 'read_binary_file', 'infer_file_structure', 'sample_file', 'read_around', 'search_file', 'search_files', 'table_profile', 'query_table', 'query_table_aggregate', 'json_profile', 'query_json', 'git_status', 'git_diff', 'git_push_current_branch', 'git_lfs_publish_current_branch', 'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'list_skills', 'read_skill', 'approval_status', 'list_artifacts');
-  if (sets.workspace || workspace.allow_write) base.push('write_file', 'write_binary_file', 'edit_file', 'delete_file', 'delete_path', 'update_table_rows', 'record_artifact', 'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread');
-  if (workspace.ota_memory?.enabled) base.push(...OTA_MEMORY_TOOL_NAMES);
-  else {
-    if (sets.workspace || workspace.allow_read) base.push('memory_search');
-    if (sets.workspace || workspace.allow_write) base.push('memory_write');
+  // Lifecycle-v1 memory actions are a stable provider interface for every agent.
+  // Backend readiness is separate: unconfigured workspaces fail explicitly at call time.
+  base.push(...MEMORY_LIFECYCLE_TOOL_NAMES);
+  if (sets.estate_admin) base.push(...ESTATE_ADMIN_TOOL_NAMES);
+  if (sets.workspace || workspace.allow_read) base.push(...WORKSPACE_READ_TOOL_NAMES);
+  if (sets.workspace || workspace.allow_write) base.push(...WORKSPACE_WRITE_TOOL_NAMES);
+  if (workspace.ota_memory?.enabled !== true) {
+    if (sets.workspace || workspace.allow_read) base.push(LEGACY_MEMORY_TOOL_NAMES[0]);
+    if (sets.workspace || workspace.allow_write) base.push(LEGACY_MEMORY_TOOL_NAMES[1]);
   }
-  if (sets.workspace || workspace.allow_patch) base.push('propose_patch', 'apply_patch', 'patch_file_lines');
-  if (sets.workspace || workspace.allow_tests) base.push('run_command', 'git', 'github', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process');
-
-  if (sets.browser) base.push('list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch');
-  if (sets.computer) base.push('cua_driver_status', 'computer_screen_click', 'computer_window_click', 'computer_screen_mouse_move', 'computer_window_mouse_move', 'computer_screen_drag', 'computer_window_drag', 'computer_screen_scroll', 'computer_window_scroll', 'cua_driver_call', 'cua_driver_batch');
+  if (sets.workspace || workspace.allow_patch) base.push(...WORKSPACE_PATCH_TOOL_NAMES);
+  if (sets.workspace || workspace.allow_tests) base.push(...WORKSPACE_EXEC_TOOL_NAMES);
+  if (sets.browser) base.push(...BROWSER_TOOL_NAMES);
+  if (sets.computer) base.push(...MAC_COMPUTER_TOOL_NAMES);
   if (sets.computer_windows) base.push(...windowsComputerTools(workspace));
-  if (sets.machine_admin) base.push('run_configured_command', 'workspace_helper_list', 'workspace_helper_status', 'workspace_helper_upsert', 'workspace_helper_run');
+  if (sets.machine_admin) base.push(...MACHINE_ADMIN_TOOL_NAMES);
 
   return [...new Set(base)];
 }
 
+function apiSetIncompatibilities(sets: ReturnType<typeof resolvedApiSets>, platform: PlatformKind): string[] {
+  const out: string[] = [];
+  if (sets.computer && platform !== 'macos') out.push(`api_sets.computer requires macOS host; current host is ${platform}`);
+  if (sets.computer_windows && platform !== 'windows') out.push(`api_sets.computer_windows requires Windows host; current host is ${platform}`);
+  return out;
+}
+
 function windowsComputerTools(workspace: Workspace) {
   const config = workspace.windows_computer;
-  const tools = ['windows_computer_status', 'windows_list_monitors'];
+  const tools: string[] = [WINDOWS_COMPUTER_TOOL_NAMES[0], WINDOWS_COMPUTER_TOOL_NAMES[1]];
   if (config?.allow_screenshot) tools.push('windows_screenshot');
   if (config?.allow_screenshot && config?.allow_window_management) tools.push('windows_window_screenshot', 'windows_window_screenshot_sequence');
   if (config?.allow_uia_tree) tools.push('windows_uia_tree', 'windows_uia_read');

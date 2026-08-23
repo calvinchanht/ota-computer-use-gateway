@@ -48,7 +48,6 @@ const commitCandidate = z.discriminatedUnion('kind', [
 ]);
 
 export function registerOtaMemoryTools(context: RegisterContext): void {
-  if (![...context.workspaces.values()].some((workspace) => workspace.ota_memory?.enabled)) return;
   context.server.registerTool('memory_begin_turn', beginTurnSpec(), async (args) => memoryCall(context, 'memory_begin_turn', 'memory.begin_turn', args));
   context.server.registerTool('memory_commit_turn', commitTurnSpec(), async (args) => memoryCall(context, 'memory_commit_turn', 'memory.commit_turn', args));
   context.server.registerTool('memory_flush_session', flushSessionSpec(), async (args) => memoryCall(context, 'memory_flush_session', 'memory.flush_session', args));

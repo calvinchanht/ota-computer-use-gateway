@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AppConfig } from '../config/schema.js';
 import type { Workspace } from '../core/workspaces.js';
+import { ALWAYS_EXPOSED_PROVIDER_TOOL_NAMES } from '../tools/actionSurface.js';
 import { registerApprovalTools } from './register/approvals.js';
 import { registerArtifactTools } from './register/artifacts.js';
 import { registerBrowserTools } from './register/browser.js';
@@ -10,6 +11,7 @@ import { registerGitTools } from './register/git.js';
 import { registerGatewayTools } from './register/gateway.js';
 import { registerGenesisTools } from './register/genesis.js';
 import { registerJobLifecycleTools } from './register/jobLifecycle.js';
+import { registerLargeFileTools } from './register/largeFiles.js';
 import { registerMemoryTools } from './register/memory.js';
 import { registerOtaMemoryTools } from './register/otaMemory.js';
 import { registerPatchTools } from './register/patch.js';
@@ -34,6 +36,7 @@ export function registerTools(server: McpServer, config: AppConfig, workspaces: 
   registerBrowserTools(context);
   registerComputerTools(context);
   registerFileTools(context);
+  registerLargeFileTools(context);
   registerGitTools(context);
   registerMemoryTools(context);
   registerOtaMemoryTools(context);
@@ -44,8 +47,9 @@ export function registerTools(server: McpServer, config: AppConfig, workspaces: 
 }
 
 function filteredServer(server: McpServer, config: AppConfig): McpServer {
-  const exposed = new Set(config.server.exposed_tools ?? []);
-  if (exposed.size === 0) return server;
+  const configured = config.server.exposed_tools ?? [];
+  const exposed = new Set([...configured, ...ALWAYS_EXPOSED_PROVIDER_TOOL_NAMES]);
+  if (configured.length === 0) return server;
   return new Proxy(server, {
     get(target, prop, receiver) {
       if (prop !== 'registerTool') return Reflect.get(target, prop, receiver);

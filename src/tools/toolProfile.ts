@@ -1,8 +1,8 @@
 import { ok } from '../core/result.js';
 import { commandRuntimeInfo } from '../core/commandAdapter.js';
 import { conservativeCensoringEnabled, environmentFilteringEnabled, resultSanitizationEnabled, secretContentHeuristicsEnabled, secretValueRedactionEnabled, type AppConfig } from '../config/schema.js';
-import { ESTATE_TOOL_NAMES, LEGACY_GENESIS_TOOL_ALIASES } from './genesis.js';
-import { OTA_MEMORY_TOOL_NAMES } from './otaMemory.js';
+import { LEGACY_GENESIS_TOOL_ALIASES } from './genesis.js';
+import { BROWSER_TOOL_NAMES, CANONICAL_PROVIDER_TOOL_NAMES, ESTATE_ADMIN_TOOL_NAMES, MAC_COMPUTER_TOOL_NAMES, MACHINE_ADMIN_TOOL_NAMES, MEMORY_LIFECYCLE_TOOL_NAMES, WINDOWS_COMPUTER_TOOL_NAMES, WORKSPACE_TOOL_NAMES } from './actionSurface.js';
 
 export function toolProfile(config?: AppConfig) {
   return ok('tool profile', {
@@ -30,7 +30,9 @@ export function toolProfile(config?: AppConfig) {
     optional_integrations: {
       ota_memory: {
         config_key: 'workspaces[].ota_memory',
-        tools: [...OTA_MEMORY_TOOL_NAMES],
+        tools: [...MEMORY_LIFECYCLE_TOOL_NAMES],
+        interface: 'baseline_for_all_agents',
+        backend_config_key: 'workspaces[].ota_memory.enabled',
         scope: 'server-owned database, project, workspace, agent, user, and privacy identity'
       }
     },
@@ -43,25 +45,7 @@ export function toolProfile(config?: AppConfig) {
 }
 
 function canonicalTools(): string[] {
-  return [
-    ...ESTATE_TOOL_NAMES,
-    ...OTA_MEMORY_TOOL_NAMES,
-    'list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify',
-    'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch',
-    'cua_driver_status', 'computer_screen_click', 'computer_window_click', 'computer_screen_mouse_move', 'computer_window_mouse_move', 'computer_screen_drag', 'computer_window_drag', 'computer_screen_scroll', 'computer_window_scroll', 'cua_driver_call', 'cua_driver_batch',
-    'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_window_screenshot', 'windows_window_screenshot_sequence', 'windows_uia_tree', 'windows_uia_read', 'windows_uia_set_value',
-    'windows_list_windows', 'windows_focus_window', 'windows_place_window', 'windows_launch_app',
-    'windows_mouse_move', 'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
-    'windows_window_mouse_move', 'windows_window_click', 'windows_window_double_click', 'windows_window_drag', 'windows_window_scroll',
-    'windows_type_text', 'windows_key', 'windows_hotkey',
-    'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch',
-    'workspace_inventory', 'read_file', 'read_file_chunk', 'read_file_lines', 'write_file', 'read_binary_file', 'write_binary_file', 'edit_file', 'apply_patch',
-    'run_command', 'run_configured_command', 'workspace_helper_list', 'workspace_helper_status', 'workspace_helper_upsert', 'workspace_helper_run', 'list_dir', 'stat_path', 'tree', 'search_files',
-    'git', 'github', 'git_status', 'git_diff', 'git_push_current_branch', 'git_lfs_publish_current_branch', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process',
-    'get_project_context', 'get_context_snapshot', 'get_agent_bootstrap', 'memory_search', 'memory_write',
-    'list_skills', 'read_skill', 'approval_status', 'list_artifacts', 'record_artifact',
-    'record_progress', 'record_decision', 'record_handoff', 'update_current_task', 'checkpoint_thread'
-  ];
+  return [...CANONICAL_PROVIDER_TOOL_NAMES];
 }
 
 function apiCapabilitySets() {
@@ -76,12 +60,13 @@ function apiCapabilitySets() {
 
 function capabilitySetDefinitions() {
   return {
-    workspace: capabilitySet('Normal agent workspace operations.', ['workspace_inventory', 'list_dir', 'stat_path', 'tree', 'read_file', 'read_file_chunk', 'read_file_lines', 'write_file', 'edit_file', 'apply_patch', 'run_command', 'github', 'start_process', 'get_agent_bootstrap', 'get_project_context', 'list_skills', 'record_progress', 'checkpoint_thread']),
-    browser: capabilitySet('Direct full CDP browser automation using preassigned profiles and ports.', ['list_browser_profiles', 'browser_status', 'list_browser_tabs', 'browser_visible_state', 'browser_tail', 'browser_manage_tabs', 'browser_click_and_wait', 'browser_upload_file_and_verify', 'browser_cdp_browser_call', 'browser_cdp_browser_batch', 'browser_cdp_call', 'browser_cdp_batch']),
-    computer: capabilitySet('Local GUI/computer use; independent from machine administration.', ['cua_driver_status', 'computer_screen_click', 'computer_window_click', 'computer_screen_mouse_move', 'computer_window_mouse_move', 'computer_screen_drag', 'computer_window_drag', 'computer_screen_scroll', 'computer_window_scroll', 'cua_driver_call', 'cua_driver_batch']),
+    workspace: capabilitySet('Normal agent workspace operations.', [...WORKSPACE_TOOL_NAMES]),
+    browser: capabilitySet('Direct full CDP browser automation using preassigned profiles and ports.', [...BROWSER_TOOL_NAMES]),
+    computer: { ...capabilitySet('Local macOS GUI/computer use through Cua Driver; independent from machine administration.', [...MAC_COMPUTER_TOOL_NAMES]), host_os: 'macos' },
     computer_windows: windowsCapabilitySet(),
-    machine_admin: capabilitySet('Own-machine/lane management through configured commands/processes and scoped service/config/runbook work.', ['run_configured_command', 'run_command', 'workspace_helper_list', 'workspace_helper_status', 'workspace_helper_upsert', 'workspace_helper_run', 'github', 'start_process', 'list_processes', 'read_process', 'write_process', 'stop_process']),
-    estate_admin: capabilitySet('Cross-agent/cross-host estate reporting and approved estate operations.', [...ESTATE_TOOL_NAMES])
+    machine_admin: capabilitySet('Own-machine/lane management through configured commands/processes and scoped service/config/runbook work.', [...MACHINE_ADMIN_TOOL_NAMES]),
+    estate_admin: capabilitySet('Cross-agent/cross-host estate reporting and approved estate operations.', [...ESTATE_ADMIN_TOOL_NAMES]),
+    memory_lifecycle: capabilitySet('Stable lifecycle-v1 OTA-Memory provider interface present for every agent; backend readiness is separate.', [...MEMORY_LIFECYCLE_TOOL_NAMES])
   };
 }
 
@@ -92,31 +77,22 @@ function capabilitySet(purpose: string, tools: string[]) {
 function windowsCapabilitySet() {
   return {
     purpose: 'Windows desktop computer use with monitor capture, UIA, mouse, keyboard, clipboard, windows, and app launch.',
-    full_macro: 'api_sets.computer_windows grants the complete Windows computer-use surface.',
+    host_os: 'windows',
+    full_macro: 'api_sets.computer_windows grants the complete Windows computer-use surface on Windows hosts.',
     partial_rights: 'Use windows_computer.enabled plus individual allow_* rights for narrower lanes such as non-screenshot validation.',
-    tools: windowsComputerTools()
+    tools: [...WINDOWS_COMPUTER_TOOL_NAMES]
   };
 }
 
 function capabilitySetExamples() {
   return {
-    catalyst: ['workspace', 'browser'],
-    cortex: ['workspace', 'browser', 'machine_admin'],
-    boba: ['workspace', 'browser', 'computer', 'machine_admin'],
-    genesis: ['workspace', 'browser', 'computer', 'computer_windows', 'machine_admin', 'estate_admin']
+    linux_estate_admin: ['workspace', 'browser', 'machine_admin', 'estate_admin'],
+    linux_agent: ['workspace', 'browser'],
+    macos_agent: ['workspace', 'browser', 'computer', 'machine_admin'],
+    windows_agent: ['workspace', 'browser', 'computer_windows', 'machine_admin']
   };
 }
 
-function windowsComputerTools() {
-  return [
-    'windows_computer_status', 'windows_list_monitors', 'windows_screenshot', 'windows_window_screenshot', 'windows_window_screenshot_sequence', 'windows_uia_tree', 'windows_uia_read', 'windows_uia_set_value',
-    'windows_list_windows', 'windows_focus_window', 'windows_place_window', 'windows_launch_app',
-    'windows_mouse_move', 'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
-    'windows_window_mouse_move', 'windows_window_click', 'windows_window_double_click', 'windows_window_drag', 'windows_window_scroll',
-    'windows_type_text', 'windows_key', 'windows_hotkey',
-    'windows_clipboard_get', 'windows_clipboard_set', 'windows_batch'
-  ];
-}
 
 function workspaceHelperProfile() {
   return {
@@ -154,7 +130,7 @@ function gitProfile() {
 
 function apiBehavior() {
   return {
-    estate_admin: { tools: [...ESTATE_TOOL_NAMES], posture: 'read-heavy coarse estate reports with no secret return' },
+    estate_admin: { tools: [...ESTATE_ADMIN_TOOL_NAMES], posture: 'read-heavy coarse estate reports with no secret return' },
     run_recovery: 'Every HTTP JSON API tool/batch response includes api.run_id. Use get_gateway_run / GET /api/v1/runs/{run_id} to recover status/results instead of blindly retrying.',
     idempotency: 'When a tool schema exposes idempotency_key, send a stable value so retries do not duplicate work. run_command and other direct command tools currently do not expose caller-supplied idempotency_key; recover async command results with api.run_id and do not blindly retry the original command.',
     async_polling: {

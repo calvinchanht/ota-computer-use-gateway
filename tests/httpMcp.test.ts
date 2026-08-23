@@ -35,6 +35,21 @@ describe('HTTP MCP compatibility transport', () => {
     }
   });
 
+  it('serves the advertised OTA API schema endpoint', async () => {
+    const server = createServer(createHttpRequestHandler(config));
+    await listen(server);
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('expected TCP address');
+      const response = await fetch(`http://127.0.0.1:${address.port}/ota/api/v1/schema`);
+      expect(response.status).toBe(200);
+      const payload = await response.json() as { schema_url?: string; operations?: Record<string, unknown> };
+      expect(payload.schema_url).toBe('/ota/api/v1/schema');
+      expect(payload.operations).toHaveProperty('memory_begin_turn');
+      expect(payload.operations).toHaveProperty('query_table');
+    } finally { await close(server); }
+  });
+
   it('restricts browser CORS to trusted origins', async () => {
     const server = createServer(createHttpRequestHandler(config));
     await listen(server);
