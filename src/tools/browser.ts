@@ -4,7 +4,7 @@ import type { Workspace } from '../core/workspaces.js';
 import { ok } from '../core/result.js';
 import { assertInside } from '../core/paths.js';
 
-const REMINDER = 'Use CDP directly through browser_cdp_* tools.';
+const REMINDER = 'Use CDP directly through browser_cdp_* tools. Target.createTarget is forced into a separate unfocused browser window to protect the anchored Threaddex webchat.';
 
 type BrowserProfile = NonNullable<Workspace['browser']>['profiles'][number];
 
@@ -632,6 +632,11 @@ function boundedCdpParams(params: Record<string, unknown>) {
   return params;
 }
 
+function protectedCdpParams(method: string, params: Record<string, unknown>) {
+  if (method !== 'Target.createTarget') return params;
+  return { ...params, newWindow: true, focus: false, hidden: false };
+}
+
 async function oneCdpBatchCall(url: string, step: CdpBatchStep, index: number, allowPageWait: boolean) {
   if ('delay_ms' in step) {
     const delayMs = boundedDelayMs(step.delay_ms);
@@ -654,7 +659,7 @@ async function cdpCommand<T>(url: string, method: string, params: Record<string,
   return await new Promise<T>((resolve, reject) => {
     const ws = new WebSocket(url);
     const timer = setTimeout(() => reject(new Error('CDP command timed out')), 10000);
-    ws.addEventListener('open', () => ws.send(JSON.stringify({ id: 1, method, params })));
+    ws.addEventListener('open', () => ws.send(JSON.stringify({ id: 1, method, params: protectedCdpParams(method, params) })));
     ws.addEventListener('error', () => reject(new Error('CDP websocket error')));
     ws.addEventListener('message', (event) => handleCdpMessage(event.data, resolve, reject, timer, ws));
   });
@@ -675,7 +680,7 @@ async function cdpCommandWithWait<T>(url: string, method: string, params: Record
     };
     ws.addEventListener('open', () => {
       ws.send(JSON.stringify({ id: 0, method: 'Page.enable', params: {} }));
-      ws.send(JSON.stringify({ id: 1, method, params }));
+      ws.send(JSON.stringify({ id: 1, method, params: protectedCdpParams(method, params) }));
     });
     ws.addEventListener('error', () => { clearTimeout(timer); reject(new Error('CDP websocket error')); });
     ws.addEventListener('message', (event) => {
