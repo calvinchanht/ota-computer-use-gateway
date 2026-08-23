@@ -4,33 +4,34 @@ import { toolProfile } from '../src/tools/toolProfile.js';
 import type { Workspace } from '../src/core/workspaces.js';
 
 describe('policy and tool profile consistency', () => {
-  it('advertises every canonical primitive when all capabilities are enabled', () => {
-    const policy = workspacePolicy(fixtureWorkspace()).data;
-    const profile = toolProfile().data;
-    for (const tool of profile?.canonical_tools ?? []) {
-      if (tool === 'memory_search' || tool === 'memory_write') continue;
-      expect(policy?.allowed_tools, tool).toContain(tool);
+  it('covers every canonical primitive across the role x OS matrix', () => {
+    const workspace = fixtureWorkspace({ ota_memory: { enabled: false } as any });
+    const visible = new Set<string>();
+    for (const platform of ['linux', 'macos', 'windows'] as const) {
+      for (const tool of workspacePolicy(workspace, undefined, platform).data?.allowed_tools ?? []) visible.add(tool);
     }
+    const profile = toolProfile().data;
+    for (const tool of profile?.canonical_tools ?? []) expect(visible, tool).toContain(tool);
   });
 
-  it('keeps canonical OTA-Memory tools conditional on workspace enablement', () => {
+  it('keeps canonical OTA-Memory lifecycle tools baseline while legacy memory is transitional', () => {
     const profile = toolProfile().data;
     const memoryTools = ['memory_begin_turn', 'memory_commit_turn', 'memory_flush_session'];
     expect(profile?.canonical_tools).toEqual(expect.arrayContaining(memoryTools));
 
-    const enabled = workspacePolicy(fixtureWorkspace()).data;
+    const enabled = workspacePolicy(fixtureWorkspace(), undefined, 'windows').data;
     expect(enabled?.allowed_tools).toEqual(expect.arrayContaining(memoryTools));
     expect(enabled?.allowed_tools).not.toContain('memory_search');
     expect(enabled?.allowed_tools).not.toContain('memory_write');
 
-    const disabled = workspacePolicy(fixtureWorkspace({ ota_memory: { enabled: false } as any })).data;
-    for (const tool of memoryTools) expect(disabled?.allowed_tools).not.toContain(tool);
+    const disabled = workspacePolicy(fixtureWorkspace({ ota_memory: { enabled: false } as any }), undefined, 'windows').data;
+    for (const tool of memoryTools) expect(disabled?.allowed_tools).toContain(tool);
     expect(disabled?.allowed_tools).toContain('memory_search');
     expect(disabled?.allowed_tools).toContain('memory_write');
   });
 
   it('does not advertise deprecated aliases in workspace policy', () => {
-    const policy = workspacePolicy(fixtureWorkspace()).data;
+    const policy = workspacePolicy(fixtureWorkspace(), undefined, 'windows').data;
     const profile = toolProfile().data;
     for (const tool of Object.keys(profile?.deprecated_tools ?? {})) {
       expect(policy?.allowed_tools, tool).not.toContain(tool);
@@ -38,7 +39,7 @@ describe('policy and tool profile consistency', () => {
   });
 
   it('documents OpenClaw-strength workspace primitives without treating delete or exec as machine admin', () => {
-    const policy = workspacePolicy(fixtureWorkspace()).data;
+    const policy = workspacePolicy(fixtureWorkspace(), undefined, 'windows').data;
     expect(policy?.policy_model?.principle).toContain('not be weaker than OpenClaw');
     expect(policy?.policy_model?.workspace_exec).toContain('run_command');
     expect(policy?.policy_model?.workspace_delete).toContain('delete_file');
@@ -84,7 +85,7 @@ describe('policy and tool profile consistency', () => {
 
 
   it('exposes filesystem scope for machine_admin and workspace-only lanes', () => {
-    const machinePolicy = workspacePolicy(fixtureWorkspace()).data;
+    const machinePolicy = workspacePolicy(fixtureWorkspace(), undefined, 'windows').data;
     expect(machinePolicy?.filesystem_scope).toMatchObject({
       default_scope: 'workspace',
       absolute_path_scope: 'host',
@@ -96,7 +97,7 @@ describe('policy and tool profile consistency', () => {
     const workspaceOnly = workspacePolicy(fixtureWorkspace({
       api_sets: { workspace: true, browser: false, computer: false, computer_windows: false, machine_admin: false, estate_admin: false },
       filesystem: { machine_admin_host_scope: false, host_root: '/' }
-    })).data;
+    }), undefined, 'linux').data;
     expect(workspaceOnly?.filesystem_scope).toMatchObject({
       default_scope: 'workspace',
       absolute_path_scope: 'workspace',
@@ -106,7 +107,7 @@ describe('policy and tool profile consistency', () => {
   });
 
   it('exposes implemented data and patch helpers through the workspace policy', () => {
-    const policy = workspacePolicy(fixtureWorkspace()).data;
+    const policy = workspacePolicy(fixtureWorkspace(), undefined, 'windows').data;
     expect(policy?.allowed_tools).toEqual(expect.arrayContaining([
       'infer_file_structure', 'sample_file', 'read_around', 'search_file',
       'table_profile', 'query_table', 'query_table_aggregate', 'json_profile', 'query_json',
@@ -129,7 +130,7 @@ describe('policy and tool profile consistency', () => {
         allow_process_attach: false,
         allow_multi_monitor: true
       }
-    })).data;
+    }), undefined, 'windows').data;
 
     expect(policy?.allowed_tools).toContain('windows_computer_status');
     expect(policy?.allowed_tools).toContain('windows_list_monitors');
@@ -143,7 +144,7 @@ describe('policy and tool profile consistency', () => {
   });
 
   it('explains full Windows macro versus partial Windows rights', () => {
-    const policy = workspacePolicy(fixtureWorkspace()).data;
+    const policy = workspacePolicy(fixtureWorkspace(), undefined, 'windows').data;
     const profile = toolProfile().data;
     const windowsSet = profile?.api_capability_sets?.sets?.computer_windows;
 

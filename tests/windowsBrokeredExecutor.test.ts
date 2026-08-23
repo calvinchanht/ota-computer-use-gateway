@@ -45,7 +45,11 @@ describe('Windows brokered executor adapter', () => {
     const harness = await startHarness();
     try {
       const result = await runWindowsBrokeredOperation({ localOtaBaseUrl: harness.baseUrl, workspaceId: 'anna' }, job('windows.status'));
-      expect(result).toMatchObject({ status: 'succeeded', result: { host_supported: process.platform === 'win32' } });
+      if (process.platform === 'win32') {
+        expect(result).toMatchObject({ status: 'succeeded', result: { host_supported: true } });
+      } else {
+        expect(result).toMatchObject({ status: 'failed', error_code: 'local_ota_policy_denied' });
+      }
     } finally {
       await harness.close();
     }
