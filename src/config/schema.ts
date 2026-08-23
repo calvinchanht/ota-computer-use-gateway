@@ -31,6 +31,8 @@ export const windowsComputerSchema = z.object({
   allow_multi_monitor: z.boolean().default(true)
 }).prefault({});
 
+export const API_SET_NAMES = ['workspace', 'browser', 'computer', 'computer_windows', 'machine_admin', 'estate_admin'] as const;
+
 export const apiSetsSchema = z.object({
   workspace: z.boolean().optional(),
   browser: z.boolean().optional(),

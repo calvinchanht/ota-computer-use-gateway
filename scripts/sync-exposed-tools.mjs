@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFile, writeFile } from 'node:fs/promises';
 import YAML from 'yaml';
-import { configSchema } from '../dist/config/schema.js';
+import { API_SET_NAMES, configSchema } from '../dist/config/schema.js';
 import { allowedTools } from '../dist/tools/policy.js';
 
 async function main() {
@@ -58,7 +58,10 @@ function enableApiSets(raw, workspaceId, sets) {
   if (!sets.size) return;
   const workspace = rawWorkspace(raw, workspaceId);
   workspace.api_sets = workspace.api_sets ?? {};
-  for (const set of sets) workspace.api_sets[set] = true;
+  for (const set of sets) {
+    if (!API_SET_NAMES.includes(set)) throw new Error(`unsupported --enable-api-sets value: ${set}`);
+    workspace.api_sets[set] = true;
+  }
 }
 
 function rawWorkspace(raw, workspaceId) {

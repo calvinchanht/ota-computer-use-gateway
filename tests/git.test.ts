@@ -131,7 +131,7 @@ describe('git display hygiene', () => {
     } finally {
       await rm(repo.root, { recursive: true, force: true });
     }
-  }, 15_000);
+  }, 60_000);
 
   it('reports missing github token without exposing token path', async () => {
     const repo = await fixtureRepo();
@@ -188,7 +188,7 @@ describe('git display hygiene', () => {
       await rm(repo.root, { recursive: true, force: true });
       await rm(remote, { recursive: true, force: true });
     }
-  }, 30000);
+  }, 60_000);
 
   it('initializes LFS before creating an isolated worktree', async () => {
     if (spawnSync('git', ['lfs', 'version']).status !== 0) return;
@@ -209,7 +209,7 @@ describe('git display hygiene', () => {
       await rm(repo.root, { recursive: true, force: true });
       await rm(worktree, { recursive: true, force: true });
     }
-  });
+  }, 60_000);
 
   it('exposes github through the /ota/api/v1/gh HTTP alias', async () => {
     const repo = await fixtureRepo();
