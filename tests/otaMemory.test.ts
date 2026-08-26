@@ -3,6 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { configSchema, type AppConfig } from '../src/config/schema.js';
 import { buildWorkspaces } from '../src/core/workspaces.js';
 import { createServer } from '../src/server/create.js';
@@ -70,6 +72,41 @@ describe('OTA-Memory lifecycle adapter', () => {
       replacement: { kind: 'observation', content: 'New current checkpoint.' },
       reason: 'replace stale checkpoint'
     }]).success).toBe(true);
+    expect(candidates.safeParse([{
+      candidate_key: 'forget-missing-target', kind: 'forget', reason: 'forget stale checkpoint'
+    }]).success).toBe(false);
+    expect(candidates.safeParse([{
+      candidate_key: 'evidence-missing-refs', kind: 'tool_evidence',
+      summary: 'Tool result.', reason: 'retain evidence'
+    }]).success).toBe(false);
+    expect(candidates.safeParse([{
+      candidate_key: 'correct-current', kind: 'correction',
+      target: { record_type: 'observation', record_id: 'obs_current' }, reason: 'correct stale checkpoint'
+    }]).success).toBe(true);
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    const client = new Client({ name: 'ota-memory-schema-test', version: '0.0.0' });
+    await client.connect(clientTransport);
+    const listed = await client.listTools();
+    const commitTool = listed.tools.find((tool) => tool.name === 'memory_commit_turn');
+    const properties = commitTool?.inputSchema.properties as Record<string, unknown> | undefined;
+    const candidateArray = properties?.candidates as { items?: Record<string, unknown> } | undefined;
+    const serializedCandidate = candidateArray?.items;
+    expect(serializedCandidate).toMatchObject({
+      type: 'object',
+      properties: {
+        kind: {
+          type: 'string',
+          enum: ['observation', 'outcome', 'tool_evidence', 'correction', 'forget', 'supersession']
+        },
+        target: { type: 'object' },
+        replacement: { type: 'object' }
+      }
+    });
+    expect(serializedCandidate).not.toHaveProperty('oneOf');
+    await client.close();
+    await server.close();
   });
 });
 
