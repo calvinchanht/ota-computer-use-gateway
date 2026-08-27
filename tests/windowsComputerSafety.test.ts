@@ -168,7 +168,82 @@ describe('windows computer UIA and hwnd input safety', () => {
     expect(readScript).toContain('bounds_finite=$b.bounds_finite');
     expect(readScript).toContain('bounds_empty=$b.bounds_empty');
 
-    await windowsUiaSetValue(fixtureWorkspace(), 42, { automation_id: 'target' }, 'value');
+    mocks.execFileAsync.mockImplementationOnce(async (_file: unknown, args: unknown) => {
+      const argv = args as string[];
+      const encodedIndex = argv.indexOf('-EncodedCommand');
+      expect(encodedIndex).toBeGreaterThanOrEqual(0);
+      const script = Buffer.from(argv[encodedIndex + 1], 'base64').toString('utf16le');
+      scripts.push(script);
+      return {
+        stdout: JSON.stringify({
+          hwnd: 42,
+          automation_id: 'target',
+          name: 'Target',
+          control_type: 'Edit',
+          set: true,
+          method: 'ValuePattern',
+          value_chars: 5,
+          focus_method: 'AutomationElement.SetFocus',
+          focus_verified_before_mutation: true,
+          focus_verification: 'Automation.Compare'
+        }),
+        stderr: ''
+      };
+    });
+    const write = await windowsUiaSetValue(fixtureWorkspace(), 42, { automation_id: 'target' }, 'value');
+    expect(write.data).toMatchObject({
+      hwnd: 42,
+      automation_id: 'target',
+      name: 'Target',
+      control_type: 'Edit',
+      set: true,
+      method: 'ValuePattern',
+      value_chars: 5,
+      focus_method: 'AutomationElement.SetFocus',
+      focus_verified_before_mutation: true,
+      focus_verification: 'Automation.Compare'
+    });
+    const setterScript = scripts.at(-1)!;
+    const selected = setterScript.indexOf('$e=findUiaElement 42');
+    const initialSetFocus = setterScript.indexOf('$e.SetFocus()', selected);
+    const initialFocusedElement = setterScript.indexOf('$focused=[System.Windows.Automation.AutomationElement]::FocusedElement', initialSetFocus);
+    const initialNullGuard = setterScript.indexOf("if($null -eq $focused){throw 'UI Automation descendant focus verification failed'}", initialFocusedElement);
+    const initialCompare = setterScript.indexOf('[System.Windows.Automation.Automation]::Compare($e,$focused)', initialNullGuard);
+    const initialCompareThrow = setterScript.indexOf("throw 'UI Automation descendant focus verification failed'", initialCompare);
+    const valuePatternSet = setterScript.indexOf('$p.SetValue(', initialCompareThrow);
+    const legacySet = setterScript.indexOf('$p.SetValue(', valuePatternSet + 1);
+    const wmSet = setterScript.indexOf('[Win32Windows]::SetControlText(', initialCompareThrow);
+    const fallbackTopLevelFocus = setterScript.indexOf('$focus=[Win32Windows]::Focus([IntPtr]42)', initialCompareThrow);
+    const fallbackSetFocus = setterScript.indexOf('$e.SetFocus()', fallbackTopLevelFocus);
+    const fallbackFocusedElement = setterScript.indexOf('$focused=[System.Windows.Automation.AutomationElement]::FocusedElement', fallbackSetFocus);
+    const fallbackNullGuard = setterScript.indexOf("if($null -eq $focused){throw 'UI Automation descendant focus verification failed'}", fallbackFocusedElement);
+    const fallbackCompare = setterScript.indexOf('[System.Windows.Automation.Automation]::Compare($e,$focused)', fallbackNullGuard);
+    const fallbackCompareThrow = setterScript.indexOf("throw 'UI Automation descendant focus verification failed'", fallbackCompare);
+    const firstSendKeys = setterScript.indexOf("[System.Windows.Forms.SendKeys]::SendWait('^{A}')", fallbackCompareThrow);
+    const secondSendKeys = setterScript.indexOf('[System.Windows.Forms.SendKeys]::SendWait(', firstSendKeys + 1);
+    expect(selected).toBeGreaterThanOrEqual(0);
+    expect(initialSetFocus).toBeGreaterThan(selected);
+    expect(initialFocusedElement).toBeGreaterThan(initialSetFocus);
+    expect(initialNullGuard).toBeGreaterThan(initialFocusedElement);
+    expect(initialCompare).toBeGreaterThan(initialNullGuard);
+    expect(initialCompareThrow).toBeGreaterThan(initialCompare);
+    for (const mutation of [valuePatternSet, legacySet, wmSet, firstSendKeys, secondSendKeys]) {
+      expect(mutation).toBeGreaterThan(initialCompareThrow);
+    }
+    expect(fallbackTopLevelFocus).toBeGreaterThan(wmSet);
+    expect(fallbackSetFocus).toBeGreaterThan(fallbackTopLevelFocus);
+    expect(fallbackFocusedElement).toBeGreaterThan(fallbackSetFocus);
+    expect(fallbackNullGuard).toBeGreaterThan(fallbackFocusedElement);
+    expect(fallbackCompare).toBeGreaterThan(fallbackNullGuard);
+    expect(fallbackCompareThrow).toBeGreaterThan(fallbackCompare);
+    expect(firstSendKeys).toBeGreaterThan(fallbackCompareThrow);
+    expect(secondSendKeys).toBeGreaterThan(firstSendKeys);
+    const receiptStart = setterScript.lastIndexOf('@{ hwnd=42; automation_id=');
+    const receipt = setterScript.slice(receiptStart);
+    expect(receipt).toContain("focus_method='AutomationElement.SetFocus'");
+    expect(receipt).toContain('focus_verified_before_mutation=$true');
+    expect(receipt).toContain("focus_verification='Automation.Compare'");
+    expect(receipt).not.toContain(' focused=');
     const writeScript = scripts.at(-1)!;
     expect(writeScript).toContain('function findUiaElement(');
     expect(writeScript).toContain('return $matches[0]');
