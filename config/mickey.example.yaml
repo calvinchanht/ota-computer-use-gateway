@@ -29,8 +29,10 @@ workspaces:
       machine_admin_host_scope: false
       host_root: /
     browser:
+  max_open_work_pages: 5
       profiles:
-        - label: "mickey"
+        - purpose: work
+      label: "mickey"
           user_data_dir: "/absolute/path/to/chrome-profile"
           cdp_host: "127.0.0.1"
           cdp_port: 9222

@@ -28,7 +28,9 @@ Examples of CDP methods provider-thread agents may use directly:
 - `Target.closeTarget`
 - `Browser.getVersion`
 
-The gateway scopes access to the configured profile/target and keeps it behind MCP auth/policy. It does not expose a naked remote debugging port publicly.
+The gateway scopes access to the configured **work** profile/target and keeps it behind MCP auth/policy. A profile declared with `purpose: threaddex` is reserved for provider conversations and is unavailable to agent browser actions. Work and Threaddex profiles must use different CDP endpoints and different user-data directories when those directories are declared. The gateway does not expose a naked remote debugging port publicly.
+
+Creating a work page is bounded by `browser.max_open_work_pages` (default `5`). The cap counts physical Chrome `page` targets in the selected work browser. `Target.createTarget` fails once the cap is reached; the agent must close a work page before opening another. The gateway does not auto-close pages.
 
 ## Mac/Cua Driver tools
 
@@ -95,7 +97,7 @@ Roblox Studio-specific operations are not reimplemented here. Use the separately
 
 Screenshot capture stores a full PNG artifact and a WebP preview artifact under `.agent/artifacts/windows-screenshots/`, but those image paths and signed URLs are internal to the OTA -> Threaddex visual-followup handoff. Neither screenshot operation may expose local paths, `artifact`, `preview`, `full`, `readable_url`, `image_web_url`, or `web_url` as competing agent-facing visual sources.
 
-For webchat visual inspection, call `windows_screenshot` with the active Threaddex job id:
+For webchat visual inspection inside a formal Threaddex job, call `windows_screenshot` with the active job id:
 
 ```json
 {
@@ -107,7 +109,7 @@ For webchat visual inspection, call `windows_screenshot` with the active Threadd
 }
 ```
 
-When the Threaddex follow-up endpoint is configured, the gateway posts the screenshot readable URL back to the active job as a visible follow-up prompt. The action response returns only the capture metadata and `visual_followup` polling contract. The webchat agent must poll `visual_followup.status_url` until `sent_to_provider` is true before claiming visual inspection. If `visual_followup.job_id` is omitted, the screenshot is still captured, but `visual_followup.state` is `not_requested`.
+When the Threaddex follow-up endpoint is configured, the gateway posts the screenshot readable URL back to the active job as a visible follow-up prompt. For direct/non-job work, pass `conversation_lane` for the exact calling lane; direct delivery fails closed without it, so a screenshot can never silently fall through to `main` or another same-agent lane. The action response returns only capture metadata plus the `visual_followup` contract. The webchat agent must wait for `sent_to_provider=true` before claiming provider-visible inspection. If neither a job id nor a lane-scoped direct delivery identity is available, the screenshot remains captured locally but visual delivery is `not_requested`.
 
 App launch is first-class because desktop development workflows, such as Roblox Studio work, require starting and controlling non-browser applications.
 
@@ -141,18 +143,28 @@ Workspace config can declare profiles:
 
 ```yaml
 browser:
+  max_open_work_pages: 5
   profiles:
-    - label: "catalyst"
-      user_data_dir: "/path/to/profile"
+    - label: "catalyst-threaddex"
+      purpose: "threaddex"
+      user_data_dir: "/path/to/threaddex-profile"
       cdp_host: "127.0.0.1"
       cdp_port: 9222
+      display: ":20"
+      headed: true
+      launch: false
+    - label: "catalyst-work"
+      purpose: "work"
+      user_data_dir: "/path/to/work-profile"
+      cdp_host: "127.0.0.1"
+      cdp_port: 9223
       display: ":20"
       headed: true
       default: true
       launch: false
 ```
 
-If no profile is configured, the gateway synthesizes a default profile whose label is the workspace/agent id.
+If no profile is configured, the gateway synthesizes a backward-compatible `work` profile whose label is the workspace/agent id. Production agents that also use Threaddex must explicitly split the provider browser into a separate `purpose: threaddex` process/profile before enabling agent browser work.
 
 
 ## Batch sequencing

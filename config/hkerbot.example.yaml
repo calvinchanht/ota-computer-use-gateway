@@ -31,8 +31,10 @@ workspaces:
     allow_screen: true
     allow_mouse_keyboard: true
     browser:
+  max_open_work_pages: 5
       profiles:
-        - label: "hkerbot-social"
+        - purpose: work
+      label: "hkerbot-social"
           description: "HKerBot social/MBS browser for x.com, Instagram, and Meta Business Suite."
           user_data_dir: "/home/molt/hkerbot/workspace/.browser-profiles/hker"
           cdp_host: "127.0.0.1"

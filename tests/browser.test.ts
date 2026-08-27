@@ -152,7 +152,7 @@ describe('browser CDP proxy tools', () => {
   });
 
   it('forces Target.createTarget into a separate unfocused browser window', async () => {
-    mockFetch({ webSocketDebuggerUrl: 'ws://cdp/browser' });
+    mockFetchSequence([[], { webSocketDebuggerUrl: 'ws://cdp/browser' }]);
     const sends = mockWebSocket({ targetId: 'new-page' });
     await browserCdpBrowserCall(controlWorkspace(), 'Target.createTarget', {
       url: 'https://example.com/',
@@ -216,6 +216,40 @@ describe('browser CDP proxy tools', () => {
     expect(data.results[0].wait.ok).toBe(true);
     expect(sends[0]).toContain('Page.enable');
     expect(sends[1]).toContain('Page.navigate');
+  });
+
+  it('treats browser profiles as work-only by default and reports the five-page default cap', async () => {
+    const data = (await listBrowserProfiles(fixtureWorkspace())).data as any;
+    expect(data.max_open_work_pages).toBe(5);
+    expect(data.profiles[0].purpose).toBe('work');
+  });
+
+  it('does not expose Threaddex-reserved profiles to agent browser actions', async () => {
+    const workspace = controlWorkspace({
+      browser: {
+        profiles: [
+          { label: 'threaddex', purpose: 'threaddex', cdp_host: '127.0.0.1', cdp_port: 9333, headed: true, default: true, launch: false },
+          { label: 'work', purpose: 'work', cdp_host: '127.0.0.1', cdp_port: 9444, headed: true, default: false, launch: false }
+        ]
+      }
+    });
+    await expect(browserStatus(workspace, 'threaddex')).rejects.toThrow('reserved for Threaddex');
+    mockFetch({ Browser: 'Chrome' });
+    const data = (await browserStatus(workspace)).data as any;
+    expect(data.profile.label).toBe('work');
+  });
+
+  it('blocks new work-browser pages at the configured page limit', async () => {
+    mockFetch(Array.from({ length: 5 }, (_, index) => ({ id: String(index + 1), type: 'page', title: `Work ${index + 1}`, url: `https://example.com/${index + 1}` })));
+    await expect(browserCdpBrowserCall(controlWorkspace(), 'Target.createTarget', { url: 'https://example.com/new' }))
+      .rejects.toThrow('work_browser_page_limit_reached:5/5');
+  });
+
+  it('honors a custom work-browser page limit', async () => {
+    const workspace = controlWorkspace({ browser: { max_open_work_pages: 2, profiles: [] } });
+    mockFetch([{ id: '1', type: 'page', title: 'Existing', url: 'https://example.com/1' }, { id: '2', type: 'page', title: 'Existing 2', url: 'https://example.com/2' }]);
+    await expect(browserCdpBrowserCall(workspace, 'Target.createTarget', { url: 'https://example.com/new' }))
+      .rejects.toThrow('work_browser_page_limit_reached:2/2');
   });
 
   it('requires browser CDP control for CDP calls', async () => {
