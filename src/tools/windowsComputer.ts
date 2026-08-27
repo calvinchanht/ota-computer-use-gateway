@@ -519,7 +519,7 @@ function rectObjFn() {
 }
 
 function uiaRectObjFn() {
-  return `function uiaFinite($v){ $d=[double]$v; (-not [double]::IsNaN($d)) -and (-not [double]::IsInfinity($d)) }; function uiaRectObj($r){ $finite=(uiaFinite $r.X) -and (uiaFinite $r.Y) -and (uiaFinite $r.Width) -and (uiaFinite $r.Height); $empty=$false; try{$empty=[bool]$r.IsEmpty}catch{}; if($finite -and (($r.Width -le 0) -or ($r.Height -le 0))){$empty=$true}; $bounds=$null; if($finite -and -not $empty){$bounds=@{ x=[int]$r.X; y=[int]$r.Y; width=[int]$r.Width; height=[int]$r.Height }}; @{ bounds=$bounds; bounds_finite=[bool]$finite; bounds_empty=[bool]$empty } }`;
+  return `function uiaFinite($v){ $d=[double]$v; (-not [double]::IsNaN($d)) -and (-not [double]::IsInfinity($d)) }; function uiaRectObj($r){ $finite=(uiaFinite $r.X) -and (uiaFinite $r.Y) -and (uiaFinite $r.Width) -and (uiaFinite $r.Height); $empty=$false; try{$empty=[bool]$r.IsEmpty}catch{}; if($finite -and (($r.Width -le 0) -or ($r.Height -le 0))){$empty=$true}; $bounds=$null; if($finite -and -not $empty){$bounds=@{ x=$r.X; y=$r.Y; width=$r.Width; height=$r.Height }}; @{ bounds=$bounds; bounds_finite=[bool]$finite; bounds_empty=[bool]$empty } }`;
 }
 
 function screenObjFn() {

@@ -1,6 +1,8 @@
+import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
 import {
+  windowsPowerShellJsonScript,
   windowsUiaRead,
   windowsUiaSetValue,
   windowsUiaTree,
@@ -82,13 +84,39 @@ describe('windows computer UIA and hwnd input safety', () => {
     expect(script).toContain('[double]::IsNaN($d)');
     expect(script).toContain('[double]::IsInfinity($d)');
     expect(script).toContain('$bounds=$null');
-    expect(script).toContain('if($finite -and -not $empty){$bounds=@{ x=[int]$r.X; y=[int]$r.Y; width=[int]$r.Width; height=[int]$r.Height }}');
+    expect(script).toContain('if($finite -and -not $empty){$bounds=@{ x=$r.X; y=$r.Y; width=$r.Width; height=$r.Height }}');
     expect(script).toContain('bounds_finite=[bool]$finite');
     expect(script).toContain('bounds_empty=[bool]$empty');
     expect(script).toContain('$r.Width -le 0');
     expect(script).toContain('$r.Height -le 0');
     expect(script).not.toContain('bounds=rectObj $e.Current.BoundingRectangle');
   });
+
+  it.runIf(process.platform === 'win32')('preserves fractional finite UIA rectangle values through the generated PowerShell helper', async () => {
+    await windowsUiaRead(fixtureWorkspace(), 42, { automation_id: 'fractional-target' });
+    const script = scripts.at(-1)!;
+    const helperStart = script.indexOf('function uiaFinite($v)');
+    const helperEnd = script.indexOf('; function findUiaElements(', helperStart);
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const uiaRectHelpers = script.slice(helperStart, helperEnd);
+
+    const actualChildProcess = await vi.importActual<typeof import('node:child_process')>('node:child_process');
+    const actualExecFileAsync = promisify(actualChildProcess.execFile);
+    const probe = `${uiaRectHelpers}; $r=[pscustomobject]@{ X=1.25; Y=-2.5; Width=36.75; Height=20.125; IsEmpty=$false }; (uiaRectObj $r) | ConvertTo-Json -Depth 4`;
+    const encoded = Buffer.from(windowsPowerShellJsonScript(probe), 'utf16le').toString('base64');
+    const { stdout, stderr } = await actualExecFileAsync(
+      'powershell.exe',
+      ['-NoProfile', '-Sta', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+      { timeout: 30000, maxBuffer: 1024 * 1024 }
+    );
+    expect(String(stderr).trim()).toBe('');
+    expect(JSON.parse(String(stdout).trim())).toEqual({
+      bounds: { x: 1.25, y: -2.5, width: 36.75, height: 20.125 },
+      bounds_finite: true,
+      bounds_empty: false
+    });
+  }, 35_000);
 
   it('covers finite, empty, Infinity, -Infinity, and NaN rectangle branches without guessed coordinates', async () => {
     await windowsUiaTree(fixtureWorkspace(), 20, 42);
@@ -100,7 +128,7 @@ describe('windows computer UIA and hwnd input safety', () => {
     expect(script).toContain('[double]::IsNaN($d)');
     expect(script).toContain('[double]::IsInfinity($d)');
     expect(script).toContain('$empty=[bool]$r.IsEmpty');
-    expect(script.match(/\[int\]\$r\.(X|Y|Width|Height)/g)).toHaveLength(4);
+    expect(script.match(/\[int\]\$r\.(X|Y|Width|Height)/g)).toBeNull();
   });
 
   it('isolates a bad UIA node and continues walking later children and siblings', async () => {
