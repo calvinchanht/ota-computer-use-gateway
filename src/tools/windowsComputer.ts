@@ -275,7 +275,7 @@ export async function windowsWindowClick(workspace: Workspace, hwnd: number, x: 
 
 export async function windowsWindowDoubleClick(workspace: Workspace, hwnd: number, x: number, y: number, button = 'left', coordinateSpace = 'client', focus = true) {
   const first = await windowsWindowClick(workspace, hwnd, x, y, button, coordinateSpace, focus);
-  const second = await windowsWindowClick(workspace, hwnd, x, y, button, coordinateSpace, false);
+  const second = await windowsWindowClick(workspace, hwnd, x, y, button, coordinateSpace, focus);
   return ok('windows window double click', { first: first.data, second: second.data });
 }
 
@@ -429,7 +429,7 @@ function windowScreenshotScript(file: string, hwnd: number) {
 
 function uiaTreeScript(maxNodes: number, hwnd?: number) {
   const root = hwnd === undefined ? '[System.Windows.Automation.AutomationElement]::RootElement' : `[System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]${int(hwnd)})`;
-  return `${uiaAssemblies()}; ${rectObjFn()}; ${uiaWalkFn()}; $root=${root}; if($root -eq $null){throw 'UI Automation root not found'}; $out=New-Object System.Collections.ArrayList; walk $root 0 ${Math.max(1, Math.trunc(maxNodes))} $out; @{ hwnd=${psOptionalLiteral(hwnd)}; nodes=$out; count=$out.Count; truncated=($out.Count -ge ${Math.max(1, Math.trunc(maxNodes))}) } | ConvertTo-Json -Depth 8`;
+  return `${uiaAssemblies()}; ${uiaWalkFn()}; $root=${root}; if($root -eq $null){throw 'UI Automation root not found'}; $out=New-Object System.Collections.ArrayList; walk $root 0 ${Math.max(1, Math.trunc(maxNodes))} $out; @{ hwnd=${psOptionalLiteral(hwnd)}; nodes=$out; count=$out.Count; truncated=($out.Count -ge ${Math.max(1, Math.trunc(maxNodes))}) } | ConvertTo-Json -Depth 8`;
 }
 
 function listWindowsScript() {
@@ -445,7 +445,7 @@ function placeWindowScript(hwnd: number, monitor: string, x: number, y: number, 
 }
 
 function uiaReadScript(hwnd: number, selector: Required<WindowsUiaSelector>, maxChars: number) {
-  return `${uiaAssemblies()}; ${uiaSelectorFn()}; $e=findUiaElement ${int(hwnd)} ${q(selector.automation_id)} ${q(selector.name)} ${q(selector.control_type)}; $source='name'; $text=$e.Current.Name; $patterns=@($e.GetSupportedPatterns() | ForEach-Object {$_.ProgrammaticName}); try{$p=$e.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern);$source='value';$text=$p.Current.Value}catch{}; if($source -eq 'name'){try{$p=$e.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern);$source='text';$text=$p.DocumentRange.GetText(${int(maxChars)})}catch{}}; if($source -eq 'name'){try{$p=$e.GetCurrentPattern([System.Windows.Automation.LegacyIAccessiblePattern]::Pattern);$source='legacy_value';$text=$p.Current.Value}catch{}}; if($null -eq $text){$text=''}; if($text.Length -gt ${int(maxChars)}){$text=$text.Substring(0,${int(maxChars)})}; @{ hwnd=${int(hwnd)}; automation_id=$e.Current.AutomationId; name=$e.Current.Name; control_type=($e.Current.ControlType.ProgrammaticName -replace '^ControlType\\.'); source=$source; text=$text; supported_patterns=$patterns; truncated=($text.Length -ge ${int(maxChars)}) } | ConvertTo-Json -Depth 6`;
+  return `${uiaAssemblies()}; ${uiaRectObjFn()}; ${uiaSelectorFn()}; $matches=findUiaElements ${int(hwnd)} ${q(selector.automation_id)} ${q(selector.name)} ${q(selector.control_type)}; if($matches.Count -eq 0){throw 'UI Automation element not found for selector'}; $e=$matches[0]; $source='name'; $text=$e.Current.Name; $patterns=@($e.GetSupportedPatterns() | ForEach-Object {$_.ProgrammaticName}); try{$p=$e.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern);$source='value';$text=$p.Current.Value}catch{}; if($source -eq 'name'){try{$p=$e.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern);$source='text';$text=$p.DocumentRange.GetText(${int(maxChars)})}catch{}}; if($source -eq 'name'){try{$p=$e.GetCurrentPattern([System.Windows.Automation.LegacyIAccessiblePattern]::Pattern);$source='legacy_value';$text=$p.Current.Value}catch{}}; if($null -eq $text){$text=''}; if($text.Length -gt ${int(maxChars)}){$text=$text.Substring(0,${int(maxChars)})}; $b=uiaRectObj $e.Current.BoundingRectangle; @{ hwnd=${int(hwnd)}; match_count=$matches.Count; automation_id=$e.Current.AutomationId; name=$e.Current.Name; control_type=($e.Current.ControlType.ProgrammaticName -replace '^ControlType\\.'); enabled=$e.Current.IsEnabled; offscreen=$e.Current.IsOffscreen; bounds=$b.bounds; bounds_finite=$b.bounds_finite; bounds_empty=$b.bounds_empty; source=$source; text=$text; supported_patterns=$patterns; truncated=($text.Length -ge ${int(maxChars)}) } | ConvertTo-Json -Depth 6`;
 }
 
 function uiaSetValueScript(hwnd: number, selector: Required<WindowsUiaSelector>, value: string) {
@@ -475,19 +475,19 @@ function mouseScrollScript(x: number, y: number, delta: number) {
 }
 
 function windowClickScript(hwnd: number, x: number, y: number, button: string, coordinateSpace: string, focus: boolean) {
-  return `${mouseTypes()}; ${windowCoordinateTypes()}; $p=windowPoint ${int(hwnd)} ${int(x)} ${int(y)} ${q(coordinateSpace)} ${psBool(focus)}; [System.Windows.Forms.Cursor]::Position=New-Object System.Drawing.Point($p.screen.x,$p.screen.y); click ${q(button)}; $p | Add-Member -NotePropertyName button -NotePropertyValue ${q(button)} -PassThru | ConvertTo-Json -Depth 5`;
+  return `${mouseTypes()}; ${win32WindowTypes()}; ${windowCoordinateTypes()}; ${windowInputFocusGuardFn()}; $focused=ensureWindowInputFocus ${int(hwnd)} ${psBool(focus)}; $p=windowPoint ${int(hwnd)} ${int(x)} ${int(y)} ${q(coordinateSpace)} $focused; [System.Windows.Forms.Cursor]::Position=New-Object System.Drawing.Point($p.screen.x,$p.screen.y); click ${q(button)}; $p | Add-Member -NotePropertyName button -NotePropertyValue ${q(button)} -PassThru | ConvertTo-Json -Depth 5`;
 }
 
 function windowMoveScript(hwnd: number, x: number, y: number, coordinateSpace: string, focus: boolean) {
-  return `${formsAssemblies()}; ${windowCoordinateTypes()}; $p=windowPoint ${int(hwnd)} ${int(x)} ${int(y)} ${q(coordinateSpace)} ${psBool(focus)}; [System.Windows.Forms.Cursor]::Position=New-Object System.Drawing.Point($p.screen.x,$p.screen.y); $p | ConvertTo-Json -Depth 5`;
+  return `${formsAssemblies()}; ${win32WindowTypes()}; ${windowCoordinateTypes()}; ${windowInputFocusGuardFn()}; $focused=ensureWindowInputFocus ${int(hwnd)} ${psBool(focus)}; $p=windowPoint ${int(hwnd)} ${int(x)} ${int(y)} ${q(coordinateSpace)} $focused; [System.Windows.Forms.Cursor]::Position=New-Object System.Drawing.Point($p.screen.x,$p.screen.y); $p | ConvertTo-Json -Depth 5`;
 }
 
 function windowDragScript(hwnd: number, fromX: number, fromY: number, toX: number, toY: number, coordinateSpace: string, focus: boolean, durationMs: number, steps: number) {
-  return `${mouseTypes()}; ${windowCoordinateTypes()}; $a=windowPoint ${int(hwnd)} ${int(fromX)} ${int(fromY)} ${q(coordinateSpace)} ${psBool(focus)}; $b=windowPoint ${int(hwnd)} ${int(toX)} ${int(toY)} ${q(coordinateSpace)} $false; $d=drag $a.screen.x $a.screen.y $b.screen.x $b.screen.y ${int(durationMs)} ${int(steps)}; @{ hwnd=${int(hwnd)}; coordinate_space=${q(coordinateSpace)}; from=$a; to=$b; duration_ms=${int(durationMs)}; steps=${int(steps)}; actual_elapsed_ms=$d.actual_elapsed_ms } | ConvertTo-Json -Depth 6`;
+  return `${mouseTypes()}; ${win32WindowTypes()}; ${windowCoordinateTypes()}; ${windowInputFocusGuardFn()}; $focused=ensureWindowInputFocus ${int(hwnd)} ${psBool(focus)}; $a=windowPoint ${int(hwnd)} ${int(fromX)} ${int(fromY)} ${q(coordinateSpace)} $focused; $b=windowPoint ${int(hwnd)} ${int(toX)} ${int(toY)} ${q(coordinateSpace)} $false; $d=drag $a.screen.x $a.screen.y $b.screen.x $b.screen.y ${int(durationMs)} ${int(steps)}; @{ hwnd=${int(hwnd)}; coordinate_space=${q(coordinateSpace)}; from=$a; to=$b; duration_ms=${int(durationMs)}; steps=${int(steps)}; actual_elapsed_ms=$d.actual_elapsed_ms } | ConvertTo-Json -Depth 6`;
 }
 
 function windowScrollScript(hwnd: number, x: number, y: number, delta: number, coordinateSpace: string, focus: boolean) {
-  return `${mouseTypes()}; ${windowCoordinateTypes()}; $p=windowPoint ${int(hwnd)} ${int(x)} ${int(y)} ${q(coordinateSpace)} ${psBool(focus)}; [System.Windows.Forms.Cursor]::Position=New-Object System.Drawing.Point($p.screen.x,$p.screen.y); [Win32Input]::mouse_event(0x0800,0,0,${int(delta)},[UIntPtr]::Zero); $p | Add-Member -NotePropertyName delta -NotePropertyValue ${int(delta)} -PassThru | ConvertTo-Json -Depth 5`;
+  return `${mouseTypes()}; ${win32WindowTypes()}; ${windowCoordinateTypes()}; ${windowInputFocusGuardFn()}; $focused=ensureWindowInputFocus ${int(hwnd)} ${psBool(focus)}; $p=windowPoint ${int(hwnd)} ${int(x)} ${int(y)} ${q(coordinateSpace)} $focused; [System.Windows.Forms.Cursor]::Position=New-Object System.Drawing.Point($p.screen.x,$p.screen.y); [Win32Input]::mouse_event(0x0800,0,0,${int(delta)},[UIntPtr]::Zero); $p | Add-Member -NotePropertyName delta -NotePropertyValue ${int(delta)} -PassThru | ConvertTo-Json -Depth 5`;
 }
 
 function typeTextScript(text: string, hwnd?: number) {
@@ -516,6 +516,10 @@ function uiaAssemblies() {
 
 function rectObjFn() {
   return 'function rectObj($r){ @{ x=[int]$r.X; y=[int]$r.Y; width=[int]$r.Width; height=[int]$r.Height } }';
+}
+
+function uiaRectObjFn() {
+  return `function uiaFinite($v){ $d=[double]$v; (-not [double]::IsNaN($d)) -and (-not [double]::IsInfinity($d)) }; function uiaRectObj($r){ $finite=(uiaFinite $r.X) -and (uiaFinite $r.Y) -and (uiaFinite $r.Width) -and (uiaFinite $r.Height); $empty=$false; try{$empty=[bool]$r.IsEmpty}catch{}; if($finite -and (($r.Width -le 0) -or ($r.Height -le 0))){$empty=$true}; $bounds=$null; if($finite -and -not $empty){$bounds=@{ x=[int]$r.X; y=[int]$r.Y; width=[int]$r.Width; height=[int]$r.Height }}; @{ bounds=$bounds; bounds_finite=[bool]$finite; bounds_empty=[bool]$empty } }`;
 }
 
 function screenObjFn() {
@@ -683,26 +687,30 @@ public class Win32WindowCoordinates {
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
   public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
   public struct POINT { public int X; public int Y; }
-  public static object Point(IntPtr hWnd, int x, int y, string space, bool focus) {
+  public static object Point(IntPtr hWnd, int x, int y, string space, bool focused) {
     if (!IsWindow(hWnd)) throw new Exception("hwnd is not a valid window");
     if (IsIconic(hWnd)) throw new Exception("window is minimized");
     var p = new POINT { X = x, Y = y };
-    bool focused = focus && SetForegroundWindow(hWnd);
+
     if (space == "window") { RECT r; if (!GetWindowRect(hWnd, out r)) throw new Exception("GetWindowRect failed"); p.X = r.Left + x; p.Y = r.Top + y; }
     else if (space == "client") { if (!ClientToScreen(hWnd, ref p)) throw new Exception("ClientToScreen failed"); }
     else throw new Exception("coordinate_space must be client or window");
     return new { hwnd = hWnd.ToInt64(), coordinate_space = space, local = new { x = x, y = y }, screen = new { x = p.X, y = p.Y }, focused = focused };
   }
 }
-"@; function windowPoint($hwnd,$x,$y,$space,$focus){ [Win32WindowCoordinates]::Point([IntPtr]$hwnd,[int]$x,[int]$y,$space,[bool]$focus) }`;
+"@; function windowPoint($hwnd,$x,$y,$space,$focused){ [Win32WindowCoordinates]::Point([IntPtr]$hwnd,[int]$x,[int]$y,$space,[bool]$focused) }`;
+}
+
+function windowInputFocusGuardFn() {
+  return `function ensureWindowInputFocus($hwnd,$focusRequested){ if(-not [bool]$focusRequested){ return $false }; $focus=[Win32Windows]::Focus([IntPtr]$hwnd); if((-not $focus.focused) -or ([long]$focus.foreground_hwnd -ne [long]$hwnd)){throw ('failed to focus hwnd '+$hwnd+'; foreground hwnd is '+$focus.foreground_hwnd)}; return $true }`;
 }
 
 function uiaWalkFn() {
-  return `${rectObjFn()}; function nodeObj($e,$d,$r){ $ct=$e.Current.ControlType.ProgrammaticName -replace '^ControlType\\.'; @{ ref=$r; depth=$d; name=$e.Current.Name; automation_id=$e.Current.AutomationId; class_name=$e.Current.ClassName; control_type=$ct; hwnd=$e.Current.NativeWindowHandle; pid=$e.Current.ProcessId; bounds=rectObj $e.Current.BoundingRectangle; enabled=$e.Current.IsEnabled; offscreen=$e.Current.IsOffscreen } }; function walk($e,$d,$max,$out){ if($out.Count -ge $max){ return }; [void]$out.Add((nodeObj $e $d ("n"+$out.Count))); $w=[System.Windows.Automation.TreeWalker]::ControlViewWalker; $c=$w.GetFirstChild($e); while($c -ne $null -and $out.Count -lt $max){ walk $c ($d+1) $max $out; $c=$w.GetNextSibling($c) } }`;
+  return `${uiaRectObjFn()}; function nodeObj($e,$d,$r){ $ct=$e.Current.ControlType.ProgrammaticName -replace '^ControlType\\.'; $b=uiaRectObj $e.Current.BoundingRectangle; @{ ref=$r; depth=$d; name=$e.Current.Name; automation_id=$e.Current.AutomationId; class_name=$e.Current.ClassName; control_type=$ct; hwnd=$e.Current.NativeWindowHandle; pid=$e.Current.ProcessId; bounds=$b.bounds; bounds_finite=$b.bounds_finite; bounds_empty=$b.bounds_empty; enabled=$e.Current.IsEnabled; offscreen=$e.Current.IsOffscreen } }; function walk($e,$d,$max,$out){ if($out.Count -ge $max){ return }; $ref="n"+$out.Count; try{$node=nodeObj $e $d $ref}catch{$message=$_.Exception.Message; if($message.Length -gt 512){$message=$message.Substring(0,512)}; $node=@{ ref=$ref; depth=$d; fault=$message }}; [void]$out.Add($node); $w=[System.Windows.Automation.TreeWalker]::ControlViewWalker; try{$c=$w.GetFirstChild($e)}catch{return}; while($c -ne $null -and $out.Count -lt $max){ walk $c ($d+1) $max $out; try{$c=$w.GetNextSibling($c)}catch{$c=$null} } }`;
 }
 
 function uiaSelectorFn() {
-  return `function findUiaElement($hwnd,$automationId,$name,$controlType){ $root=[System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]$hwnd); if($root -eq $null){throw 'UI Automation root not found for hwnd'}; $all=$root.FindAll([System.Windows.Automation.TreeScope]::Subtree,[System.Windows.Automation.Condition]::TrueCondition); foreach($e in $all){ $ct=$e.Current.ControlType.ProgrammaticName -replace '^ControlType\\.'; if($automationId -and $e.Current.AutomationId -ne $automationId){continue}; if($name -and $e.Current.Name -ne $name){continue}; if($controlType -and $ct -ne $controlType){continue}; return $e }; throw 'UI Automation element not found for selector' }`;
+  return `function findUiaElements($hwnd,$automationId,$name,$controlType){ $root=[System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]$hwnd); if($root -eq $null){throw 'UI Automation root not found for hwnd'}; $all=$root.FindAll([System.Windows.Automation.TreeScope]::Subtree,[System.Windows.Automation.Condition]::TrueCondition); $matches=New-Object System.Collections.ArrayList; foreach($e in $all){ try{$ct=$e.Current.ControlType.ProgrammaticName -replace '^ControlType\\.'; if($automationId -and $e.Current.AutomationId -ne $automationId){continue}; if($name -and $e.Current.Name -ne $name){continue}; if($controlType -and $ct -ne $controlType){continue}; [void]$matches.Add($e)}catch{continue} }; return ,$matches }; function findUiaElement($hwnd,$automationId,$name,$controlType){ $matches=findUiaElements $hwnd $automationId $name $controlType; if($matches.Count -eq 0){throw 'UI Automation element not found for selector'}; return $matches[0] }`;
 }
 
 function targetedSendKeysPrefix(hwnd?: number) {
