@@ -464,20 +464,15 @@ export async function screenshotVisualFollowup(screenshot: Record<string, unknow
   const readableUrl = screenshotReadableUrl(screenshot);
   if (!readableUrl) return { state: 'not_available', sent_to_provider: false, provider_visible: false, reason: 'readable_url_missing', instruction: 'Screenshot was captured, but no readable URL was available to send as a visible follow-up.' };
   const input = visualFollowupInput(params, readableUrl);
-  if (!input.job_id) return await directVisualFollowup(input, readableUrl);
+  return input.job_id ? jobVisualFollowup(input, readableUrl) : directVisualFollowup(input, readableUrl);
+}
+
+async function jobVisualFollowup(input: ReturnType<typeof visualFollowupInput>, readableUrl: string) {
   try {
-    const response = await fetch(`${input.base_url}/v1/job/${encodeURIComponent(input.job_id)}/visual-followup`, {
+    const response = await fetch(`${input.base_url}/v1/job/${encodeURIComponent(input.job_id!)}/visual-followup`, {
       method: 'POST',
       headers: visualFollowupHeaders(),
-      body: JSON.stringify({
-        idempotency_key: input.idempotency_key,
-        kind: input.kind,
-        source: input.source,
-        readable_url: readableUrl,
-        attachment_paths: input.attachment_paths,
-        mime: input.mime,
-        prompt_text: input.prompt_text
-      })
+      body: JSON.stringify(jobVisualFollowupBody(input, readableUrl))
     });
     const body = await response.json().catch(() => ({})) as Record<string, unknown>;
     if (!response.ok || body.ok !== true || !isRecord(body.visual_followup)) {
@@ -489,30 +484,20 @@ export async function screenshotVisualFollowup(screenshot: Record<string, unknow
   }
 }
 
+function jobVisualFollowupBody(input: ReturnType<typeof visualFollowupInput>, readableUrl: string) {
+  return {
+    idempotency_key: input.idempotency_key, kind: input.kind, source: input.source,
+    conversation_lane: input.conversation_lane, readable_url: readableUrl, attachment_paths: input.attachment_paths,
+    mime: input.mime, prompt_text: input.prompt_text
+  };
+}
+
 async function directVisualFollowup(input: ReturnType<typeof visualFollowupInput>, readableUrl: string) {
-  if (!input.agent_id) {
-    return {
-      state: 'not_requested',
-      sent_to_provider: false,
-      provider_visible: false,
-      reason: 'direct_visual_followup_agent_id_required',
-      instruction: 'Screenshot was captured, but no job_id or agent_id/workspace_id was available for visible direct prompt delivery.'
-    };
-  }
+  const missing = directVisualFollowupMissingIdentity(input);
+  if (missing) return missing;
   try {
-    const response = await fetch(`${input.base_url}/v1/agents/${encodeURIComponent(input.agent_id)}/direct-visual-followup`, {
-      method: 'POST',
-      headers: visualFollowupHeaders(),
-      body: JSON.stringify({
-        idempotency_key: input.idempotency_key,
-        kind: input.kind,
-        source: input.source,
-        readable_url: readableUrl,
-        attachment_path: input.attachment_path,
-        attachment_paths: input.attachment_paths,
-        mime: input.mime,
-        prompt_text: input.prompt_text
-      })
+    const response = await fetch(`${input.base_url}/v1/agents/${encodeURIComponent(input.agent_id!)}/direct-visual-followup`, {
+      method: 'POST', headers: visualFollowupHeaders(), body: JSON.stringify(directVisualFollowupBody(input, readableUrl))
     });
     const body = await response.json().catch(() => ({})) as Record<string, unknown>;
     if (!response.ok || body.ok !== true || !isRecord(body.visual_followup)) return directVisualFollowupFailure(response.status, body.error);
@@ -520,6 +505,26 @@ async function directVisualFollowup(input: ReturnType<typeof visualFollowupInput
   } catch (error) {
     return { state: 'failed', sent_to_provider: false, provider_visible: false, reason: `direct_visual_followup_request_exception:${error instanceof Error ? error.message : String(error)}` };
   }
+}
+
+function directVisualFollowupMissingIdentity(input: ReturnType<typeof visualFollowupInput>) {
+  if (!input.agent_id) return {
+    state: 'not_requested', sent_to_provider: false, provider_visible: false, reason: 'direct_visual_followup_agent_id_required',
+    instruction: 'Screenshot was captured, but no job_id or agent_id/workspace_id was available for visible direct prompt delivery.'
+  };
+  if (!input.conversation_lane) return {
+    state: 'not_requested', sent_to_provider: false, provider_visible: false, reason: 'direct_visual_followup_conversation_lane_required',
+    instruction: 'Screenshot was captured, but direct visual delivery is fail-closed until conversation_lane identifies the calling Threaddex lane.'
+  };
+  return undefined;
+}
+
+function directVisualFollowupBody(input: ReturnType<typeof visualFollowupInput>, readableUrl: string) {
+  return {
+    idempotency_key: input.idempotency_key, kind: input.kind, source: input.source, conversation_lane: input.conversation_lane,
+    readable_url: readableUrl, attachment_path: input.attachment_path, attachment_paths: input.attachment_paths,
+    mime: input.mime, prompt_text: input.prompt_text
+  };
 }
 
 function directVisualFollowupFailure(status: number, error: unknown) {
@@ -542,6 +547,7 @@ function visualFollowupInput(params: Record<string, unknown>, readableUrl: strin
   const visual = isRecord(params.visual_followup) ? params.visual_followup : {};
   const job_id = stringValue(visual.job_id) ?? stringValue(params.threaddex_job_id) ?? stringValue(params.job_id);
   const agent_id = stringValue(visual.agent_id) ?? stringValue(params.agent_id) ?? stringValue(params.workspace_id);
+  const conversation_lane = stringValue(visual.conversation_lane) ?? stringValue(params.conversation_lane);
   const base_url = configuredVisualFollowupBaseUrl();
   const public_base_url = stripTrailingSlash(process.env.THREADEX_VISUAL_FOLLOWUP_PUBLIC_BASE_URL ?? '');
   const kind = stringValue(visual.kind) ?? stringValue(params.kind) ?? 'screenshot';
@@ -551,7 +557,7 @@ function visualFollowupInput(params: Record<string, unknown>, readableUrl: strin
   const prompt_text = stringValue(visual.prompt_text) ?? stringValue(params.prompt_text) ?? defaultVisualPrompt(job_id, readableUrl);
   const attachment_path = stringValue(visual.attachment_path) ?? stringValue(params.attachment_path);
   const attachment_paths = stringArrayValue(visual.attachment_paths ?? params.attachment_paths, 8);
-  return { job_id, agent_id, base_url, public_base_url, idempotency_key, kind, source, mime, prompt_text, attachment_path, attachment_paths };
+  return { job_id, agent_id, conversation_lane, base_url, public_base_url, idempotency_key, kind, source, mime, prompt_text, attachment_path, attachment_paths };
 }
 
 function configuredVisualFollowupBaseUrl(): string {

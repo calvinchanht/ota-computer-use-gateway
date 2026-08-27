@@ -18,6 +18,29 @@ describe('cua driver proxy tools', () => {
     expect(String((result as any).instruction)).toContain('agent_id/workspace_id');
   });
 
+  it('fails closed for direct screenshot delivery when caller lane is missing', async () => {
+    const result = await screenshotVisualFollowup(
+      { preview: { readable_url: 'https://boba-api.unrealize.com/api/v1/artifacts/screen.webp?sig=abc' } },
+      { agent_id: 'boba' }
+    );
+    expect(result).toMatchObject({ state: 'not_requested', reason: 'direct_visual_followup_conversation_lane_required' });
+  });
+
+  it('sends direct screenshot visual follow-up only with the declared caller lane', async () => {
+    process.env.THREADEX_VISUAL_FOLLOWUP_BASE_URL = 'http://127.0.0.1:33988';
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ ok: true, visual_followup: { id: 'lane-shot', conversation_lane: 'worker-a', state: 'queued', sent_to_provider: false, provider_visible: false, status_path: '/v1/agents/boba/direct-visual-followup/lane-shot/status' } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    await screenshotVisualFollowup(
+      { preview: { readable_url: 'https://safe.example/lane-shot.webp' } },
+      { agent_id: 'boba', conversation_lane: 'worker-a', visual_followup: { idempotency_key: 'lane-shot' } }
+    );
+    expect(calls[0].url).toBe('http://127.0.0.1:33988/v1/agents/boba/direct-visual-followup');
+    expect(JSON.parse(String(calls[0].init.body))).toMatchObject({ conversation_lane: 'worker-a', idempotency_key: 'lane-shot' });
+  });
+
   it('creates a Threaddex visual follow-up and returns a pollable public status URL', async () => {
     process.env.THREADEX_VISUAL_FOLLOWUP_BASE_URL = 'http://127.0.0.1:33988';
     process.env.THREADEX_VISUAL_FOLLOWUP_PUBLIC_BASE_URL = 'https://threaddex-boba.unrealize.com';

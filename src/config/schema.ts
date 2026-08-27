@@ -5,6 +5,7 @@ export const DEFAULT_MAX_PROCESS_MS = 60 * 60 * 1000;
 
 export const browserProfileSchema = z.object({
   label: z.string().min(1).optional(),
+  purpose: z.enum(['work', 'threaddex']).optional(),
   user_data_dir: z.string().min(1).optional(),
   cdp_host: z.string().min(1).default('127.0.0.1'),
   cdp_port: z.number().int().positive().default(9222),
@@ -15,7 +16,29 @@ export const browserProfileSchema = z.object({
 });
 
 export const browserSchema = z.object({
+  max_open_work_pages: z.number().int().positive().max(100).optional(),
   profiles: z.array(browserProfileSchema).default([])
+}).superRefine((browser, context) => {
+  const work = browser.profiles.filter((profile) => (profile.purpose ?? 'work') === 'work');
+  const threaddex = browser.profiles.filter((profile) => profile.purpose === 'threaddex');
+  for (const workProfile of work) {
+    for (const threaddexProfile of threaddex) {
+      if (workProfile.cdp_host === threaddexProfile.cdp_host && workProfile.cdp_port === threaddexProfile.cdp_port) {
+        context.addIssue({
+          code: 'custom',
+          path: ['profiles'],
+          message: `work and threaddex browser profiles must use different CDP endpoints: ${workProfile.label ?? 'work'} / ${threaddexProfile.label ?? 'threaddex'}`
+        });
+      }
+      if (workProfile.user_data_dir && threaddexProfile.user_data_dir && workProfile.user_data_dir === threaddexProfile.user_data_dir) {
+        context.addIssue({
+          code: 'custom',
+          path: ['profiles'],
+          message: `work and threaddex browser profiles must use different user_data_dir values: ${workProfile.label ?? 'work'} / ${threaddexProfile.label ?? 'threaddex'}`
+        });
+      }
+    }
+  }
 }).default({ profiles: [] });
 
 export const windowsComputerSchema = z.object({

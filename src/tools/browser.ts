@@ -4,7 +4,8 @@ import type { Workspace } from '../core/workspaces.js';
 import { ok } from '../core/result.js';
 import { assertInside } from '../core/paths.js';
 
-const REMINDER = 'Use CDP directly through browser_cdp_* tools. Target.createTarget is forced into a separate unfocused browser window to protect the anchored Threaddex webchat.';
+const REMINDER = 'Use the dedicated work browser through browser_cdp_* CDP tools. Threaddex-reserved profiles are not available to agent browser actions. Target.createTarget is forced into a separate unfocused work-browser window.';
+const DEFAULT_MAX_OPEN_WORK_PAGES = 5;
 
 type BrowserProfile = NonNullable<Workspace['browser']>['profiles'][number];
 
@@ -83,7 +84,7 @@ let browserTailCursor = 0;
 
 export async function listBrowserProfiles(workspace: Workspace) {
   const profiles = configuredProfiles(workspace).map((profile, index) => browserProfile(workspace, profile, index));
-  return ok(`listed ${profiles.length} browser profiles`, { workspace_id: workspace.id, reminder: REMINDER, profiles });
+  return ok(`listed ${profiles.length} browser profiles`, { workspace_id: workspace.id, reminder: REMINDER, max_open_work_pages: maxOpenWorkPages(workspace), profiles });
 }
 
 export async function browserStatus(workspace: Workspace, label?: string) {
@@ -245,7 +246,9 @@ export async function browserUploadFileAndVerify(workspace: Workspace, options: 
 export async function browserCdpBrowserCall(workspace: Workspace, method: string, params: Record<string, unknown> = {}, label?: string) {
   assertBrowserControl(workspace);
   const profile = selectedBrowserProfile(workspace, label);
-  const result = await cdpCommand(await browserWebSocketUrl(profile), boundedCdpMethod(method), boundedCdpParams(params));
+  const boundedMethod = boundedCdpMethod(method);
+  if (boundedMethod === 'Target.createTarget') await assertWorkPageCapacity(workspace, profile);
+  const result = await cdpCommand(await browserWebSocketUrl(profile), boundedMethod, boundedCdpParams(params));
   return ok('browser-level CDP call completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, method, result: boundedJson(result) });
 }
 
@@ -255,14 +258,20 @@ export async function browserCdpBrowserBatch(workspace: Workspace, calls: CdpBat
   const url = await browserWebSocketUrl(profile);
   const boundedCalls = calls.slice(0, 20);
   const results = [];
-  for (let index = 0; index < boundedCalls.length; index++) results.push(await oneCdpBatchCall(url, boundedCalls[index], index, false));
+  for (let index = 0; index < boundedCalls.length; index++) {
+    const step = boundedCalls[index];
+    if ('method' in step && step.method === 'Target.createTarget') await assertWorkPageCapacity(workspace, profile);
+    results.push(await oneCdpBatchCall(url, step, index, false));
+  }
   return ok('browser-level CDP batch completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, results });
 }
 
 export async function browserCdpCall(workspace: Workspace, targetId: string, method: string, params: Record<string, unknown> = {}, label?: string) {
   assertBrowserControl(workspace);
   const { profile, target } = await websocketTarget(workspace, targetId, label);
-  const result = await cdpCommand(target.webSocketDebuggerUrl, boundedCdpMethod(method), boundedCdpParams(params));
+  const boundedMethod = boundedCdpMethod(method);
+  if (boundedMethod === 'Target.createTarget') await assertWorkPageCapacity(workspace, profile);
+  const result = await cdpCommand(target.webSocketDebuggerUrl, boundedMethod, boundedCdpParams(params));
   return ok('browser CDP call completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, target: targetSummary(target), method, result: boundedJson(result) });
 }
 
@@ -271,7 +280,11 @@ export async function browserCdpBatch(workspace: Workspace, targetId: string, ca
   const { profile, target } = await websocketTarget(workspace, targetId, label);
   const boundedCalls = calls.slice(0, 20);
   const results = [];
-  for (let index = 0; index < boundedCalls.length; index++) results.push(await oneCdpBatchCall(target.webSocketDebuggerUrl, boundedCalls[index], index, true));
+  for (let index = 0; index < boundedCalls.length; index++) {
+    const step = boundedCalls[index];
+    if ('method' in step && step.method === 'Target.createTarget') await assertWorkPageCapacity(workspace, profile);
+    results.push(await oneCdpBatchCall(target.webSocketDebuggerUrl, step, index, true));
+  }
   return ok('browser CDP batch completed', { workspace_id: workspace.id, reminder: REMINDER, profile_label: profile.label, target: targetSummary(target), results });
 }
 
@@ -592,9 +605,12 @@ function assertBrowserControl(workspace: Workspace) {
 
 function selectedBrowserProfile(workspace: Workspace, label?: string) {
   const profiles = configuredProfiles(workspace).map((profile, index) => browserProfile(workspace, profile, index));
-  const target = label ?? profiles.find((profile) => profile.default)?.label ?? workspace.id;
+  const workProfiles = profiles.filter((profile) => profile.purpose === 'work');
+  const target = label ?? workProfiles.find((profile) => profile.default)?.label ?? workProfiles[0]?.label;
+  if (!target) throw new Error('no dedicated work browser profile is configured');
   const profile = profiles.find((item) => item.label === target);
   if (!profile) throw new Error(`unknown browser profile: ${target}`);
+  if (profile.purpose !== 'work') throw new Error(`browser profile is reserved for Threaddex and unavailable to work browser actions: ${target}`);
   return profile;
 }
 
@@ -606,6 +622,7 @@ function configuredProfiles(workspace: Workspace): BrowserProfile[] {
 function browserProfile(workspace: Workspace, profile: BrowserProfile, index: number) {
   return {
     label: profile.label ?? workspace.id,
+    purpose: profile.purpose ?? 'work',
     user_data_dir: profile.user_data_dir ?? null,
     cdp_host: profile.cdp_host ?? '127.0.0.1',
     cdp_port: profile.cdp_port ?? 9222,
@@ -614,6 +631,19 @@ function browserProfile(workspace: Workspace, profile: BrowserProfile, index: nu
     default: profile.default ?? index === 0,
     launch: profile.launch ?? false
   };
+}
+
+async function assertWorkPageCapacity(workspace: Workspace, profile: ReturnType<typeof browserProfile>): Promise<void> {
+  const targets = await fetchCdpJson<ChromeTarget[]>(profile, '/json/list');
+  const openPages = targets.filter((target) => targetMatchesFilter(target, normalizeTargetFilter({ type: 'page' }))).length;
+  const limit = maxOpenWorkPages(workspace);
+  if (openPages >= limit) {
+    throw new Error(`work_browser_page_limit_reached:${openPages}/${limit}:${profile.label}; close a work-browser page before opening another`);
+  }
+}
+
+function maxOpenWorkPages(workspace: Workspace): number {
+  return workspace.browser?.max_open_work_pages ?? DEFAULT_MAX_OPEN_WORK_PAGES;
 }
 
 function boundedJson(value: unknown) {
@@ -735,6 +765,7 @@ function delay(ms: number) {
 function defaultProfile(workspace: Workspace): BrowserProfile {
   return {
     label: workspace.id,
+    purpose: 'work',
     cdp_host: '127.0.0.1',
     cdp_port: 9222,
     headed: true,

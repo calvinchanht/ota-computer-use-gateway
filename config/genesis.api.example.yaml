@@ -97,8 +97,10 @@ workspaces:
     host_root: /
   commands: {}
   browser:
+  max_open_work_pages: 5
     profiles:
-    - label: genesis
+    - purpose: work
+      label: genesis
       user_data_dir: /home/molt/.config/google-chrome-genesis
       cdp_host: 127.0.0.1
       cdp_port: 9222
