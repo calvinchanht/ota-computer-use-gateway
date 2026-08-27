@@ -13,7 +13,7 @@ const port = 21000 + Math.floor(Math.random() * 1000);
 const config = path.join(root, 'config.yaml');
 await writeConfig(config, root, port);
 
-const child = spawn('node', ['dist/index.js', '--config', config, '--transport', 'http'], { stdio: ['ignore', 'ignore', 'pipe'] });
+const child = spawn(process.execPath, ['dist/index.js', '--config', config, '--transport', 'http'], { stdio: ['ignore', 'ignore', 'pipe'] });
 child.stderr.on('data', () => {});
 
 try {
