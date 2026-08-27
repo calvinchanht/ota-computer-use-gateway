@@ -23,7 +23,7 @@ try {
   await exerciseStatus(port, sessionId);
   await exerciseObservation(port, sessionId);
   await exerciseLaunch(port, sessionId);
-  await exerciseDeniedCapabilities(port, sessionId);
+  await exerciseDisabledRegistration(port, sessionId);
   console.log('windows computer non-screenshot smoke ok');
 } finally {
   child.kill('SIGTERM');
@@ -62,13 +62,35 @@ async function exerciseLaunch(port, sessionId) {
   if (!Number.isInteger(launched.pid)) throw new Error('windows_launch_app returned no integer pid');
 }
 
-async function exerciseDeniedCapabilities(port, sessionId) {
-  await expectToolError(port, sessionId, 'windows_screenshot', { workspace_id: 'windows-smoke' }, 'allow_screenshot');
-  await expectToolError(port, sessionId, 'windows_click', { workspace_id: 'windows-smoke', x: 1, y: 1 }, 'allow_mouse');
-  await expectToolError(port, sessionId, 'windows_window_click', { workspace_id: 'windows-smoke', hwnd: 1, x: 1, y: 1 }, 'allow_mouse');
-  await expectToolError(port, sessionId, 'windows_type_text', { workspace_id: 'windows-smoke', text: 'blocked' }, 'allow_keyboard');
-  await expectToolError(port, sessionId, 'windows_clipboard_get', { workspace_id: 'windows-smoke' }, 'allow_clipboard');
-  await expectBatchStopped(port, sessionId);
+async function exerciseDisabledRegistration(port, sessionId) {
+  const tools = await listToolNames(port, sessionId);
+  for (const name of ['windows_computer_status', 'windows_list_monitors', 'windows_list_windows', 'windows_uia_tree', 'windows_uia_read', 'windows_focus_window', 'windows_place_window', 'windows_launch_app']) {
+    expectIncludes(tools, name, 'registration');
+  }
+  for (const name of [
+    'windows_screenshot',
+    'windows_window_screenshot',
+    'windows_window_screenshot_sequence',
+    'windows_uia_set_value',
+    'windows_mouse_move',
+    'windows_click',
+    'windows_double_click',
+    'windows_drag',
+    'windows_scroll',
+    'windows_window_mouse_move',
+    'windows_window_click',
+    'windows_window_double_click',
+    'windows_window_drag',
+    'windows_window_scroll',
+    'windows_type_text',
+    'windows_key',
+    'windows_hotkey',
+    'windows_clipboard_get',
+    'windows_clipboard_set',
+    'windows_batch'
+  ]) {
+    expectExcludes(tools, name, 'registration');
+  }
 }
 
 async function writeConfig(file, workspaceRoot, port) {
@@ -116,16 +138,9 @@ async function toolData(port, sessionId, name, args) {
   return payload.data;
 }
 
-async function expectToolError(port, sessionId, name, args, expected) {
-  const result = await call(port, sessionId, name, args);
-  const text = JSON.stringify(result);
-  if (!text.includes(expected)) throw new Error(`${name} did not report ${expected}: ${text}`);
-}
-
-async function expectBatchStopped(port, sessionId) {
-  const data = await toolData(port, sessionId, 'windows_batch', { workspace_id: 'windows-smoke', calls: [{ tool: 'click', args: { x: 1, y: 1 } }, { delay_ms: 1 }] });
-  if (!JSON.stringify(data.stopped_on_error).includes('allow_mouse')) throw new Error(`windows_batch did not stop on allow_mouse: ${JSON.stringify(data)}`);
-  if (data.results.length !== 1) throw new Error(`windows_batch did not stop after first error: ${JSON.stringify(data)}`);
+async function listToolNames(port, sessionId) {
+  const result = await rpc(port, nextId(), 'tools/list', {}, sessionId);
+  return result.result.tools.map((tool) => tool.name);
 }
 
 async function initialize(port) {
