@@ -14,10 +14,10 @@ const config = path.join(root, 'config.yaml');
 await writeConfig(config, root, port);
 
 const child = spawn(process.execPath, ['dist/index.js', '--config', config, '--transport', 'http'], { stdio: ['ignore', 'ignore', 'pipe'] });
-child.stderr.on('data', () => {});
+const childDiagnostics = observeChild(child);
 
 try {
-  await waitForHealth(port);
+  await waitForHealth(port, config, childDiagnostics);
   const sessionId = await initialize(port);
   await exercisePolicy(port, sessionId);
   await exerciseStatus(port, sessionId);
@@ -166,15 +166,113 @@ function parseResponse(text) {
   return JSON.parse(data ? data.slice(6) : text);
 }
 
-async function waitForHealth(port) {
+const STDERR_TAIL_LIMIT = 8192;
+const PROBE_EVIDENCE_LIMIT = 512;
+const LISTENING_MARKER = 'OTA gateway HTTP API listening on ';
+
+function observeChild(child) {
+  const state = {
+    terminated: false,
+    exitCode: null,
+    signal: null,
+    error: null,
+    stderrTail: '',
+    listenerMarkerSeen: false
+  };
+  let settled = false;
+  let resolveTermination;
+  const termination = new Promise((resolve) => {
+    resolveTermination = resolve;
+  });
+  const markTerminated = () => {
+    state.terminated = true;
+    if (settled) return;
+    settled = true;
+    resolveTermination();
+  };
+
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk) => {
+    const combined = `${state.stderrTail}${chunk}`;
+    if (!state.listenerMarkerSeen && combined.includes(LISTENING_MARKER)) state.listenerMarkerSeen = true;
+    state.stderrTail = combined.slice(-STDERR_TAIL_LIMIT);
+  });
+  child.on('error', (error) => {
+    state.error = boundText(describeError(error), PROBE_EVIDENCE_LIMIT);
+    markTerminated();
+  });
+  child.on('exit', (code, signal) => {
+    state.exitCode = code;
+    state.signal = signal;
+    markTerminated();
+  });
+
+  return { state, termination };
+}
+
+async function waitForHealth(port, configPath, childDiagnostics) {
+  const startedAt = Date.now();
+  let lastProbeEvidence = 'not attempted';
+
   for (let i = 0; i < 50; i += 1) {
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/healthz`);
-      if (res.ok && (await res.text()).includes('ota-computer-use-gateway')) return;
-    } catch {}
-    await delay(100);
+    if (childDiagnostics.state.terminated) throw childTerminatedBeforeHealth(childDiagnostics.state);
+
+    const outcome = await Promise.race([
+      probeHealth(port).then((probe) => ({ kind: 'probe', probe })),
+      childDiagnostics.termination.then(() => ({ kind: 'terminated' }))
+    ]);
+    if (outcome.kind === 'terminated') throw childTerminatedBeforeHealth(childDiagnostics.state);
+
+    lastProbeEvidence = outcome.probe.evidence;
+    if (outcome.probe.healthy) return;
+
+    const terminatedDuringDelay = await Promise.race([
+      delay(100).then(() => false),
+      childDiagnostics.termination.then(() => true)
+    ]);
+    if (terminatedDuringDelay) throw childTerminatedBeforeHealth(childDiagnostics.state);
   }
-  throw new Error('http server did not become healthy');
+
+  const elapsed = Date.now() - startedAt;
+  throw new Error(
+    `http server did not become healthy: elapsed_ms=${elapsed} child_state=${JSON.stringify(describeChildState(childDiagnostics.state))} listener_marker_seen=${childDiagnostics.state.listenerMarkerSeen} last_probe=${JSON.stringify(lastProbeEvidence)} port=${port} config=${JSON.stringify(configPath)} stderr_tail=${JSON.stringify(childDiagnostics.state.stderrTail || '<empty>')}`
+  );
+}
+
+async function probeHealth(port) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/healthz`);
+    const text = await res.text();
+    return {
+      healthy: res.ok && text.includes('ota-computer-use-gateway'),
+      evidence: `status=${res.status} ok=${res.ok} body=${JSON.stringify(boundText(text, PROBE_EVIDENCE_LIMIT))}`
+    };
+  } catch (error) {
+    return { healthy: false, evidence: `error=${JSON.stringify(boundText(describeError(error), PROBE_EVIDENCE_LIMIT))}` };
+  }
+}
+
+function childTerminatedBeforeHealth(state) {
+  return new Error(
+    `http server child terminated before health: code=${state.exitCode ?? 'null'} signal=${state.signal ?? 'null'} error=${JSON.stringify(state.error)} stderr_tail=${JSON.stringify(state.stderrTail || '<empty>')}`
+  );
+}
+
+function describeChildState(state) {
+  if (!state.terminated) return 'running';
+  return `terminated(code=${state.exitCode ?? 'null'}, signal=${state.signal ?? 'null'}, error=${state.error ?? 'null'})`;
+}
+
+function describeError(error) {
+  if (error instanceof Error) {
+    const code = typeof error.code === 'string' ? ` code=${error.code}` : '';
+    return `${error.name}: ${error.message}${code}`;
+  }
+  return String(error);
+}
+
+function boundText(text, limit) {
+  return text.length <= limit ? text : text.slice(-limit);
 }
 
 function expectIncludes(items, expected, label) {
