@@ -9,6 +9,18 @@ import { truncateText } from '../core/text.js';
 import type { AppConfig } from '../config/schema.js';
 import { workspaceChildEnvironmentMode } from '../core/securityPolicy.js';
 import type { Workspace } from '../core/workspaces.js';
+import {
+  executeWindowsOtaDeployment,
+  WINDOWS_OTA_DEPLOY_MODE,
+  WINDOWS_OTA_DEPLOY_PROFILE,
+  WINDOWS_OTA_DEPLOY_REPO,
+  WINDOWS_OTA_PRE_LIVE_MARKER,
+  WINDOWS_OTA_SOURCE_REVISION,
+  WINDOWS_OTA_SOURCE_TREE,
+  WINDOWS_OTA_TARGET_PRINCIPAL,
+  WINDOWS_OTA_TARGET_SID,
+  WINDOWS_OTA_TARGET_USER
+} from './windowsOtaDeploy.js';
 
 const REGISTRY_PATH = '.agent/workspace-helpers.json';
 const MAX_OUTPUT_BYTES = 30000;
@@ -34,6 +46,12 @@ export const helperDefinitionSchema = z.object({
   target_user: z.string().regex(/^[a-z_][a-z0-9_-]{0,31}$/).optional(),
   service_unit: z.string().regex(/^[A-Za-z0-9_.@:-]{1,160}\.service$/).optional(),
   post_checks: z.array(postCheckSchema).default([]),
+  deployment_profile: z.literal(WINDOWS_OTA_DEPLOY_PROFILE).optional(),
+  source_revision: z.literal(WINDOWS_OTA_SOURCE_REVISION).optional(),
+  source_tree: z.literal(WINDOWS_OTA_SOURCE_TREE).optional(),
+  target_principal: z.literal(WINDOWS_OTA_TARGET_PRINCIPAL).optional(),
+  target_sid: z.literal(WINDOWS_OTA_TARGET_SID).optional(),
+  expected_live_marker: z.literal(WINDOWS_OTA_PRE_LIVE_MARKER).optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional()
 }).strict();
@@ -80,9 +98,15 @@ export async function workspaceHelperRun(config: AppConfig, workspace: Workspace
   const registry = await readRegistry(config, workspace);
   const helper = findHelper(registry, helperId, mode);
   if (!helper) throw new Error(`unknown workspace helper: ${helperId}/${mode}`);
+  validateDefinition(helper);
   assertHelperPrivilege(workspace, helper);
   if (helper.kind === 'repo_build_test') return runRepoBuildTest(config, workspace, helper, args);
   if (helper.kind === 'ssh_systemd_user_service') return runSystemdUserService(config, workspace, helper);
+  if (helper.kind === 'repo_deploy_to_host') {
+    assertNoRepoDeployExecutionArgs(args);
+    assertFixedRepoDeployLocalTarget(helper);
+    return executeWindowsOtaDeployment();
+  }
   return ok('workspace helper plan ready', {
     helper: publicHelper(helper),
     executed: false,
@@ -94,6 +118,9 @@ export async function workspaceHelperRun(config: AppConfig, workspace: Workspace
 function assertHelperPrivilege(workspace: Workspace, helper: HelperDefinition): void {
   if (helper.kind === 'ssh_systemd_user_service' && workspace.api_sets?.machine_admin !== true) {
     throw new Error('systemd workspace helpers require machine_admin API set');
+  }
+  if (helper.kind === 'repo_deploy_to_host' && workspace.api_sets?.machine_admin !== true) {
+    throw new Error('repo_deploy_to_host workspace helpers require machine_admin API set');
   }
 }
 
@@ -108,10 +135,42 @@ function validateDefinition(helper: HelperDefinition): HelperDefinition {
       if (check.kind === 'http_json' && check.url && !isLocalUrl(check.url)) throw new Error('http_json post_checks must use local loopback URLs');
     }
   }
-  if (helper.kind === 'repo_deploy_to_host') {
-    if (!helper.repo || !helper.target_host_id || !helper.target_user) throw new Error('repo_deploy_to_host helper requires repo, target_host_id, and target_user');
-  }
+  if (helper.kind === 'repo_deploy_to_host') assertFixedRepoDeployDefinition(helper);
+  else assertNoFixedRepoDeployFields(helper);
   return helper;
+}
+
+function assertFixedRepoDeployDefinition(helper: HelperDefinition): void {
+  if (helper.mode !== WINDOWS_OTA_DEPLOY_MODE) throw new Error(`repo_deploy_to_host mode must be ${WINDOWS_OTA_DEPLOY_MODE}`);
+  if (helper.repo !== WINDOWS_OTA_DEPLOY_REPO) throw new Error('repo_deploy_to_host repo does not match the fixed Windows OTA profile');
+  if (!helper.target_host_id) throw new Error('repo_deploy_to_host requires target_host_id');
+  if (helper.target_user !== WINDOWS_OTA_TARGET_USER) throw new Error('repo_deploy_to_host target_user does not match the fixed Windows OTA profile');
+  if (helper.deployment_profile !== WINDOWS_OTA_DEPLOY_PROFILE) throw new Error('repo_deploy_to_host deployment_profile mismatch');
+  if (helper.source_revision !== WINDOWS_OTA_SOURCE_REVISION) throw new Error('repo_deploy_to_host source_revision mismatch');
+  if (helper.source_tree !== WINDOWS_OTA_SOURCE_TREE) throw new Error('repo_deploy_to_host source_tree mismatch');
+  if (helper.target_principal !== WINDOWS_OTA_TARGET_PRINCIPAL) throw new Error('repo_deploy_to_host target_principal mismatch');
+  if (helper.target_sid !== WINDOWS_OTA_TARGET_SID) throw new Error('repo_deploy_to_host target_sid mismatch');
+  if (helper.expected_live_marker !== WINDOWS_OTA_PRE_LIVE_MARKER) throw new Error('repo_deploy_to_host expected_live_marker mismatch');
+  if (helper.checks.length !== 0 || helper.post_checks.length !== 0 || helper.service_unit !== undefined) {
+    throw new Error('repo_deploy_to_host fixed Windows OTA profile does not accept checks, post_checks, or service_unit');
+  }
+  assertFixedRepoDeployLocalTarget(helper);
+}
+
+function assertNoFixedRepoDeployFields(helper: HelperDefinition): void {
+  if (helper.deployment_profile !== undefined || helper.source_revision !== undefined || helper.source_tree !== undefined || helper.target_principal !== undefined || helper.target_sid !== undefined || helper.expected_live_marker !== undefined) {
+    throw new Error('fixed Windows OTA deployment fields are only valid for repo_deploy_to_host');
+  }
+}
+
+function assertFixedRepoDeployLocalTarget(helper: HelperDefinition): void {
+  const localHostId = (process.env.OTA_LOCAL_HOST_ID ?? '').trim().toLowerCase();
+  if (!localHostId) throw new Error('repo_deploy_to_host requires server-owned OTA_LOCAL_HOST_ID binding');
+  if ((helper.target_host_id ?? '').trim().toLowerCase() !== localHostId) throw new Error('repo_deploy_to_host target_host_id must match the exact local host binding');
+}
+
+function assertNoRepoDeployExecutionArgs(args: Record<string, unknown>): void {
+  if (Object.keys(args).length !== 0) throw new Error('repo_deploy_to_host does not accept execution args or transaction overrides');
 }
 
 async function runRepoBuildTest(config: AppConfig, workspace: Workspace, helper: HelperDefinition, args: Record<string, unknown>) {
@@ -260,6 +319,12 @@ function publicHelper(helper: HelperDefinition) {
     target_user: helper.target_user,
     service_unit: helper.service_unit,
     post_checks: helper.post_checks,
+    deployment_profile: helper.deployment_profile,
+    source_revision: helper.source_revision,
+    source_tree: helper.source_tree,
+    target_principal: helper.target_principal,
+    target_sid: helper.target_sid,
+    expected_live_marker: helper.expected_live_marker,
     created_at: helper.created_at,
     updated_at: helper.updated_at
   };
@@ -267,7 +332,18 @@ function publicHelper(helper: HelperDefinition) {
 
 function helperPlan(helper: HelperDefinition) {
   if (helper.kind === 'ssh_systemd_user_service') return { type: helper.kind, target_host_id: helper.target_host_id, target_user: helper.target_user, service_unit: helper.service_unit, post_checks: helper.post_checks };
-  if (helper.kind === 'repo_deploy_to_host') return { type: helper.kind, repo: helper.repo, target_host_id: helper.target_host_id, target_user: helper.target_user, checks: helper.checks };
+  if (helper.kind === 'repo_deploy_to_host') return {
+    type: helper.kind,
+    repo: helper.repo,
+    target_host_id: helper.target_host_id,
+    target_user: helper.target_user,
+    deployment_profile: helper.deployment_profile,
+    source_revision: helper.source_revision,
+    source_tree: helper.source_tree,
+    target_principal: helper.target_principal,
+    target_sid: helper.target_sid,
+    expected_live_marker: helper.expected_live_marker
+  };
   return { type: helper.kind };
 }
 

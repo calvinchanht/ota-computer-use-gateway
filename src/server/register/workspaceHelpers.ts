@@ -2,6 +2,14 @@ import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
 import { READ_ONLY, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import { workspaceHelperList, workspaceHelperRun, workspaceHelperStatus, workspaceHelperUpsert } from '../../tools/workspaceHelpers.js';
+import {
+  WINDOWS_OTA_DEPLOY_PROFILE,
+  WINDOWS_OTA_PRE_LIVE_MARKER,
+  WINDOWS_OTA_SOURCE_REVISION,
+  WINDOWS_OTA_SOURCE_TREE,
+  WINDOWS_OTA_TARGET_PRINCIPAL,
+  WINDOWS_OTA_TARGET_SID
+} from '../../tools/windowsOtaDeploy.js';
 import type { RegisterContext } from './types.js';
 
 const helperIdSchema = z.string().regex(/^[a-z][a-z0-9_]{1,63}$/);
@@ -65,7 +73,13 @@ function helperUpsertTool() {
           kind: z.enum(['http_json', 'command_status']),
           url: z.string().optional(),
           expect_status: z.number().int().positive().optional()
-        }).strict()).default([])
+        }).strict()).default([]),
+        deployment_profile: z.literal(WINDOWS_OTA_DEPLOY_PROFILE).optional(),
+        source_revision: z.literal(WINDOWS_OTA_SOURCE_REVISION).optional(),
+        source_tree: z.literal(WINDOWS_OTA_SOURCE_TREE).optional(),
+        target_principal: z.literal(WINDOWS_OTA_TARGET_PRINCIPAL).optional(),
+        target_sid: z.literal(WINDOWS_OTA_TARGET_SID).optional(),
+        expected_live_marker: z.literal(WINDOWS_OTA_PRE_LIVE_MARKER).optional()
       }).strict()
     },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL
