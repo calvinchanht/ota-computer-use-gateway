@@ -48,6 +48,20 @@ describe('fixed Windows OTA deployment executor', () => {
     expect(wrapper).not.toMatch(/Start-Process|Stop-Process|Stop-Service|Restart-Service|taskkill|cmd\.exe|run_command|workspace_helper_run/i);
   });
 
+  it('proves the fixed listener process under the bounded Rosebot pwsh supervisor topology', async () => {
+    const probe = WINDOWS_OTA_TEST_CONSTANTS.listenerProbeScript;
+    expect(probe).toContain('Get-CimInstance Win32_Process -ErrorAction Stop');
+    expect(probe).toContain('ParentProcessId');
+    expect(probe).toContain(`$depth -lt ${WINDOWS_OTA_TEST_CONSTANTS.supervisorAncestryLimit}`);
+    expect(probe).toContain(`-ieq '${WINDOWS_OTA_TEST_CONSTANTS.supervisorExecutable}'`);
+    expect(probe).toContain('Run-WindowsNodeServiceLoop\\.ps1');
+    expect(probe).toContain(`-Name\\s+(?:"${WINDOWS_OTA_TEST_CONSTANTS.serviceName}"|${WINDOWS_OTA_TEST_CONSTANTS.serviceName})(?=$|\\s)`);
+    expect(probe).not.toContain('Win32_Service');
+
+    const fixture = controllerFixture({ listeners: [{ processPresent: true, supervisorPresent: true, supervisorMatched: true }] });
+    expect((await executeWindowsOtaDeployment(fixture.controller)).ok).toBe(true);
+  });
+
   it('runs exactly one register and one start, accepts exact provenance, and cleans task and receipt on success', async () => {
     const fixture = controllerFixture();
     const result = await executeWindowsOtaDeployment(fixture.controller);
@@ -93,7 +107,9 @@ describe('fixed Windows OTA deployment executor', () => {
     ['low physical memory', { resources: { freePhysicalMb: 383 } }, 'insufficient_physical_memory'],
     ['wrong listener count', { listeners: [] }, 'listener_count_mismatch'],
     ['wrong listener address', { listeners: [{ address: '127.0.0.1' }] }, 'listener_binding_mismatch'],
-    ['wrong listener service', { listeners: [{ serviceNames: ['other'] }] }, 'listener_service_mismatch'],
+    ['missing listener process', { listeners: [{ processPresent: false }] }, 'listener_process_missing'],
+    ['missing listener supervisor', { listeners: [{ supervisorPresent: false, supervisorMatched: false }] }, 'listener_supervisor_missing'],
+    ['wrong listener supervisor', { listeners: [{ supervisorPresent: true, supervisorMatched: false }] }, 'listener_supervisor_mismatch'],
     ['bad health status', { health: { status: 503 } }, 'health_check_failed'],
     ['bad health payload', { health: { body: { ok: true, service: 'other', transport: 'http' } } }, 'health_payload_mismatch']
   ])('fails closed before registration for %s', async (_name, override, failureClass) => {
@@ -262,7 +278,9 @@ describe('fixed Windows OTA deployment executor', () => {
     ['rollback marker', { rollbackMarker: 'bad' }, 'rollback_marker_mismatch'],
     ['new path', { postNewPathPresent: true }, 'new_deployment_path_present_post'],
     ['source provenance', { postSource: { tree: 'bad' } }, 'source_tree_mismatch'],
-    ['listener', { postListeners: [{ serviceNames: ['other'] }] }, 'listener_service_mismatch'],
+    ['listener process', { postListeners: [{ processPresent: false }] }, 'listener_process_missing'],
+    ['listener supervisor missing', { postListeners: [{ supervisorPresent: false, supervisorMatched: false }] }, 'listener_supervisor_missing'],
+    ['listener supervisor mismatch', { postListeners: [{ supervisorPresent: true, supervisorMatched: false }] }, 'listener_supervisor_mismatch'],
     ['health', { postHealth: { body: { ok: false, service: 'ota-computer-use-gateway', transport: 'http' } } }, 'health_payload_mismatch']
   ])('rejects incorrect post-deployment %s and cleans operation state', async (_name, override, failureClass) => {
     const fixture = controllerFixture(override as FixtureOverride);
@@ -381,7 +399,9 @@ function normalizeListeners(input?: Array<Partial<ListenerSnapshot>>): ListenerS
     address: WINDOWS_OTA_TEST_CONSTANTS.listenerAddress,
     port: WINDOWS_OTA_TEST_CONSTANTS.listenerPort,
     processId: 4242,
-    serviceNames: [WINDOWS_OTA_TEST_CONSTANTS.serviceName],
+    processPresent: true,
+    supervisorPresent: true,
+    supervisorMatched: true,
     ...item
   }));
 }

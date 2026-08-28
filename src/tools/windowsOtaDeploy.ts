@@ -31,6 +31,9 @@ const RECEIPT_PATH = 'D:\\Projects\\Rosebot\\runtime\\ota247-repo-deploy-receipt
 const LISTENER_ADDRESS = '100.99.103.54';
 const LISTENER_PORT = 18769;
 const SERVICE_NAME = 'rosebot-ota-gateway';
+const SUPERVISOR_EXECUTABLE = 'pwsh.exe';
+const SUPERVISOR_SCRIPT = 'Run-WindowsNodeServiceLoop.ps1';
+const SUPERVISOR_ANCESTRY_LIMIT = 4;
 const HEALTH_URL = `http://${LISTENER_ADDRESS}:${LISTENER_PORT}/healthz`;
 const WAIT_TIMEOUT_MS = 8 * 60 * 1000;
 const MAX_COMMAND_OUTPUT = 30000;
@@ -77,7 +80,9 @@ export type ListenerSnapshot = {
   address: string;
   port: number;
   processId: number;
-  serviceNames: string[];
+  processPresent: boolean;
+  supervisorPresent: boolean;
+  supervisorMatched: boolean;
 };
 
 export type HealthSnapshot = {
@@ -264,7 +269,9 @@ function assertListener(listeners: ListenerSnapshot[]): void {
   if (listeners.length !== 1) throw new DeployFailure('listener_count_mismatch', { listener_count: listeners.length });
   const listener = listeners[0];
   if (listener.address !== LISTENER_ADDRESS || listener.port !== LISTENER_PORT) throw new DeployFailure('listener_binding_mismatch');
-  if (!listener.serviceNames.some((name) => name.toLowerCase() === SERVICE_NAME)) throw new DeployFailure('listener_service_mismatch');
+  if (!listener.processPresent) throw new DeployFailure('listener_process_missing');
+  if (!listener.supervisorPresent) throw new DeployFailure('listener_supervisor_missing');
+  if (!listener.supervisorMatched) throw new DeployFailure('listener_supervisor_mismatch');
 }
 
 function assertHealth(health: HealthSnapshot): void {
@@ -397,11 +404,34 @@ async function readSourceIdentity(): Promise<SourceIdentity> {
 }
 
 function listenerScript(): string {
+  const supervisorScriptToken = SUPERVISOR_SCRIPT.replaceAll('.', '\\.');
+  const supervisorScriptPattern = `(?i)(?:^|\\s)-File\\s+(?:"[^"]*${supervisorScriptToken}"|[^\\s"]*${supervisorScriptToken})(?=$|\\s)`;
+  const supervisorNamePattern = `(?i)(?:^|\\s)-Name\\s+(?:"${SERVICE_NAME}"|${SERVICE_NAME})(?=$|\\s)`;
   return [
+    '$processes=@(Get-CimInstance Win32_Process -ErrorAction Stop)',
     `$items=@(Get-NetTCPConnection -State Listen -LocalAddress ${psQuote(LISTENER_ADDRESS)} -LocalPort ${LISTENER_PORT} -ErrorAction SilentlyContinue | ForEach-Object {`,
     '  $pidValue=[int]$_.OwningProcess',
-    '  $services=@(Get-CimInstance Win32_Service | Where-Object { $_.ProcessId -eq $pidValue } | ForEach-Object { $_.Name })',
-    `  [ordered]@{address=${psQuote(LISTENER_ADDRESS)};port=${LISTENER_PORT};processId=$pidValue;serviceNames=$services}`,
+    '  $listenerProcesses=@($processes | Where-Object { [int]$_.ProcessId -eq $pidValue })',
+    '  $processPresent=($listenerProcesses.Count -eq 1)',
+    '  $supervisorPresent=$false',
+    '  $supervisorMatched=$false',
+    '  if ($processPresent) {',
+    '    $current=$listenerProcesses[0]',
+    `    for ($depth=0; $depth -lt ${SUPERVISOR_ANCESTRY_LIMIT}; $depth++) {`,
+    '      $parentPid=[int]$current.ParentProcessId',
+    '      if ($parentPid -le 0) { break }',
+    '      $parents=@($processes | Where-Object { [int]$_.ProcessId -eq $parentPid })',
+    '      if ($parents.Count -ne 1) { break }',
+    '      $current=$parents[0]',
+    '      $commandLine=[string]$current.CommandLine',
+    `      $scriptMatched=$commandLine -match ${psQuote(supervisorScriptPattern)}`,
+    '      if ($scriptMatched) {',
+    '        $supervisorPresent=$true',
+    `        if (([string]$current.Name -ieq ${psQuote(SUPERVISOR_EXECUTABLE)}) -and ($commandLine -match ${psQuote(supervisorNamePattern)})) { $supervisorMatched=$true; break }`,
+    '      }',
+    '    }',
+    '  }',
+    `  [ordered]@{address=${psQuote(LISTENER_ADDRESS)};port=${LISTENER_PORT};processId=$pidValue;processPresent=[bool]$processPresent;supervisorPresent=[bool]$supervisorPresent;supervisorMatched=[bool]$supervisorMatched}`,
     '})',
     '[ordered]@{items=@($items)} | ConvertTo-Json -Compress -Depth 4'
   ].join('\r\n');
@@ -551,6 +581,10 @@ export const WINDOWS_OTA_TEST_CONSTANTS = {
   listenerAddress: LISTENER_ADDRESS,
   listenerPort: LISTENER_PORT,
   serviceName: SERVICE_NAME,
+  supervisorExecutable: SUPERVISOR_EXECUTABLE,
+  supervisorScript: SUPERVISOR_SCRIPT,
+  supervisorAncestryLimit: SUPERVISOR_ANCESTRY_LIMIT,
+  listenerProbeScript: listenerScript(),
   healthUrl: HEALTH_URL,
   nodeDir: NODE_DIR,
   waitTimeoutMs: WAIT_TIMEOUT_MS
