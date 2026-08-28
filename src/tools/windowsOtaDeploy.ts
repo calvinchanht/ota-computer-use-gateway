@@ -107,7 +107,7 @@ export interface WindowsOtaController {
   startTask(taskName: string): Promise<void>;
   waitForReceipt(receiptPath: string, operationId: string, timeoutMs: number): Promise<UpdaterReceipt>;
   unregisterTask(taskName: string): Promise<void>;
-  deleteReceipt(receiptPath: string): Promise<void>;
+  deleteReceipt(receiptPath: string, operationId: string): Promise<void>;
 }
 
 export function buildWindowsOtaTaskSpec(operationId: string): ScheduledTaskSpec {
@@ -130,13 +130,13 @@ export function buildWindowsOtaTaskSpec(operationId: string): ScheduledTaskSpec 
 }
 
 type DeploymentState = {
-  operationOwned: boolean;
+  ownedOperationId?: string;
   registered: boolean;
   started: boolean;
 };
 
 export async function executeWindowsOtaDeployment(controller: WindowsOtaController = systemWindowsOtaController()): Promise<ToolResult> {
-  const state: DeploymentState = { operationOwned: false, registered: false, started: false };
+  const state: DeploymentState = { registered: false, started: false };
   try {
     await executeDeploymentOperation(controller, randomUUID(), state);
     return deploymentSuccessResult();
@@ -148,19 +148,19 @@ export async function executeWindowsOtaDeployment(controller: WindowsOtaControll
 
 async function executeDeploymentOperation(controller: WindowsOtaController, operationId: string, state: DeploymentState): Promise<void> {
   await assertPreconditions(controller);
-  state.operationOwned = true;
   const spec = buildWindowsOtaTaskSpec(operationId);
   await controller.registerTask(spec);
+  state.ownedOperationId = operationId;
   state.registered = true;
   await controller.startTask(spec.taskName);
   state.started = true;
   const receipt = await controller.waitForReceipt(RECEIPT_PATH, operationId, WAIT_TIMEOUT_MS);
   assertUpdaterReceipt(receipt, operationId);
   await assertPostconditions(controller);
-  await cleanupOperation(controller, state.registered);
+  await cleanupOperation(controller, state.registered, operationId);
   state.registered = false;
   await assertOperationCleaned(controller);
-  state.operationOwned = false;
+  state.ownedOperationId = undefined;
 }
 
 function assertUpdaterReceipt(receipt: UpdaterReceipt, operationId: string): void {
@@ -171,11 +171,12 @@ function assertUpdaterReceipt(receipt: UpdaterReceipt, operationId: string): voi
 }
 
 async function cleanupFailedOperation(controller: WindowsOtaController, state: DeploymentState): Promise<string | undefined> {
-  if (!state.operationOwned) return undefined;
+  if (state.ownedOperationId === undefined) return undefined;
   try {
-    await cleanupOperation(controller, state.registered);
+    await cleanupOperation(controller, state.registered, state.ownedOperationId);
     state.registered = false;
     await assertOperationCleaned(controller);
+    state.ownedOperationId = undefined;
     return undefined;
   } catch (cleanup) {
     return failureCode(cleanup);
@@ -269,19 +270,14 @@ function assertHealth(health: HealthSnapshot): void {
   if (body.ok !== true || body.service !== 'ota-computer-use-gateway' || body.transport !== 'http') throw new DeployFailure('health_payload_mismatch');
 }
 
-async function cleanupOperation(controller: WindowsOtaController, registered: boolean): Promise<void> {
+async function cleanupOperation(controller: WindowsOtaController, registered: boolean, operationId: string): Promise<void> {
   const failures: string[] = [];
-  let taskPresent = registered;
-  if (!taskPresent) {
-    try { taskPresent = await controller.taskExists(TASK_NAME); }
-    catch { failures.push('task_cleanup_probe_failed'); }
-  }
-  if (taskPresent) {
+  try { await controller.deleteReceipt(RECEIPT_PATH, operationId); }
+  catch { failures.push('receipt_cleanup_failed'); }
+  if (registered) {
     try { await controller.unregisterTask(TASK_NAME); }
     catch { failures.push('task_cleanup_failed'); }
   }
-  try { await controller.deleteReceipt(RECEIPT_PATH); }
-  catch { failures.push('receipt_cleanup_failed'); }
   if (failures.length > 0) throw new DeployFailure(failures.join('+'));
 }
 
@@ -328,7 +324,7 @@ function systemWindowsOtaController(): WindowsOtaController {
     startTask: async (taskName) => { await powershell(`Start-ScheduledTask -TaskName ${psQuote(taskName)}`); },
     waitForReceipt,
     unregisterTask: async (taskName) => { await powershell(`Unregister-ScheduledTask -TaskName ${psQuote(taskName)} -Confirm:$false -ErrorAction Stop`); },
-    deleteReceipt: async (receiptPath) => { await rm(receiptPath, { force: true }); }
+    deleteReceipt: deleteReceiptForOperation
   };
 }
 
@@ -437,6 +433,21 @@ async function waitForReceipt(receiptPath: string, operationId: string, timeoutM
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new DeployFailure('deployment_receipt_timeout');
+}
+
+async function deleteReceiptForOperation(receiptPath: string, operationId: string): Promise<void> {
+  let raw: string;
+  try { raw = await readFile(receiptPath, 'utf8'); }
+  catch (error) {
+    if (isMissing(error)) return;
+    throw error;
+  }
+
+  let parsed: UpdaterReceipt;
+  try { parsed = parseReceipt(JSON.parse(raw)); }
+  catch { throw new DeployFailure('receipt_cleanup_ownership_unproven'); }
+  if (parsed.operation_id !== operationId) throw new DeployFailure('receipt_cleanup_operation_mismatch');
+  await rm(receiptPath, { force: true });
 }
 
 function parseReceipt(value: unknown): UpdaterReceipt {

@@ -117,6 +117,77 @@ describe('fixed Windows OTA deployment executor', () => {
     expect(receiptFixture.calls.deleteReceipt).toBe(0);
   });
 
+  it('does not clean task or receipt owned by a concurrent winner after both invocations pass absence checks', async () => {
+    const shared: FixtureSharedState = { taskPresent: false, receiptPresent: false };
+    const winner = controllerFixture({}, shared);
+    const loser = controllerFixture({}, shared);
+    const loserAtHealth = deferred();
+    const winnerReceiptCreated = deferred();
+    const releaseWinnerReceipt = deferred();
+
+    const winnerHealth = winner.controller.health;
+    let winnerHealthReads = 0;
+    winner.controller.health = async () => {
+      const value = await winnerHealth();
+      winnerHealthReads += 1;
+      if (winnerHealthReads === 1) await loserAtHealth.promise;
+      return value;
+    };
+
+    const loserHealth = loser.controller.health;
+    let loserHealthReads = 0;
+    loser.controller.health = async () => {
+      const value = await loserHealth();
+      loserHealthReads += 1;
+      if (loserHealthReads === 1) {
+        loserAtHealth.resolve();
+        await winnerReceiptCreated.promise;
+      }
+      return value;
+    };
+
+    const winnerWaitForReceipt = winner.controller.waitForReceipt;
+    winner.controller.waitForReceipt = async (...args) => {
+      const receipt = await winnerWaitForReceipt(...args);
+      winnerReceiptCreated.resolve();
+      await releaseWinnerReceipt.promise;
+      return receipt;
+    };
+
+    const winnerPromise = executeWindowsOtaDeployment(winner.controller);
+    const loserPromise = executeWindowsOtaDeployment(loser.controller);
+    const loserResult = await loserPromise;
+    const stateAfterLoser = { ...shared };
+    const loserCleanupCalls = { unregister: loser.calls.unregister, deleteReceipt: loser.calls.deleteReceipt };
+    releaseWinnerReceipt.resolve();
+    const winnerResult = await winnerPromise;
+
+    expect(loserResult.ok).toBe(false);
+    expect(loser.calls.register).toBe(1);
+    expect(loserCleanupCalls).toEqual({ unregister: 0, deleteReceipt: 0 });
+    expect(stateAfterLoser).toMatchObject({ taskPresent: true, receiptPresent: true });
+    expect(winnerResult.ok).toBe(true);
+    expect(winner.calls.unregister).toBe(1);
+    expect(winner.calls.deleteReceipt).toBe(1);
+  });
+
+  it('preserves a receipt owned by another operation while cleaning its own task', async () => {
+    const fixture = controllerFixture({ updaterReceipt: { operation_id: 'foreign-operation' } });
+    const result = await executeWindowsOtaDeployment(fixture.controller);
+
+    expect(result.ok).toBe(false);
+    expect(result.data).toMatchObject({
+      failure_class: 'receipt_operation_mismatch',
+      cleanup_ok: false,
+      cleanup_failure_class: 'receipt_cleanup_failed'
+    });
+    expect(fixture.calls.unregister).toBe(1);
+    expect(fixture.calls.deleteReceipt).toBe(1);
+    expect(fixture.state.taskPresent).toBe(false);
+    expect(fixture.state.receiptPresent).toBe(true);
+    expect(fixture.state.receiptOperationId).toBe('foreign-operation');
+  });
+
   it('accepts an absent source .deploy-rev because exact Git revision/tree and clean state are independently bound', async () => {
     const fixture = controllerFixture({ source: { deployMarker: undefined } });
     const result = await executeWindowsOtaDeployment(fixture.controller);
@@ -185,10 +256,19 @@ type FixtureOverride = {
   postHealth?: Partial<HealthSnapshot>;
 };
 
-function controllerFixture(override: FixtureOverride = {}) {
+type FixtureSharedState = {
+  taskPresent: boolean;
+  receiptPresent: boolean;
+  receiptOperationId?: string;
+};
+
+function controllerFixture(override: FixtureOverride = {}, sharedState?: FixtureSharedState) {
   const calls = { register: 0, start: 0, wait: 0, unregister: 0, deleteReceipt: 0 };
-  let taskPresent = override.taskPresent ?? false;
-  let receiptPresent = override.receiptPresent ?? false;
+  const state = sharedState ?? {
+    taskPresent: override.taskPresent ?? false,
+    receiptPresent: override.receiptPresent ?? false,
+    receiptOperationId: undefined
+  };
   let registeredSpec: ScheduledTaskSpec | undefined;
   let sourceReads = 0;
   let liveMarkerReads = 0;
@@ -211,8 +291,8 @@ function controllerFixture(override: FixtureOverride = {}) {
 
   const controller: WindowsOtaController = {
     runtimeIdentity: async () => runtime,
-    taskExists: async () => taskPresent,
-    receiptExists: async () => receiptPresent,
+    taskExists: async () => state.taskPresent,
+    receiptExists: async () => state.receiptPresent,
     sourceIdentity: async () => (++sourceReads === 1 ? source : postSource),
     readMarker: async (root) => {
       if (root === WINDOWS_OTA_TEST_CONSTANTS.liveRoot) return ++liveMarkerReads === 1 ? (override.preLiveMarker ?? WINDOWS_OTA_PRE_LIVE_MARKER) : (override.postLiveMarker ?? WINDOWS_OTA_POST_LIVE_MARKER);
@@ -224,22 +304,35 @@ function controllerFixture(override: FixtureOverride = {}) {
     resources: async () => resources,
     listeners: async () => (++listenerReads === 1 ? listeners : postListeners),
     health: async () => (++healthReads === 1 ? health : postHealth),
-    registerTask: async (spec) => { calls.register += 1; registeredSpec = spec; taskPresent = true; },
+    registerTask: async (spec) => {
+      calls.register += 1;
+      if (state.taskPresent) throw new Error('task already registered');
+      registeredSpec = spec;
+      state.taskPresent = true;
+    },
     startTask: async () => { calls.start += 1; },
     waitForReceipt: async (_path, operationId) => {
       calls.wait += 1;
       if (override.waitFailure) throw override.waitFailure;
-      receiptPresent = true;
-      return {
-        schema_version: 'ota-windows-deploy-receipt/v1', operation_id: operationId, updater_exit_code: 0, outcome: 'success',
+      const receipt = {
+        schema_version: 'ota-windows-deploy-receipt/v1' as const, operation_id: operationId, updater_exit_code: 0, outcome: 'success' as const,
         ...override.updaterReceipt
       };
+      state.receiptPresent = true;
+      state.receiptOperationId = receipt.operation_id;
+      return receipt;
     },
-    unregisterTask: async () => { calls.unregister += 1; taskPresent = false; },
-    deleteReceipt: async () => { calls.deleteReceipt += 1; receiptPresent = false; }
+    unregisterTask: async () => { calls.unregister += 1; state.taskPresent = false; },
+    deleteReceipt: async (_path, operationId) => {
+      calls.deleteReceipt += 1;
+      if (!state.receiptPresent) return;
+      if (state.receiptOperationId !== operationId) throw new Error('receipt owned by another operation');
+      state.receiptPresent = false;
+      state.receiptOperationId = undefined;
+    }
   };
 
-  return { controller, calls, get registeredSpec() { return registeredSpec; } };
+  return { controller, calls, state, get registeredSpec() { return registeredSpec; } };
 }
 
 function normalizeListeners(input?: Array<Partial<ListenerSnapshot>>): ListenerSnapshot[] {
@@ -251,4 +344,10 @@ function normalizeListeners(input?: Array<Partial<ListenerSnapshot>>): ListenerS
     serviceNames: [WINDOWS_OTA_TEST_CONSTANTS.serviceName],
     ...item
   }));
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
 }
