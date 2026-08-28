@@ -171,7 +171,7 @@ describe('fixed Windows OTA deployment executor', () => {
     expect(winner.calls.deleteReceipt).toBe(1);
   });
 
-  it('preserves a receipt owned by another operation while cleaning its own task', async () => {
+  it('preserves a foreign receipt and retains the owned task exclusion when receipt ownership is unproven', async () => {
     const fixture = controllerFixture({ updaterReceipt: { operation_id: 'foreign-operation' } });
     const result = await executeWindowsOtaDeployment(fixture.controller);
 
@@ -179,11 +179,11 @@ describe('fixed Windows OTA deployment executor', () => {
     expect(result.data).toMatchObject({
       failure_class: 'receipt_operation_mismatch',
       cleanup_ok: false,
-      cleanup_failure_class: 'receipt_cleanup_failed'
+      cleanup_failure_class: 'post_start_exclusion_retained'
     });
-    expect(fixture.calls.unregister).toBe(1);
-    expect(fixture.calls.deleteReceipt).toBe(1);
-    expect(fixture.state.taskPresent).toBe(false);
+    expect(fixture.calls.unregister).toBe(0);
+    expect(fixture.calls.deleteReceipt).toBe(0);
+    expect(fixture.state.taskPresent).toBe(true);
     expect(fixture.state.receiptPresent).toBe(true);
     expect(fixture.state.receiptOperationId).toBe('foreign-operation');
   });
@@ -206,15 +206,55 @@ describe('fixed Windows OTA deployment executor', () => {
     expect(fixture.calls.deleteReceipt).toBe(1);
   });
 
-  it('cleans task/receipt after bounded wait failure and never performs a second start', async () => {
+  it('retains task exclusion after bounded wait failure and never performs a second start', async () => {
     const fixture = controllerFixture({ waitFailure: new Error('bounded wait failed') });
     const result = await executeWindowsOtaDeployment(fixture.controller);
     expect(result.ok).toBe(false);
-    expect(result.data).toMatchObject({ failure_class: 'unexpected_executor_failure', retry_attempted: false, cleanup_ok: true });
+    expect(result.data).toMatchObject({
+      failure_class: 'unexpected_executor_failure',
+      retry_attempted: false,
+      cleanup_ok: false,
+      cleanup_failure_class: 'post_start_exclusion_retained'
+    });
     expect(fixture.calls.start).toBe(1);
     expect(fixture.calls.wait).toBe(1);
-    expect(fixture.calls.unregister).toBe(1);
-    expect(fixture.calls.deleteReceipt).toBe(1);
+    expect(fixture.calls.unregister).toBe(0);
+    expect(fixture.calls.deleteReceipt).toBe(0);
+    expect(fixture.state.taskPresent).toBe(true);
+  });
+
+  it('retains invocation A exclusion across timeout so invocation B cannot start or delete A late receipt', async () => {
+    const shared: FixtureSharedState = { taskPresent: false, receiptPresent: false };
+    const invocationA = controllerFixture({}, shared);
+    let operationAId = '';
+    invocationA.controller.waitForReceipt = async (_path, operationId) => {
+      invocationA.calls.wait += 1;
+      operationAId = operationId;
+      throw new Error('bounded wait failed');
+    };
+
+    const resultA = await executeWindowsOtaDeployment(invocationA.controller);
+    expect(resultA.ok).toBe(false);
+    expect(resultA.data).toMatchObject({
+      failure_class: 'unexpected_executor_failure',
+      cleanup_ok: false,
+      cleanup_failure_class: 'post_start_exclusion_retained'
+    });
+    expect(operationAId).not.toBe('');
+    expect(invocationA.calls).toMatchObject({ register: 1, start: 1, wait: 1, unregister: 0, deleteReceipt: 0 });
+    expect(shared).toMatchObject({ taskPresent: true, receiptPresent: false });
+
+    const invocationB = controllerFixture({}, shared);
+    const resultB = await executeWindowsOtaDeployment(invocationB.controller);
+    expect(resultB.ok).toBe(false);
+    expect(resultB.data).toMatchObject({ failure_class: 'operation_task_present', cleanup_ok: true });
+    expect(invocationB.calls).toMatchObject({ register: 0, start: 0, wait: 0, unregister: 0, deleteReceipt: 0 });
+    expect(shared).toMatchObject({ taskPresent: true, receiptPresent: false });
+
+    shared.receiptPresent = true;
+    shared.receiptOperationId = operationAId;
+    expect(shared).toMatchObject({ taskPresent: true, receiptPresent: true, receiptOperationId: operationAId });
+    expect(invocationB.calls.deleteReceipt).toBe(0);
   });
 
   it.each([

@@ -133,10 +133,11 @@ type DeploymentState = {
   ownedOperationId?: string;
   registered: boolean;
   started: boolean;
+  receiptOwnershipProven: boolean;
 };
 
 export async function executeWindowsOtaDeployment(controller: WindowsOtaController = systemWindowsOtaController()): Promise<ToolResult> {
-  const state: DeploymentState = { registered: false, started: false };
+  const state: DeploymentState = { registered: false, started: false, receiptOwnershipProven: false };
   try {
     await executeDeploymentOperation(controller, randomUUID(), state);
     return deploymentSuccessResult();
@@ -155,6 +156,7 @@ async function executeDeploymentOperation(controller: WindowsOtaController, oper
   await controller.startTask(spec.taskName);
   state.started = true;
   const receipt = await controller.waitForReceipt(RECEIPT_PATH, operationId, WAIT_TIMEOUT_MS);
+  state.receiptOwnershipProven = receipt.operation_id === operationId;
   assertUpdaterReceipt(receipt, operationId);
   await assertPostconditions(controller);
   await cleanupOperation(controller, state.registered, operationId);
@@ -172,6 +174,7 @@ function assertUpdaterReceipt(receipt: UpdaterReceipt, operationId: string): voi
 
 async function cleanupFailedOperation(controller: WindowsOtaController, state: DeploymentState): Promise<string | undefined> {
   if (state.ownedOperationId === undefined) return undefined;
+  if (state.started && !state.receiptOwnershipProven) return 'post_start_exclusion_retained';
   try {
     await cleanupOperation(controller, state.registered, state.ownedOperationId);
     state.registered = false;
