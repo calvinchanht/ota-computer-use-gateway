@@ -14,20 +14,16 @@ describe('policy and tool profile consistency', () => {
     for (const tool of profile?.canonical_tools ?? []) expect(visible, tool).toContain(tool);
   });
 
-  it('keeps canonical OTA-Memory lifecycle tools baseline while legacy memory is transitional', () => {
+  it('keeps the frozen OTA-Memory lifecycle-v1 tools as the only agent-facing memory surface', () => {
     const profile = toolProfile().data;
     const memoryTools = ['memory_begin_turn', 'memory_commit_turn', 'memory_flush_session'];
     expect(profile?.canonical_tools).toEqual(expect.arrayContaining(memoryTools));
 
     const enabled = workspacePolicy(fixtureWorkspace(), undefined, 'windows').data;
     expect(enabled?.allowed_tools).toEqual(expect.arrayContaining(memoryTools));
-    expect(enabled?.allowed_tools).not.toContain('memory_search');
-    expect(enabled?.allowed_tools).not.toContain('memory_write');
 
     const disabled = workspacePolicy(fixtureWorkspace({ ota_memory: { enabled: false } as any }), undefined, 'windows').data;
     for (const tool of memoryTools) expect(disabled?.allowed_tools).toContain(tool);
-    expect(disabled?.allowed_tools).toContain('memory_search');
-    expect(disabled?.allowed_tools).toContain('memory_write');
   });
 
   it('does not advertise deprecated aliases in workspace policy', () => {

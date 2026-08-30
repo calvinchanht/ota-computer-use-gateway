@@ -1,19 +1,12 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
 import { agentBootstrap, checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../../tools/context.js';
-import { getProjectContext, memorySearch, memoryWrite } from '../../tools/memory.js';
+import { getProjectContext } from '../../tools/memory.js';
 import { READ_ONLY, WRITE_FILE, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import type { RegisterContext } from './types.js';
-import { contentHeuristicsEnabled, redactSecretValuesEnabled, sanitizeResultsEnabled } from '../../core/securityPolicy.js';
+import { contentHeuristicsEnabled } from '../../core/securityPolicy.js';
 
 export function registerMemoryTools(context: RegisterContext): void {
-  const hasLegacyMemoryWorkspace = [...context.workspaces.values()].some(
-    (workspace) => !workspace.ota_memory?.enabled
-  );
-  if (hasLegacyMemoryWorkspace) {
-    registerMemorySearch(context);
-    registerMemoryWrite(context);
-  }
   registerProjectContext(context);
   registerContextSnapshot(context);
   registerAgentBootstrap(context);
@@ -22,20 +15,6 @@ export function registerMemoryTools(context: RegisterContext): void {
   registerHandoffRecorder(context);
   registerCurrentTaskUpdater(context);
   registerThreadCheckpoint(context);
-}
-
-function registerMemorySearch({ server, config, workspaces }: RegisterContext): void {
-  server.registerTool('memory_search', memorySearchSpec(), async (args) => runWorkspaceTool(
-    workspaces, args.workspace_id, 'memory_search',
-    (workspace) => memorySearch(workspace, args.query, args.max_results, sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config))
-  ));
-}
-
-function registerMemoryWrite({ server, config, workspaces }: RegisterContext): void {
-  server.registerTool('memory_write', memoryWriteSpec(), async (args) => runWorkspaceTool(
-    workspaces, args.workspace_id, 'memory_write',
-    (workspace) => memoryWrite(workspace, args.type, args.title, args.body, args.tags, contentHeuristicsEnabled(config))
-  ));
 }
 
 function registerProjectContext({ server, workspaces }: RegisterContext): void {
@@ -89,14 +68,6 @@ function registerThreadCheckpoint({ server, config, workspaces }: RegisterContex
     workspaces, args.workspace_id, 'checkpoint_thread',
     (workspace) => checkpointThread(workspace, args.title, args.summary, args.next_steps, contentHeuristicsEnabled(config))
   ));
-}
-
-function memorySearchSpec() {
-  return { title: 'Memory search', description: 'Search project-local memory files.', inputSchema: { workspace_id: z.string(), query: z.string(), max_results: z.number().optional() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY };
-}
-
-function memoryWriteSpec() {
-  return { title: 'Memory write', description: 'Append a project-local memory entry. Conservative secret-like content rejection is opt-in by server config.', inputSchema: { workspace_id: z.string(), type: z.string(), title: z.string(), body: z.string(), tags: z.array(z.string()).optional() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: WRITE_FILE };
 }
 
 function projectContextSpec() {

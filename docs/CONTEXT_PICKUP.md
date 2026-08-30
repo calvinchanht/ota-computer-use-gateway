@@ -30,7 +30,7 @@ It returns an ordered startup packet with:
 - current task;
 - suggested next actions.
 
-Historical handoff, progress, checkpoint, decision, and memory material is intentionally not injected into the normal bootstrap packet. Load it on demand through `get_context_snapshot`, `get_project_context`, `memory_search`, or targeted file reads.
+Historical handoff, progress, checkpoint, and decision material is intentionally not injected into the normal bootstrap packet. Load workspace continuity on demand through `get_context_snapshot`, `get_project_context`, or targeted file reads. Use `memory_begin_turn` for bounded OTA-Memory lifecycle recall when durable memory may help.
 
 Use `get_context_snapshot` when a fuller raw view of continuity files is needed.
 
@@ -38,7 +38,7 @@ Use `get_context_snapshot` when a fuller raw view of continuity files is needed.
 
 Use retrieval tools on demand rather than asking the gateway to push everything every turn:
 
-- `memory_search`
+- `memory_begin_turn`
 - `read_file`
 - `search_files`
 - `get_context_snapshot`
