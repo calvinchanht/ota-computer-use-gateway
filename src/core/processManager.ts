@@ -29,7 +29,7 @@ export function startManagedProcess(command: string, cwd: string, timeoutMs: num
 }
 
 export function startManagedArgvProcess(command: string, args: string[], cwd: string, timeoutMs: number, displayCommand?: string, environmentMode: ChildEnvironmentMode = 'minimal'): ManagedProcess {
-  const child = spawn(command, args, { cwd, env: childProcessEnvironment(environmentMode), detached: process.platform !== 'win32' });
+  const child = spawn(command, args, { cwd, env: childProcessEnvironment(environmentMode), detached: process.platform !== 'win32', windowsHide: true });
   const item = newProcess(displayCommand ?? [command, ...args].join(' '), cwd, child);
   processes.set(item.id, item);
   attachOutput(item);
