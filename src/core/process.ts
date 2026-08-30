@@ -6,7 +6,7 @@ export type CommandResult = { code: number | null; stdout: string; stderr: strin
 
 export async function runCommand(cmd: string, args: string[], cwd: string, timeoutMs = 10000, env: NodeJS.ProcessEnv = {}, environmentMode: ChildEnvironmentMode = 'minimal'): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { cwd, env: childProcessEnvironment(environmentMode, env) });
+    const child = spawn(cmd, args, { cwd, env: childProcessEnvironment(environmentMode, env), windowsHide: true });
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
