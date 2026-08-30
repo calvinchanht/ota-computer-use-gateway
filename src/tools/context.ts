@@ -133,7 +133,7 @@ function capabilityDiscovery(workspace: Workspace) {
     autonomy_guidance: 'Routine scoped workspace/computer actions do not require operator confirmation when the configured workspace policy grants the capability. Do not refuse just because a path name looks sensitive; workspace policy may intentionally grant full read/write/list access inside the workspace root, including secrets/ when needed for the task. Never paste bearer tokens, PATs, OAuth tokens, private keys, or raw credential contents into chat/external systems unless the operator explicitly asks for that exact disclosure/use.',
     continuity_tools: [
       'get_agent_bootstrap', 'get_context_snapshot', 'get_project_context',
-      ...(workspace.ota_memory?.enabled ? [...OTA_MEMORY_TOOL_NAMES] : ['memory_search', 'memory_write']),
+      ...OTA_MEMORY_TOOL_NAMES,
       'record_progress', 'record_decision', 'update_current_task', 'record_handoff', 'checkpoint_thread'
     ],
     skill_tools: ['list_skills', 'read_skill'],
@@ -159,7 +159,7 @@ function bootstrapNextActions(workspace: Workspace) {
     'For HTTP JSON API browser/CDP or Cua Driver calls, api.status may be running. If so, wait at least api.poll_after_ms, then call get_gateway_run with api.run_id. Do not retry the original browser/computer-use command.',
     'Call list_artifacts to discover prior outputs, and record_artifact after creating important files.',
     'Call list_skills/read_skill for relevant workspace runbooks.',
-    'Call memory_search/read_file for details only when needed.',
+    'Call memory_begin_turn for bounded durable recall when prior context could help. If the memory backend is unavailable, continue with get_context_snapshot/get_project_context/read_file without claiming memory was used.',
     'Call checkpoint_thread or record_handoff before stopping or switching threads.'
   ];
 }

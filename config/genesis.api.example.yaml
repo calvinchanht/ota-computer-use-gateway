@@ -36,7 +36,9 @@ server:
   - get_project_context
   - get_context_snapshot
   - get_agent_bootstrap
-  - memory_search
+  - memory_begin_turn
+  - memory_commit_turn
+  - memory_flush_session
   - list_skills
   - read_skill
   - approval_status
@@ -46,7 +48,6 @@ server:
   - edit_file
   - delete_file
   - delete_path
-  - memory_write
   - record_artifact
   - record_progress
   - record_decision

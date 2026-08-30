@@ -46,7 +46,7 @@ The local MCP server was run with `config/mickey.local.yaml` and successfully ex
 - `heartbeat`
 - `get_project_context`
 - `git_status`
-- `memory_write`
+- the then-current project-local memory append action (retired; current agents use the lifecycle-v1 memory contract)
 
 The normal project gates also pass:
 

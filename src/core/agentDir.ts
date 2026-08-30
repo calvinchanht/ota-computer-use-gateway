@@ -1,5 +1,5 @@
 import { lstatSync, mkdirSync, realpathSync } from 'node:fs';
-import { appendFile, mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Workspace } from './workspaces.js';
 
@@ -18,11 +18,6 @@ export async function ensureAgentDir(workspace: Workspace): Promise<void> {
 
 export async function readAgentFile(workspace: Workspace, name: string): Promise<string> {
   try { return await readFile(agentPath(workspace, name), 'utf8'); } catch { return ''; }
-}
-
-export async function appendMemory(workspace: Workspace, entry: unknown): Promise<void> {
-  await ensureAgentDir(workspace);
-  await appendFile(agentPath(workspace, 'MEMORY_LOG.jsonl'), JSON.stringify(entry) + '\n');
 }
 
 function assertAgentDir(workspace: Workspace): string {

@@ -67,4 +67,4 @@ Expected server behavior:
 - Every call gets a retrievable run record.
 - Large/private outputs return summaries plus artifact ids.
 - Mutating calls require idempotency keys.
-- Bridge/orchestrator continuity tools may call `checkpoint_thread` and `memory_write` for durable pickup after important Project-chat/API turns.
+- Bridge/orchestrator continuity tools may call `checkpoint_thread`; durable memory uses the lifecycle-v1 begin/commit/flush contract rather than project-local append actions.

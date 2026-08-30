@@ -138,7 +138,7 @@ Do not rely on implicit `Referer` / `Origin`; ChatGPT MCP calls did not send Pro
 2. Extract the concrete tool/API intent.
 3. Run the bridge helper or orchestrator against the scoped Gateway JSON API.
 4. Return concise results to the chat/user.
-5. Use `checkpoint_thread` or `memory_write` after meaningful progress so pickup is durable.
+5. Use `checkpoint_thread` for workspace continuity and the lifecycle-v1 memory commit/flush actions for durable memory when appropriate.
 6. If stream/UI fails, recover by `run_id` instead of rerunning blindly.
 
 ## Safety posture

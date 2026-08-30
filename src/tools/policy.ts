@@ -4,7 +4,7 @@ import type { Workspace } from '../core/workspaces.js';
 import { platformKind, type PlatformKind } from '../core/platform.js';
 import { conservativeCensoringEnabled, environmentFilteringEnabled, resultSanitizationEnabled, secretContentHeuristicsEnabled, secretValueRedactionEnabled, type AppConfig } from '../config/schema.js';
 import { workspaceChildEnvironmentMode } from '../core/securityPolicy.js';
-import { BASE_TOOL_NAMES, BROWSER_TOOL_NAMES, ESTATE_ADMIN_TOOL_NAMES, LEGACY_MEMORY_TOOL_NAMES, MAC_COMPUTER_TOOL_NAMES, MACHINE_ADMIN_TOOL_NAMES, MEMORY_LIFECYCLE_TOOL_NAMES, WINDOWS_COMPUTER_TOOL_NAMES, WORKSPACE_EXEC_TOOL_NAMES, WORKSPACE_PATCH_TOOL_NAMES, WORKSPACE_READ_TOOL_NAMES, WORKSPACE_WRITE_TOOL_NAMES } from './actionSurface.js';
+import { BASE_TOOL_NAMES, BROWSER_TOOL_NAMES, ESTATE_ADMIN_TOOL_NAMES, MAC_COMPUTER_TOOL_NAMES, MACHINE_ADMIN_TOOL_NAMES, MEMORY_LIFECYCLE_TOOL_NAMES, WINDOWS_COMPUTER_TOOL_NAMES, WORKSPACE_EXEC_TOOL_NAMES, WORKSPACE_PATCH_TOOL_NAMES, WORKSPACE_READ_TOOL_NAMES, WORKSPACE_WRITE_TOOL_NAMES } from './actionSurface.js';
 
 export function workspacePolicy(workspace: Workspace, config?: AppConfig, platform: PlatformKind = platformKind()) {
   const configuredSets = resolvedApiSets(workspace);
@@ -60,8 +60,7 @@ function policyModel() {
 function memoryInterface(workspace: Workspace) {
   return {
     tools: [...MEMORY_LIFECYCLE_TOOL_NAMES],
-    backend_configured: workspace.ota_memory?.enabled === true,
-    legacy_tools_enabled_until_cutover: workspace.ota_memory?.enabled !== true
+    backend_configured: workspace.ota_memory?.enabled === true
   };
 }
 
@@ -157,10 +156,6 @@ export function allowedTools(workspace: Workspace, platform: PlatformKind = plat
   if (sets.estate_admin) base.push(...ESTATE_ADMIN_TOOL_NAMES);
   if (sets.workspace || workspace.allow_read) base.push(...WORKSPACE_READ_TOOL_NAMES);
   if (sets.workspace || workspace.allow_write) base.push(...WORKSPACE_WRITE_TOOL_NAMES);
-  if (workspace.ota_memory?.enabled !== true) {
-    if (sets.workspace || workspace.allow_read) base.push(LEGACY_MEMORY_TOOL_NAMES[0]);
-    if (sets.workspace || workspace.allow_write) base.push(LEGACY_MEMORY_TOOL_NAMES[1]);
-  }
   if (sets.workspace || workspace.allow_patch) base.push(...WORKSPACE_PATCH_TOOL_NAMES);
   if (sets.workspace || workspace.allow_tests) base.push(...WORKSPACE_EXEC_TOOL_NAMES);
   if (sets.browser) base.push(...BROWSER_TOOL_NAMES);

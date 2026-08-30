@@ -26,7 +26,7 @@ import {
   normalizeEstateToolName
 } from '../tools/genesis.js';
 import { agentBootstrap, checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../tools/context.js';
-import { getProjectContext, memorySearch, memoryWrite } from '../tools/memory.js';
+import { getProjectContext } from '../tools/memory.js';
 import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
 import { computerScreenClick, computerScreenDrag, computerScreenMouseMove, computerScreenScroll, computerWindowClick, computerWindowDrag, computerWindowMouseMove, computerWindowScroll, cuaDriverBatch, cuaDriverCall, cuaDriverStatus, type CuaDriverBatchStep } from '../tools/computer.js';
 import {
@@ -751,13 +751,11 @@ function callGitContextApiTool(config: AppConfig, workspace: Workspace, tool: st
   if (tool === 'get_agent_bootstrap') return agentBootstrap(workspace);
   if (tool === 'get_context_snapshot') return contextSnapshot(workspace);
   if (tool === 'get_project_context') return getProjectContext(workspace);
-  if (tool === 'memory_search') return memorySearch(workspace, requiredString(args.query, 'query'), optionalNumber(args.max_results) ?? 10, sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config));
   if (tool === 'record_progress') return recordProgress(workspace, requiredString(args.title, 'title'), requiredString(args.body, 'body'), Boolean(args.handoff), contentHeuristicsEnabled(config));
   if (tool === 'record_decision') return recordDecision(workspace, requiredString(args.title, 'title'), requiredString(args.body, 'body'), contentHeuristicsEnabled(config));
   if (tool === 'record_handoff') return recordHandoff(workspace, requiredString(args.title, 'title'), requiredString(args.body, 'body'), contentHeuristicsEnabled(config));
   if (tool === 'update_current_task') return updateCurrentTask(workspace, requiredString(args.title, 'title'), requiredString(args.body, 'body'), contentHeuristicsEnabled(config));
   if (tool === 'checkpoint_thread') return checkpointThread(workspace, requiredString(args.title, 'title'), requiredString(args.summary, 'summary'), optionalStringArray(args.next_steps), contentHeuristicsEnabled(config));
-  if (tool === 'memory_write') return memoryWrite(workspace, requiredString(args.type, 'type'), requiredString(args.title, 'title'), requiredString(args.body, 'body'), optionalStringArray(args.tags), contentHeuristicsEnabled(config));
   if (tool === 'list_artifacts') return listArtifacts(workspace);
   if (tool === 'record_artifact') return recordArtifact(workspace, requiredString(args.path, 'path'), requiredString(args.title, 'title'), optionalString(args.kind) ?? 'file', optionalString(args.description) ?? '', contentHeuristicsEnabled(config));
   if (tool === 'estate_bootstrap') return genesisBootstrap(sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config));

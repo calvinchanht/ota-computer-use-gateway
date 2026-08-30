@@ -108,9 +108,6 @@ describe('role x host OS action surface matrix', () => {
     for (const platform of platforms) {
       expect(allowedTools(disabled, platform)).toEqual(expect.arrayContaining([...MEMORY_LIFECYCLE_TOOL_NAMES]));
       expect(allowedTools(enabled, platform)).toEqual(expect.arrayContaining([...MEMORY_LIFECYCLE_TOOL_NAMES]));
-      expect(allowedTools(disabled, platform)).toEqual(expect.arrayContaining(['memory_search', 'memory_write']));
-      expect(allowedTools(enabled, platform)).not.toContain('memory_search');
-      expect(allowedTools(enabled, platform)).not.toContain('memory_write');
     }
   });
 });

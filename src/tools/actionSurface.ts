@@ -50,7 +50,6 @@ export const MACHINE_ADMIN_TOOL_NAMES = [
   'run_configured_command', 'workspace_helper_list', 'workspace_helper_status', 'workspace_helper_upsert', 'workspace_helper_run'
 ] as const;
 
-export const LEGACY_MEMORY_TOOL_NAMES = ['memory_search', 'memory_write'] as const;
 export const MEMORY_LIFECYCLE_TOOL_NAMES = [...OTA_MEMORY_TOOL_NAMES] as const;
 export const ESTATE_ADMIN_TOOL_NAMES = [...ESTATE_TOOL_NAMES] as const;
 
@@ -61,7 +60,7 @@ export const WORKSPACE_TOOL_NAMES = unique([
 export const CANONICAL_PROVIDER_TOOL_NAMES = unique([
   ...BASE_TOOL_NAMES, ...WORKSPACE_TOOL_NAMES, ...BROWSER_TOOL_NAMES, ...MAC_COMPUTER_TOOL_NAMES,
   ...WINDOWS_COMPUTER_TOOL_NAMES, ...MACHINE_ADMIN_TOOL_NAMES, ...ESTATE_ADMIN_TOOL_NAMES,
-  ...MEMORY_LIFECYCLE_TOOL_NAMES, ...LEGACY_MEMORY_TOOL_NAMES
+  ...MEMORY_LIFECYCLE_TOOL_NAMES
 ]);
 
 export function capabilityToolGroups() {

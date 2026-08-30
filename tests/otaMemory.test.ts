@@ -24,6 +24,20 @@ describe('OTA-Memory lifecycle adapter', () => {
     expect(parsed.success).toBe(false);
   });
 
+  it('registers only lifecycle-v1 memory actions even when the backend is disabled', async () => {
+    const config = configSchema.parse({
+      workspaces: [{ id: 'plain', name: 'Plain', root: process.cwd(), allow_read: true, allow_write: true }]
+    });
+    const server = await createServer(config);
+    const tools = (server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools;
+    expect(tools.memory_begin_turn).toBeDefined();
+    expect(tools.memory_commit_turn).toBeDefined();
+    expect(tools.memory_flush_session).toBeDefined();
+    expect(Object.keys(tools).filter((name) => name.startsWith('memory_')).sort()).toEqual([
+      'memory_begin_turn', 'memory_commit_turn', 'memory_flush_session'
+    ]);
+  });
+
   it('uses configured identity and ignores model-supplied scope and database paths', async () => {
     const fixture = await memoryFixture();
     const workspace = [...(await buildWorkspaces(fixture.config)).values()][0];
@@ -53,8 +67,9 @@ describe('OTA-Memory lifecycle adapter', () => {
 
     const server = await createServer(fixture.config);
     const tools = (server as unknown as { _registeredTools: Record<string, { inputSchema: unknown }> })._registeredTools;
-    expect(tools.memory_search).toBeUndefined();
-    expect(tools.memory_write).toBeUndefined();
+    expect(Object.keys(tools).filter((name) => name.startsWith('memory_')).sort()).toEqual([
+      'memory_begin_turn', 'memory_commit_turn', 'memory_flush_session'
+    ]);
     const shape = zodShape(tools.memory_begin_turn.inputSchema);
     expect(Object.keys(shape)).toContain('execution_handle');
     expect(Object.keys(shape)).not.toContain('database_path');
