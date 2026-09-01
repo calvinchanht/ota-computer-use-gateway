@@ -318,7 +318,9 @@ export async function windowsHotkey(workspace: Workspace, keys: string[], hwnd?:
   ensureCapability(workspace, 'allow_keyboard');
   const target = optionalHwnd(workspace, hwnd);
   ensureWindows();
-  return ok('windows hotkey', await psJson(sendKeysScript(hotkeySequence(keys), target)));
+  const hasWindowsModifier = keys.some(isWindowsModifier);
+  const sequence = hotkeySequence(hasWindowsModifier ? keys.filter((key) => !isWindowsModifier(key)) : keys);
+  return ok('windows hotkey', await psJson(hasWindowsModifier ? windowsHotkeyScript(sequence, target) : sendKeysScript(sequence, target)));
 }
 
 export async function windowsClipboardGet(workspace: Workspace) {
@@ -498,6 +500,11 @@ function sendKeysScript(keys: string, hwnd?: number) {
   return `${targetedSendKeysPrefix(hwnd)}; [System.Windows.Forms.SendKeys]::SendWait(${q(keys)}); @{ keys=${q(keys)}; hwnd=${psOptionalLiteral(hwnd)}; focused=$focused } | ConvertTo-Json`;
 }
 
+function windowsHotkeyScript(keys: string, hwnd?: number) {
+  const keyboardTypes = hwnd === undefined ? `${win32WindowTypes()}; ` : '';
+  return `${targetedSendKeysPrefix(hwnd)}; ${keyboardTypes}[Win32Windows]::LeftWindowsDown(); try{[System.Windows.Forms.SendKeys]::SendWait(${q(keys)})}finally{[Win32Windows]::LeftWindowsUp()}; @{ keys=${q(keys)}; hwnd=${psOptionalLiteral(hwnd)}; focused=$focused } | ConvertTo-Json`;
+}
+
 function clipboardGetScript() {
   return `${formsAssemblies()}; @{ text=[System.Windows.Forms.Clipboard]::GetText(); contains_text=[System.Windows.Forms.Clipboard]::ContainsText() } | ConvertTo-Json`;
 }
@@ -639,6 +646,7 @@ public class Win32Windows {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
   [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int command);
   [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint first, uint second, bool attach);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr hWnd, uint message, IntPtr wParam, string lParam);
@@ -656,6 +664,8 @@ public class Win32Windows {
     IntPtr after=GetForegroundWindow(); return new { hwnd=hWnd.ToInt64(), focused=after==hWnd, foreground_hwnd=after.ToInt64(), previous_foreground_hwnd=before.ToInt64(), restored=restored, attempts=Math.Min(attempts,3) };
   }
   public static bool SetControlText(IntPtr hWnd, string value) { return IsWindow(hWnd) && SendMessage(hWnd,0x000C,IntPtr.Zero,value)!=IntPtr.Zero; }
+  public static void LeftWindowsDown() { keybd_event(0x5B, 0, 0, UIntPtr.Zero); }
+  public static void LeftWindowsUp() { keybd_event(0x5B, 0, 0x0002, UIntPtr.Zero); }
   public static object[] List() {
     var items = new List<object>(); IntPtr foreground=GetForegroundWindow();
     EnumWindows((h,l) => { if(!IsWindowVisible(h)) return true; var sb=new StringBuilder(512); GetWindowText(h,sb,512); if(sb.Length==0) return true; uint pid; GetWindowThreadProcessId(h,out pid); RECT r; GetWindowRect(h,out r); string processName=""; try{processName=Process.GetProcessById((int)pid).ProcessName;}catch{} items.Add(new { hwnd=h.ToInt64(), title=sb.ToString(), pid=pid, process_name=processName, foreground=h==foreground, minimized=IsIconic(h), maximized=IsZoomed(h), bounds=new { x=r.Left, y=r.Top, width=r.Right-r.Left, height=r.Bottom-r.Top } }); return true; }, IntPtr.Zero);
@@ -716,6 +726,10 @@ function uiaSelectorFn() {
 function targetedSendKeysPrefix(hwnd?: number) {
   if (hwnd === undefined) return `${formsAssemblies()}; $focused=$true`;
   return `${formsAssemblies()}; ${win32WindowTypes()}; $focus=[Win32Windows]::Focus([IntPtr]${int(hwnd)}); if(-not $focus.focused){throw ('failed to focus hwnd ${int(hwnd)}; foreground hwnd is '+$focus.foreground_hwnd)}; $focused=$true`;
+}
+
+function isWindowsModifier(key: string) {
+  return key.toLowerCase() === 'win';
 }
 
 function hotkeySequence(keys: string[]) {
