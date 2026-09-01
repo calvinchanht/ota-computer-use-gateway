@@ -13,17 +13,17 @@ const port = 21000 + Math.floor(Math.random() * 1000);
 const config = path.join(root, 'config.yaml');
 await writeConfig(config, root, port);
 
-const child = spawn('node', ['dist/index.js', '--config', config, '--transport', 'http'], { stdio: ['ignore', 'ignore', 'pipe'] });
-child.stderr.on('data', () => {});
+const child = spawn(process.execPath, ['dist/index.js', '--config', config, '--transport', 'http'], { stdio: ['ignore', 'ignore', 'pipe'] });
+const childDiagnostics = observeChild(child);
 
 try {
-  await waitForHealth(port);
+  await waitForHealth(port, config, childDiagnostics);
   const sessionId = await initialize(port);
   await exercisePolicy(port, sessionId);
   await exerciseStatus(port, sessionId);
   await exerciseObservation(port, sessionId);
   await exerciseLaunch(port, sessionId);
-  await exerciseDeniedCapabilities(port, sessionId);
+  await exerciseDisabledRegistration(port, sessionId);
   console.log('windows computer non-screenshot smoke ok');
 } finally {
   child.kill('SIGTERM');
@@ -62,13 +62,35 @@ async function exerciseLaunch(port, sessionId) {
   if (!Number.isInteger(launched.pid)) throw new Error('windows_launch_app returned no integer pid');
 }
 
-async function exerciseDeniedCapabilities(port, sessionId) {
-  await expectToolError(port, sessionId, 'windows_screenshot', { workspace_id: 'windows-smoke' }, 'allow_screenshot');
-  await expectToolError(port, sessionId, 'windows_click', { workspace_id: 'windows-smoke', x: 1, y: 1 }, 'allow_mouse');
-  await expectToolError(port, sessionId, 'windows_window_click', { workspace_id: 'windows-smoke', hwnd: 1, x: 1, y: 1 }, 'allow_mouse');
-  await expectToolError(port, sessionId, 'windows_type_text', { workspace_id: 'windows-smoke', text: 'blocked' }, 'allow_keyboard');
-  await expectToolError(port, sessionId, 'windows_clipboard_get', { workspace_id: 'windows-smoke' }, 'allow_clipboard');
-  await expectBatchStopped(port, sessionId);
+async function exerciseDisabledRegistration(port, sessionId) {
+  const tools = await listToolNames(port, sessionId);
+  for (const name of ['windows_computer_status', 'windows_list_monitors', 'windows_list_windows', 'windows_uia_tree', 'windows_uia_read', 'windows_focus_window', 'windows_place_window', 'windows_launch_app']) {
+    expectIncludes(tools, name, 'registration');
+  }
+  for (const name of [
+    'windows_screenshot',
+    'windows_window_screenshot',
+    'windows_window_screenshot_sequence',
+    'windows_uia_set_value',
+    'windows_mouse_move',
+    'windows_click',
+    'windows_double_click',
+    'windows_drag',
+    'windows_scroll',
+    'windows_window_mouse_move',
+    'windows_window_click',
+    'windows_window_double_click',
+    'windows_window_drag',
+    'windows_window_scroll',
+    'windows_type_text',
+    'windows_key',
+    'windows_hotkey',
+    'windows_clipboard_get',
+    'windows_clipboard_set',
+    'windows_batch'
+  ]) {
+    expectExcludes(tools, name, 'registration');
+  }
 }
 
 async function writeConfig(file, workspaceRoot, port) {
@@ -116,16 +138,9 @@ async function toolData(port, sessionId, name, args) {
   return payload.data;
 }
 
-async function expectToolError(port, sessionId, name, args, expected) {
-  const result = await call(port, sessionId, name, args);
-  const text = JSON.stringify(result);
-  if (!text.includes(expected)) throw new Error(`${name} did not report ${expected}: ${text}`);
-}
-
-async function expectBatchStopped(port, sessionId) {
-  const data = await toolData(port, sessionId, 'windows_batch', { workspace_id: 'windows-smoke', calls: [{ tool: 'click', args: { x: 1, y: 1 } }, { delay_ms: 1 }] });
-  if (!JSON.stringify(data.stopped_on_error).includes('allow_mouse')) throw new Error(`windows_batch did not stop on allow_mouse: ${JSON.stringify(data)}`);
-  if (data.results.length !== 1) throw new Error(`windows_batch did not stop after first error: ${JSON.stringify(data)}`);
+async function listToolNames(port, sessionId) {
+  const result = await rpc(port, nextId(), 'tools/list', {}, sessionId);
+  return result.result.tools.map((tool) => tool.name);
 }
 
 async function initialize(port) {
@@ -151,15 +166,113 @@ function parseResponse(text) {
   return JSON.parse(data ? data.slice(6) : text);
 }
 
-async function waitForHealth(port) {
+const STDERR_TAIL_LIMIT = 8192;
+const PROBE_EVIDENCE_LIMIT = 512;
+const LISTENING_MARKER = 'OTA gateway HTTP API listening on ';
+
+function observeChild(child) {
+  const state = {
+    terminated: false,
+    exitCode: null,
+    signal: null,
+    error: null,
+    stderrTail: '',
+    listenerMarkerSeen: false
+  };
+  let settled = false;
+  let resolveTermination;
+  const termination = new Promise((resolve) => {
+    resolveTermination = resolve;
+  });
+  const markTerminated = () => {
+    state.terminated = true;
+    if (settled) return;
+    settled = true;
+    resolveTermination();
+  };
+
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk) => {
+    const combined = `${state.stderrTail}${chunk}`;
+    if (!state.listenerMarkerSeen && combined.includes(LISTENING_MARKER)) state.listenerMarkerSeen = true;
+    state.stderrTail = combined.slice(-STDERR_TAIL_LIMIT);
+  });
+  child.on('error', (error) => {
+    state.error = boundText(describeError(error), PROBE_EVIDENCE_LIMIT);
+    markTerminated();
+  });
+  child.on('exit', (code, signal) => {
+    state.exitCode = code;
+    state.signal = signal;
+    markTerminated();
+  });
+
+  return { state, termination };
+}
+
+async function waitForHealth(port, configPath, childDiagnostics) {
+  const startedAt = Date.now();
+  let lastProbeEvidence = 'not attempted';
+
   for (let i = 0; i < 50; i += 1) {
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/healthz`);
-      if (res.ok && (await res.text()).includes('ota-computer-use-gateway')) return;
-    } catch {}
-    await delay(100);
+    if (childDiagnostics.state.terminated) throw childTerminatedBeforeHealth(childDiagnostics.state);
+
+    const outcome = await Promise.race([
+      probeHealth(port).then((probe) => ({ kind: 'probe', probe })),
+      childDiagnostics.termination.then(() => ({ kind: 'terminated' }))
+    ]);
+    if (outcome.kind === 'terminated') throw childTerminatedBeforeHealth(childDiagnostics.state);
+
+    lastProbeEvidence = outcome.probe.evidence;
+    if (outcome.probe.healthy) return;
+
+    const terminatedDuringDelay = await Promise.race([
+      delay(100).then(() => false),
+      childDiagnostics.termination.then(() => true)
+    ]);
+    if (terminatedDuringDelay) throw childTerminatedBeforeHealth(childDiagnostics.state);
   }
-  throw new Error('http server did not become healthy');
+
+  const elapsed = Date.now() - startedAt;
+  throw new Error(
+    `http server did not become healthy: elapsed_ms=${elapsed} child_state=${JSON.stringify(describeChildState(childDiagnostics.state))} listener_marker_seen=${childDiagnostics.state.listenerMarkerSeen} last_probe=${JSON.stringify(lastProbeEvidence)} port=${port} config=${JSON.stringify(configPath)} stderr_tail=${JSON.stringify(childDiagnostics.state.stderrTail || '<empty>')}`
+  );
+}
+
+async function probeHealth(port) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/healthz`);
+    const text = await res.text();
+    return {
+      healthy: res.ok && text.includes('ota-computer-use-gateway'),
+      evidence: `status=${res.status} ok=${res.ok} body=${JSON.stringify(boundText(text, PROBE_EVIDENCE_LIMIT))}`
+    };
+  } catch (error) {
+    return { healthy: false, evidence: `error=${JSON.stringify(boundText(describeError(error), PROBE_EVIDENCE_LIMIT))}` };
+  }
+}
+
+function childTerminatedBeforeHealth(state) {
+  return new Error(
+    `http server child terminated before health: code=${state.exitCode ?? 'null'} signal=${state.signal ?? 'null'} error=${JSON.stringify(state.error)} stderr_tail=${JSON.stringify(state.stderrTail || '<empty>')}`
+  );
+}
+
+function describeChildState(state) {
+  if (!state.terminated) return 'running';
+  return `terminated(code=${state.exitCode ?? 'null'}, signal=${state.signal ?? 'null'}, error=${state.error ?? 'null'})`;
+}
+
+function describeError(error) {
+  if (error instanceof Error) {
+    const code = typeof error.code === 'string' ? ` code=${error.code}` : '';
+    return `${error.name}: ${error.message}${code}`;
+  }
+  return String(error);
+}
+
+function boundText(text, limit) {
+  return text.length <= limit ? text : text.slice(-limit);
 }
 
 function expectIncludes(items, expected, label) {
