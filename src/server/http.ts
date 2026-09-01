@@ -16,7 +16,7 @@ import { CANONICAL_PROVIDER_TOOL_NAMES } from '../tools/actionSurface.js';
 import { allowedTools, workspacePolicy } from '../tools/policy.js';
 import { deleteFileTool, deletePathTool, editFileTool, listDir, readBinaryFileTool, readFileTool, statPath, treeTool, workspaceInventory, writeBinaryFileTool, writeFileTool } from '../tools/files.js';
 import { gitCliTool, gitDiff, gitLfsPublishCurrentBranch, gitPushCurrentBranch, gitStatus } from '../tools/git.js';
-import { githubCliTool } from '../tools/github.js';
+import { githubCliTool, type GithubRatePolicy } from '../tools/github.js';
 import {
   genesisAgentDeepDive,
   genesisBootstrap,
@@ -747,7 +747,7 @@ function callGitContextApiTool(config: AppConfig, workspace: Workspace, tool: st
   if (tool === 'git_push_current_branch') return gitPushCurrentBranch(config, workspace, optionalString(args.repo_path) ?? '.', optionalString(args.remote) ?? 'origin', optionalString(args.branch));
   if (tool === 'git_lfs_publish_current_branch') return gitLfsPublishCurrentBranch(config, workspace, optionalString(args.repo_path) ?? '.', optionalString(args.remote) ?? 'origin', optionalString(args.branch), optionalString(args.force_with_lease_sha));
   if (tool === 'git') return gitCliTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 60000, optionalNumber(args.max_output_chars) ?? optionalNumber(args.max_stdout_bytes) ?? 20000);
-  if (tool === 'github') return githubCliTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 60000, optionalNumber(args.max_output_chars) ?? optionalNumber(args.max_stdout_bytes) ?? 20000);
+  if (tool === 'github') return githubCliTool(config, workspace, runCommandCmdArray(args), optionalString(args.cwd) ?? '.', optionalNumber(args.timeout_ms) ?? 60000, optionalNumber(args.max_output_chars) ?? optionalNumber(args.max_stdout_bytes) ?? 20000, recordArg(args.rate_policy, 'rate_policy') as GithubRatePolicy | undefined);
   if (tool === 'get_agent_bootstrap') return agentBootstrap(workspace);
   if (tool === 'get_context_snapshot') return contextSnapshot(workspace);
   if (tool === 'get_project_context') return getProjectContext(workspace);
