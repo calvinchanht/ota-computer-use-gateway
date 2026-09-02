@@ -2,6 +2,7 @@ import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../src/core/workspaces.js';
 import {
+  windowsHotkey,
   windowsPowerShellJsonScript,
   windowsUiaRead,
   windowsUiaSetValue,
@@ -302,6 +303,44 @@ describe('windows computer UIA and hwnd input safety', () => {
       expect(guard).toBeGreaterThanOrEqual(0);
       expect(cursorOrDrag).toBeGreaterThan(guard);
     }
+  });
+
+  it('holds left Windows around Win+R SendKeys and releases it in finally', async () => {
+    await windowsHotkey(fixtureWorkspace(), ['WIN', 'R']);
+    const script = scripts[0];
+    const down = script.indexOf('[Win32Windows]::LeftWindowsDown()');
+    const send = script.indexOf("[System.Windows.Forms.SendKeys]::SendWait('{R}')", down);
+    const finallyBlock = script.indexOf('finally{', send);
+    const up = script.indexOf('[Win32Windows]::LeftWindowsUp()', finallyBlock);
+    expect(script).toContain('keybd_event(0x5B, 0, 0, UIntPtr.Zero)');
+    expect(script).toContain('keybd_event(0x5B, 0, 0x0002, UIntPtr.Zero)');
+    expect(down).toBeGreaterThanOrEqual(0);
+    expect(send).toBeGreaterThan(down);
+    expect(finallyBlock).toBeGreaterThan(send);
+    expect(up).toBeGreaterThan(finallyBlock);
+  });
+
+  it('preserves Ctrl, Alt, and Shift hotkeys on the existing SendKeys path', async () => {
+    await windowsHotkey(fixtureWorkspace(), ['CTRL', 'A']);
+    await windowsHotkey(fixtureWorkspace(), ['ALT', 'F4']);
+    await windowsHotkey(fixtureWorkspace(), ['SHIFT', 'TAB']);
+    expect(scripts).toHaveLength(3);
+    for (const [script, expected] of scripts.map((script, index) => [script, ["SendWait('^{A}')", "SendWait('%{F4}')", "SendWait('+{TAB}')"][index]] as const)) {
+      expect(script).toContain(expected);
+      expect(script).not.toContain('LeftWindowsDown');
+      expect(script).not.toContain('LeftWindowsUp');
+    }
+  });
+
+  it('verifies a targeted hwnd before injecting the Windows modifier', async () => {
+    await windowsHotkey(fixtureWorkspace(), ['WIN', 'R'], 42);
+    const script = scripts[0];
+    const focus = script.indexOf('$focus=[Win32Windows]::Focus([IntPtr]42)');
+    const focusGuard = script.indexOf("if(-not $focus.focused){throw ('failed to focus hwnd 42; foreground hwnd is '+$focus.foreground_hwnd)}", focus);
+    const down = script.indexOf('[Win32Windows]::LeftWindowsDown()', focusGuard);
+    expect(focus).toBeGreaterThanOrEqual(0);
+    expect(focusGuard).toBeGreaterThan(focus);
+    expect(down).toBeGreaterThan(focusGuard);
   });
 });
 
