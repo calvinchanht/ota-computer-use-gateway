@@ -13,6 +13,14 @@ const enabled = process.platform === 'win32' && Number.isSafeInteger(targetPid) 
 const integrationDescribe = enabled ? describe : describe.skip;
 
 integrationDescribe('Windows native observer owned-Studio integration', () => {
+  it('refuses a mismatched PID/HWND target before hooks or capture', async () => {
+    expect(process.pid).not.toBe(targetPid);
+    const started = Date.now();
+    await expect(windowsObserveNativeEvents(fixtureWorkspace(), process.pid, targetHwnd))
+      .rejects.toThrow(/native observer target PID\/HWND mismatch/);
+    expect(Date.now() - started).toBeLessThan(WINDOWS_NATIVE_OBSERVER_TIMEOUT_MS);
+  }, WINDOWS_NATIVE_OBSERVER_TIMEOUT_MS + 10000);
+
   it('captures ordered bounded L/R mouse delivery and allowed WinEvent lifecycle correlation without launching or driving the target', async () => {
     const result = await windowsObserveNativeEvents(fixtureWorkspace(), targetPid, targetHwnd);
     const data = (result as any).data as Record<string, any>;

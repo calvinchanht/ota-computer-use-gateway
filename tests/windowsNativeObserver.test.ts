@@ -45,15 +45,28 @@ describe('bounded Windows native observer contract', () => {
     expect(allowedTools(explicitObserver, 'windows')).toContain('windows_observe_native_events');
   });
 
-  it('builds a fixed first-party observer that validates owned Studio PID/HWND before installing hooks', () => {
+  it('builds a fixed first-party observer that validates and pins the owned Studio PID/HWND before installing hooks', () => {
     const script = windowsNativeObserverPowerShellForTest(1234, 5678);
     expect(script).toContain('GetAncestor(hwnd, GA_ROOT) != hwnd');
     expect(script).toContain('GetWindowThreadProcessId(hwnd, out hwndPid)');
-    expect(script).toContain('if (hwndPid != pid)');
+    expect(script).toContain('hwndPid != pid');
     expect(script).toContain('target.ProcessName, "RobloxStudioBeta"');
     expect(script).toContain('target.SessionId != Process.GetCurrentProcess().SessionId');
     expect(script).toContain('!String.Equals(currentSid, targetSid, StringComparison.Ordinal)');
-    expect(script.indexOf('ValidateTarget(pid, hwnd);')).toBeLessThan(script.indexOf('SetWindowsHookEx(WH_MOUSE_LL'));
+    expect(script).toContain('OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, false, pid)');
+    expect(script.indexOf('ValidateAndPinTarget(pid, hwnd, out targetWindowThreadId);')).toBeLessThan(script.indexOf('SetWindowsHookEx(WH_MOUSE_LL'));
+  });
+
+  it('keeps the pinned process identity live for the full observation and fails closed on target loss or replacement', () => {
+    const script = windowsNativeObserverPowerShellForTest(1234, 5678);
+    expect(script).toContain('WaitForSingleObject(TargetProcessHandle, 0) != WAIT_TIMEOUT');
+    expect(script).toContain('GetProcessId(TargetProcessHandle) != TargetPid');
+    expect(script).toContain('hwndThreadId != TargetWindowThreadId');
+    expect(script).toContain('if (!EnsureTargetIdentity()) { endedReason = "target_lost"; break; }');
+    expect(script).toContain('if (!EnsureTargetIdentity()) return;');
+    expect(script).toContain('(eventType == EVENT_OBJECT_DESTROY || eventType == EVENT_OBJECT_CREATE) && hwnd == TargetHwnd && objectId == OBJID_WINDOW && childId == CHILDID_SELF');
+    expect(script).toContain('if (TargetLost) endedReason = "target_lost";');
+    expect(script.indexOf('UnhookWindowsHookEx(mouseHook)')).toBeLessThan(script.indexOf('CloseHandle(targetProcessHandle)'));
   });
 
   it('uses only L/R WH_MOUSE_LL delivery and exact process-scoped WINEVENT_OUTOFCONTEXT hooks', () => {
@@ -64,7 +77,7 @@ describe('bounded Windows native observer contract', () => {
     expect(script).toContain('WM_RBUTTONDOWN');
     expect(script).toContain('WM_RBUTTONUP');
     expect(script).toContain('SetWinEventHook(eventId, eventId, IntPtr.Zero, WinEventProcRef, pid, 0, WINEVENT_OUTOFCONTEXT)');
-    expect(script).toContain('if (!AllowedWinEvents.Contains(eventType)');
+    expect(script).toContain('!AllowedWinEvents.Contains(eventType)');
     expect(script).toContain('if (pid != 0 && pid != TargetPid) return;');
     expect(script).toContain('IsTargetBoundaryWindow(hwnd, true)');
     expect(script).toContain('pid == TargetPid && IsTargetBoundaryWindow(hit, false)');
@@ -86,7 +99,7 @@ describe('bounded Windows native observer contract', () => {
     expect(script).toContain(`if (timeoutMs != ${WINDOWS_NATIVE_OBSERVER_TIMEOUT_MS})`);
     expect(script).toContain(`if (eventCap != ${WINDOWS_NATIVE_OBSERVER_EVENT_CAP})`);
     expect(script).toContain('Clock.ElapsedMilliseconds < timeoutMs && RecordCount() < eventCap');
-    expect(script).toContain('if (Records.Count >= EventCap) return;');
+    expect(script).toContain('if (TargetLost || Records.Count >= EventCap) return;');
     expect(script).toContain(`[OtaBoundedNativeObserver]::Observe([uint32]1234, [int64]5678, ${WINDOWS_NATIVE_OBSERVER_TIMEOUT_MS}, ${WINDOWS_NATIVE_OBSERVER_EVENT_CAP})`);
   });
 });
