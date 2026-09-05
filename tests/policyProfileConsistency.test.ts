@@ -124,6 +124,7 @@ describe('policy and tool profile consistency', () => {
         allow_window_management: true,
         allow_app_launch: true,
         allow_process_attach: false,
+        allow_native_event_observer: false,
         allow_multi_monitor: true
       }
     }), undefined, 'windows').data;
@@ -139,15 +140,15 @@ describe('policy and tool profile consistency', () => {
     expect(policy?.allowed_tools).not.toContain('windows_clipboard_get');
   });
 
-  it('explains full Windows macro versus partial Windows rights', () => {
+  it('explains the Windows macro versus the separately gated native observer right', () => {
     const policy = workspacePolicy(fixtureWorkspace(), undefined, 'windows').data;
     const profile = toolProfile().data;
     const windowsSet = profile?.api_capability_sets?.sets?.computer_windows;
 
-    expect(policy?.api_set_notes?.computer_windows).toContain('macro grants full Windows rights');
+    expect(policy?.api_set_notes?.computer_windows).toContain('native event observer remains separately gated');
     expect(policy?.windows_computer_rights?.enabled).toBe(true);
-    expect(windowsSet?.full_macro).toContain('complete Windows computer-use surface');
-    expect(windowsSet?.partial_rights).toContain('individual allow_* rights');
+    expect(windowsSet?.full_macro).toContain('does not grant the native event observer');
+    expect(windowsSet?.partial_rights).toContain('not implied by allow_process_attach');
   });
 
   it('lists every canonical Windows tool in the Windows capability set', () => {
@@ -183,6 +184,7 @@ function fixtureWorkspace(overrides: Partial<Workspace> = {}): Workspace {
       allow_window_management: true,
       allow_app_launch: true,
       allow_process_attach: true,
+      allow_native_event_observer: true,
       allow_multi_monitor: true
     },
     browser: { profiles: [] },

@@ -51,6 +51,7 @@ export const windowsComputerSchema = z.object({
   allow_window_management: z.boolean().default(false),
   allow_app_launch: z.boolean().default(false),
   allow_process_attach: z.boolean().default(false),
+  allow_native_event_observer: z.boolean().default(false),
   allow_multi_monitor: z.boolean().default(true)
 }).prefault({});
 

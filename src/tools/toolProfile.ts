@@ -76,10 +76,10 @@ function capabilitySet(purpose: string, tools: string[]) {
 
 function windowsCapabilitySet() {
   return {
-    purpose: 'Windows desktop computer use with monitor capture, UIA, mouse, keyboard, clipboard, windows, and app launch.',
+    purpose: 'Windows desktop computer use with monitor capture, UIA, mouse, keyboard, clipboard, windows, app launch, and a separately authorized native event observer.',
     host_os: 'windows',
-    full_macro: 'api_sets.computer_windows grants the complete Windows computer-use surface on Windows hosts.',
-    partial_rights: 'Use windows_computer.enabled plus individual allow_* rights for narrower lanes such as non-screenshot validation.',
+    full_macro: 'api_sets.computer_windows grants the established Windows computer-use surface on Windows hosts but does not grant the native event observer.',
+    partial_rights: 'Use windows_computer.enabled plus individual allow_* rights for narrower lanes. windows_computer.allow_native_event_observer is an explicit extra exposure right and is not implied by allow_process_attach.',
     tools: [...WINDOWS_COMPUTER_TOOL_NAMES]
   };
 }

@@ -43,7 +43,7 @@ export const WINDOWS_COMPUTER_TOOL_NAMES = [
   'windows_mouse_move', 'windows_click', 'windows_double_click', 'windows_drag', 'windows_scroll',
   'windows_window_mouse_move', 'windows_window_click', 'windows_window_double_click', 'windows_window_drag',
   'windows_window_scroll', 'windows_type_text', 'windows_key', 'windows_hotkey', 'windows_clipboard_get',
-  'windows_clipboard_set', 'windows_batch'
+  'windows_clipboard_set', 'windows_batch', 'windows_observe_native_events'
 ] as const;
 
 export const MACHINE_ADMIN_TOOL_NAMES = [

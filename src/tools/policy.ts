@@ -41,7 +41,7 @@ function apiSetNotes() {
     workspace: 'OpenClaw-like workspace agent primitives: scoped files, tmp cleanup/delete, artifacts, context, skills, bounded run_command/processes, git/context helpers, and async run recovery.',
     browser: 'Direct full scoped CDP access to preassigned browser profiles/ports. browser_visible_state/click/upload helpers are convenience tools only, not an observer/read-only fallback.',
     computer: 'Local macOS GUI/computer-use via Cua Driver; ignored on non-macOS hosts.',
-    computer_windows: 'Windows desktop computer-use via native APIs; ignored on non-Windows hosts. The macro grants full Windows rights subject to configured per-right controls.',
+    computer_windows: 'Windows desktop computer-use via native APIs; ignored on non-Windows hosts. The macro grants the established Windows computer-use rights; the native event observer remains separately gated by windows_computer.allow_native_event_observer.',
     machine_admin: 'Host/lane administration and configured operations. Explicit absolute host paths remain governed by filesystem.machine_admin_host_scope.',
     estate_admin: 'Cross-agent/cross-host estate reports/diagnostics and approved estate runbook operations.'
   };
@@ -187,5 +187,6 @@ function windowsComputerTools(workspace: Workspace) {
   if (config?.allow_keyboard) tools.push('windows_type_text', 'windows_key', 'windows_hotkey');
   if (config?.allow_clipboard) tools.push('windows_clipboard_get', 'windows_clipboard_set');
   if (config?.allow_mouse || config?.allow_keyboard) tools.push('windows_batch');
+  if (config?.allow_native_event_observer) tools.push('windows_observe_native_events');
   return tools;
 }

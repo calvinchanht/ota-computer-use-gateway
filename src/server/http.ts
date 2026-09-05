@@ -60,6 +60,7 @@ import {
   windowsWindowScroll,
   type WindowsBatchStep
 } from '../tools/windowsComputer.js';
+import { windowsObserveNativeEvents } from '../tools/windowsNativeObserver.js';
 import { inferFileStructure, jsonProfile, patchFileLines, queryJson, queryTable, queryTableAggregate, readAround, readFileChunk, readFileLinesLarge, sampleFile, searchFile, searchFiles, tableProfile, updateTableRows } from '../tools/largeFiles.js';
 import { runArgvTailTool, runArgvTool, runConfiguredCommand } from '../tools/runCommand.js';
 import { processKill, processList, processLog, processStart, processStartArgv, processWrite } from '../tools/processes.js';
@@ -810,6 +811,7 @@ function callWindowsApiTool(workspace: Workspace, tool: string, args: Record<str
   if (tool === 'windows_focus_window') return windowsFocusWindow(workspace, requiredNumber(args.hwnd, 'hwnd'));
   if (tool === 'windows_place_window') return windowsPlaceWindow(workspace, requiredNumber(args.hwnd, 'hwnd'), optionalString(args.monitor) ?? 'primary', optionalNumber(args.x) ?? 0, optionalNumber(args.y) ?? 0, optionalNumber(args.width), optionalNumber(args.height));
   if (tool === 'windows_launch_app') return windowsLaunchApp(workspace, requiredString(args.file_path, 'file_path'), optionalStringArray(args.args), optionalString(args.cwd));
+  if (tool === 'windows_observe_native_events') return windowsObserveNativeEvents(workspace, requiredNumber(args.pid, 'pid'), requiredNumber(args.hwnd, 'hwnd'));
   if (tool === 'windows_mouse_move') return windowsMouseMove(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'));
   if (tool === 'windows_click') return windowsClick(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left');
   if (tool === 'windows_double_click') return windowsDoubleClick(workspace, requiredNumber(args.x, 'x'), requiredNumber(args.y, 'y'), optionalString(args.button) ?? 'left');
