@@ -31,6 +31,7 @@ import {
   windowsWindowScreenshotSequence,
   windowsWindowScroll
 } from '../../tools/windowsComputer.js';
+import { windowsObserveNativeEvents } from '../../tools/windowsNativeObserver.js';
 import { READ_ONLY, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
 import type { RegisterContext } from './types.js';
 
@@ -184,6 +185,7 @@ function registerWindowsTools({ server, workspaces }: RegisterContext): void {
   server.registerTool('windows_focus_window', { title: 'Windows focus window', description: 'Restore and deterministically focus a top-level hwnd with bounded retries, then report the actual foreground hwnd.', inputSchema: { workspace_id: z.string(), hwnd: z.number().int().finite() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_focus_window', (workspace) => windowsFocusWindow(workspace, args.hwnd)));
   server.registerTool('windows_place_window', { title: 'Windows place window', description: 'Restore, move, and size a top-level hwnd within the primary or indexed monitor working area, then focus it.', inputSchema: { workspace_id: z.string(), hwnd: z.number().int().finite(), monitor: z.string().default('primary'), x: finiteNumberSchema.default(0), y: finiteNumberSchema.default(0), width: finiteNumberSchema.optional(), height: finiteNumberSchema.optional() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_place_window', (workspace) => windowsPlaceWindow(workspace, args.hwnd, args.monitor, args.x, args.y, args.width, args.height)));
   server.registerTool('windows_launch_app', { title: 'Windows launch app', description: 'Launch a local Windows app or executable.', inputSchema: { workspace_id: z.string(), file_path: z.string(), args: z.array(z.string()).default([]), cwd: z.string().optional() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: RUN_LOCAL }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_launch_app', (workspace) => windowsLaunchApp(workspace, args.file_path, args.args, args.cwd)));
+  server.registerTool('windows_observe_native_events', { title: 'Windows native event observer', description: 'Observe a fixed, bounded READ_ONLY stream of left/right WH_MOUSE_LL delivery plus approved WinEvent lifecycle records for an already-owned Roblox Studio PID/HWND.', inputSchema: { workspace_id: z.string(), pid: z.number().int().positive(), hwnd: z.number().int().positive() }, outputSchema: TOOL_RESULT_OUTPUT_SCHEMA, annotations: READ_ONLY }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'windows_observe_native_events', (workspace) => windowsObserveNativeEvents(workspace, args.pid, args.hwnd)));
   registerWindowsInputTools(server, workspaces);
 }
 

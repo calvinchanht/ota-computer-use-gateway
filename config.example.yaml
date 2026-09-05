@@ -41,6 +41,8 @@ workspaces:
       allow_window_management: false
       allow_app_launch: false
       allow_process_attach: false
+      # Separate READ_ONLY authority; api_sets.computer_windows and allow_process_attach do not imply this.
+      allow_native_event_observer: false
       allow_multi_monitor: true
     browser:
       profiles:

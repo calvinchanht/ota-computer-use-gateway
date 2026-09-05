@@ -47,6 +47,32 @@ describe('HTTP MCP compatibility transport', () => {
       expect(payload.schema_url).toBe('/ota/api/v1/schema');
       expect(payload.operations).toHaveProperty('memory_begin_turn');
       expect(payload.operations).toHaveProperty('query_table');
+      expect(payload.operations?.windows_observe_native_events).toEqual({
+        workspace_id: 'string required',
+        pid: 'integer required',
+        hwnd: 'integer required'
+      });
+    } finally { await close(server); }
+  });
+
+  it('rejects unsupported native observer arguments before dispatch', async () => {
+    const server = createServer(createHttpRequestHandler(config));
+    await listen(server);
+    try {
+      const response = await apiRequest(server, {
+        operation: 'windows_observe_native_events',
+        arguments: { workspace_id: 'missing', pid: 1234, hwnd: 5678, timeout_ms: 1 }
+      });
+      expect(response.status).toBe(400);
+      const payload = await response.json();
+      expect(payload).toMatchObject({
+        error_code: 'unsupported_parameters',
+        unsupported_parameters: [{ path: 'arguments.timeout_ms' }],
+        contract: {
+          operation: 'windows_observe_native_events',
+          expected_shape: { workspace_id: 'string required', pid: 'integer required', hwnd: 'integer required' }
+        }
+      });
     } finally { await close(server); }
   });
 
@@ -94,6 +120,16 @@ async function mcpRequest(server: Server, body: object): Promise<Response> {
   return fetch(`http://127.0.0.1:${address.port}/mcp`, {
     method: 'POST',
     headers: { accept: 'application/json, text/event-stream', 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+async function apiRequest(server: Server, body: object): Promise<Response> {
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('expected TCP address');
+  return fetch(`http://127.0.0.1:${address.port}/ota/api/v1/tool`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body)
   });
 }

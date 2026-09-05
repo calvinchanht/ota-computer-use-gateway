@@ -126,7 +126,7 @@ function fullWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     allow_patch: true, allow_tests: true, allow_screen: true, allow_mouse_keyboard: true,
     api_sets: { workspace: true, browser: true, computer: true, computer_windows: true, machine_admin: true, estate_admin: true },
     browser: { profiles: [] }, commands: {}, filesystem: { machine_admin_host_scope: true, host_root: '/' },
-    windows_computer: { enabled: true, allow_screenshot: true, allow_uia_tree: true, allow_mouse: true, allow_keyboard: true, allow_clipboard: true, allow_window_management: true, allow_app_launch: true, allow_process_attach: true, allow_multi_monitor: true },
+    windows_computer: { enabled: true, allow_screenshot: true, allow_uia_tree: true, allow_mouse: true, allow_keyboard: true, allow_clipboard: true, allow_window_management: true, allow_app_launch: true, allow_process_attach: true, allow_native_event_observer: true, allow_multi_monitor: true },
     ota_memory: { enabled: true, python_executable: 'python', package_root: '/tmp/ota-memory', database_path: '/tmp/ota-memory.sqlite3', project_id: 'test', workspace_id: 'test', agent_id: 'test', user_id: '', scope_type: 'project', privacy: 'project_only', timeout_ms: 30000 },
     ...overrides
   };
