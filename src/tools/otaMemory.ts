@@ -115,7 +115,9 @@ function redactAdapterError(error: unknown, paths: string[], enabled: boolean): 
 
 function runPython(executable: string, cwd: string, input: string, timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, ['-m', 'memory_api.gateway_adapter'], { cwd, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    // -E ignores inherited PYTHON* import/cache overrides; -s disables the
+    // per-user site directory and its executable .pth startup hooks.
+    const child = spawn(executable, ['-E', '-s', '-m', 'memory_api.gateway_adapter'], { cwd, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => { child.kill(); reject(new Error('OTA-Memory adapter timed out')); }, timeoutMs);
