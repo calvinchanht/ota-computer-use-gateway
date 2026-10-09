@@ -1,4 +1,6 @@
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -50,6 +52,38 @@ describe('OTA-Memory lifecycle adapter', () => {
     expect(receipt.owner_agent_id).toBe('anna');
     expect(receipt.boundary).toMatchObject({ project_id: 'anna-project', workspace_id: 'anna', agent_id: 'anna' });
     expect(JSON.stringify(result)).not.toContain('other.sqlite3');
+  });
+
+  it.runIf(os.platform() !== 'win32')('disables executable user-site .pth hooks for the real adapter interpreter', async () => {
+    const fixture = await memoryFixture();
+    const workspace = [...(await buildWorkspaces(fixture.config)).values()][0];
+    const python = pythonExecutable();
+    const home = path.join(fixture.root, 'isolated-home');
+    await mkdir(home, { recursive: true });
+    const userSite = execFileSync(python, ['-c', 'import site; print(site.getusersitepackages())'], {
+      encoding: 'utf8', env: { ...process.env, HOME: home }
+    }).trim();
+    await mkdir(userSite, { recursive: true });
+    const marker = path.join(fixture.root, 'user-site-pth-executed');
+    await writeFile(path.join(userSite, 'untrusted-startup.pth'),
+      `import pathlib; pathlib.Path(${JSON.stringify(marker)}).write_text("executed")\n`);
+
+    execFileSync(python, ['-c', 'pass'], { env: { ...process.env, HOME: home } });
+    expect(existsSync(marker)).toBe(true);
+    await rm(marker);
+
+    const previousHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      const result = await otaMemoryCall(workspace, 'memory.begin_turn', {
+        request_id: 'begin-user-site-isolation', intent: 'prove isolated adapter startup'
+      });
+      expect(result.data).toMatchObject({ operation: 'memory.begin_turn', owner_agent_id: 'anna' });
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
   });
 
   it('resolves opaque fixture handles without exposing target paths in the MCP schema', async () => {
