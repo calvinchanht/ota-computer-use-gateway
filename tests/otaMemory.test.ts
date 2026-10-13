@@ -138,6 +138,9 @@ describe('OTA-Memory lifecycle adapter', () => {
     const client = new Client({ name: 'ota-memory-schema-test', version: '0.0.0' });
     await client.connect(clientTransport);
     const listed = await client.listTools();
+    const beginTool = listed.tools.find((tool) => tool.name === 'memory_begin_turn');
+    expect(beginTool?.description).toContain('For substantive continuing or related work, use this proactively near the start');
+    expect(beginTool?.description).toContain('default to recall even on an uncertain match');
     const commitTool = listed.tools.find((tool) => tool.name === 'memory_commit_turn');
     const properties = commitTool?.inputSchema.properties as Record<string, unknown> | undefined;
     const candidateArray = properties?.candidates as { items?: Record<string, unknown> } | undefined;

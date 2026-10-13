@@ -72,7 +72,7 @@ function memoryCall(context: RegisterContext, name: string, operation: OtaMemory
 function beginTurnSpec() {
   return {
     title: 'Memory begin turn',
-    description: 'Retrieve one bounded, scoped OTA-Memory lifecycle-v1 context receipt. Database and identity scope are server-owned.',
+    description: 'Retrieve one bounded, scoped OTA-Memory lifecycle-v1 context receipt. For substantive continuing or related work, use this proactively near the start whenever prior durable context could plausibly help; when the work is meaningfully connected and current context may be incomplete, default to recall even on an uncertain match. Database and identity scope are server-owned.',
     inputSchema: {
       workspace_id: z.string(), request_id: z.string().min(1), intent: z.string().min(1),
       execution_handle: executionHandle, session: sessionSchema, resume_seed: z.string().optional(),
