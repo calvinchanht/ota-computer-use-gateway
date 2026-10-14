@@ -98,7 +98,7 @@ workspaces:
     host_root: /
   commands: {}
   browser:
-  max_open_work_pages: 5
+    max_open_work_pages: 5
     profiles:
     - purpose: work
       label: genesis

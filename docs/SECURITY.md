@@ -22,10 +22,10 @@ OTA is a high-capability local/host gateway. Its security boundary is explicit a
 ## Capability and tool policy
 
 - `workspaces[].api_sets` is the preferred capability model: `workspace`, `browser`, `computer`, `computer_windows`, `machine_admin`, and `estate_admin` are composable rather than a privilege ladder.
-- `server.exposed_tools`, when configured, is an additional allow surface and should be generated/synchronized from the resolved capability set instead of hand-maintained.
+- `server.exposed_tools`, when configured, is an additional allow surface for non-canonical names and should be generated/synchronized from the resolved capability set instead of hand-maintained. Canonical names remain callable on HTTP JSON even when the list is present (`serverExposesTool`).
 - `get_workspace_policy` and `get_tool_profile` are the machine-readable source of truth for the current workspace's allowed tools and capability notes.
 - Routine scoped workspace/browser/computer operations are not automatically per-call approval gated. Current policy returns `requires_approval: []`; provider UI may still ask for confirmation based on its own risk model.
-- `.agent/PANIC_STOP` remains an explicit operator stop mechanism for tools covered by the panic policy.
+- `.agent/PANIC_STOP` remains an explicit operator stop for tools covered by the panic policy on the **MCP** `runWorkspaceTool` path. The JSON `/api/v1/tool` path used by the Threaddex facade does not currently call `assertNotStopped`; treat that split as a live limitation, not as JSON honoring panic.
 
 ## Provider risk annotations
 
@@ -51,7 +51,7 @@ Annotations are provider hints, not authorization. Capability policy, auth, path
 ## Audit and retention
 
 - Tool calls are written to the workspace/agent audit stream (normally `.agent/audit/tool_calls.jsonl`).
-- HTTP mode records bounded safe request metadata in `.agent/audit/http_requests.jsonl`.
+- HTTP mode records bounded safe request metadata in `.agent/audit/http_requests.jsonl` for `/mcp` only. JSON `/api/v1/tool` and `/batch` are recorded in `.agent/audit/tool_calls.jsonl`.
 - Audit records must contain operation metadata, status, bounded previews/hashes where useful, and redacted values—not raw bearer tokens, PATs, OAuth tokens, private keys, cookies, or signed secrets.
 
 See `POLICY_MODEL.md`, `API_CAPABILITY_SETS.md`, `AUDIT_RETENTION.md`, and `PRIMITIVE_RUNTIME.md` for the detailed capability, retention, and execution contracts.

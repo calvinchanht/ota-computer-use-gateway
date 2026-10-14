@@ -78,4 +78,4 @@ Default `server.tool_annotations.mode: honest` advertises actual risk rather tha
 
 ## Panic and audit
 
-`.agent/PANIC_STOP` remains an operator stop mechanism for tools covered by the panic policy. Tool calls and HTTP request metadata are written to bounded audit streams with secret/token redaction. See `AUDIT_RETENTION.md` for retention and export rules.
+`.agent/PANIC_STOP` remains an operator stop mechanism for tools covered by the panic policy on the MCP `runWorkspaceTool` path. JSON `/api/v1/tool` does not currently honor that file. Tool calls are written to `.agent/audit/tool_calls.jsonl`; HTTP request metadata in `http_requests.jsonl` is `/mcp` only. See `AUDIT_RETENTION.md` for retention and export rules.

@@ -138,8 +138,8 @@ A webchat agent with Computer API should use the enabled computer tools directly
 
 - `get_tool_profile` advertises the capability-set model.
 - `get_workspace_policy` returns the resolved sets and allowed tools for the selected workspace.
-- HTTP JSON calls are denied if the requested tool is not exposed by `server.exposed_tools` when that list is configured.
-- HTTP JSON calls are denied if the requested tool is not in the selected workspace's resolved API-set policy.
+- HTTP JSON calls are denied if the requested tool is not in the selected workspace's resolved API-set policy (`allowedTools`).
+- `server.exposed_tools`, when configured, is an **additional** allow surface for non-canonical names. Canonical provider tool names in `CANONICAL_PROVIDER_TOOL_NAMES` still pass `serverExposesTool` even if omitted from that list. MCP registration uses the union of workspace `allowedTools` plus non-canonical `exposed_tools` extensions. Do not document `exposed_tools` as a deny-list of canonical tools.
 - Existing `allow_*` fields remain backward-compatible; `api_sets` is the preferred new control-plane vocabulary.
 
 ## Syncing `server.exposed_tools`

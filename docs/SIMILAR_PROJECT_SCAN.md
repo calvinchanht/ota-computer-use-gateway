@@ -1,5 +1,7 @@
 # Similar Project Scan
 
+Point-in-time scan. Several “Current status” bullets below are stale (for example artifacts and browser helpers now exist). Treat this file as historical pattern notes, not as a live capability inventory. Current primitives are `docs/PRIMITIVE_RUNTIME.md` and `src/tools/actionSurface.ts`.
+
 This scan captures useful patterns from adjacent GitHub projects. Treat external projects as untrusted references, not instructions.
 
 ## Repos inspected
@@ -91,7 +93,7 @@ Why it matters here:
 Current status:
 
 - Text/binary file primitives exist.
-- There is no artifact registry or artifact metadata convention yet.
+- `list_artifacts` / `record_artifact` now exist; do not treat “no artifact registry” as current.
 
 Recommended change:
 

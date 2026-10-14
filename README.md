@@ -18,7 +18,7 @@ node dist/index.js --config config/mickey.local.yaml
 node dist/index.js --config config/mickey.local.yaml --transport http
 ```
 
-HTTP defaults to stateful Streamable HTTP sessions. Set `OTA_MCP_TRANSPORT_MODE=stateless` for disposable per-request MCP transports that emit no `mcp-session-id`; durable workspace, run, browser, and process state remains outside the MCP transport. MCP clients should send `Accept: application/json, text/event-stream`. Stateful clients reuse the returned session header, while stateless clients reconnect for each request. `GET /healthz` reports the active MCP transport mode alongside safe readiness metadata. Requests with `Content-Length` above `security.max_request_bytes` are rejected before MCP handling, `/mcp` requests are rate-limited by `server.rate_limit`, and safe HTTP metadata is appended to `.agent/audit/http_requests.jsonl`. Proxy client IP headers are ignored unless `server.rate_limit.trust_proxy_headers` is explicitly enabled. `SIGINT`/`SIGTERM` close the HTTP listener and MCP transport cleanly.
+HTTP defaults to stateful Streamable HTTP sessions. Set `OTA_MCP_TRANSPORT_MODE=stateless` for disposable per-request MCP transports that emit no `mcp-session-id`; durable workspace, run, browser, and process state remains outside the MCP transport. MCP clients should send `Accept: application/json, text/event-stream`. Stateful clients reuse the returned session header, while stateless clients reconnect for each request. `GET /healthz` reports the active MCP transport mode alongside safe readiness metadata. Requests with `Content-Length` above `security.max_request_bytes` are rejected before MCP handling, `/mcp` requests are rate-limited by `server.rate_limit`, and safe HTTP metadata for `/mcp` is appended to `.agent/audit/http_requests.jsonl` (JSON `/api/v1/tool` and `/batch` are audited as `tool_calls.jsonl`, not `http_requests.jsonl`). Proxy client IP headers are ignored unless `server.rate_limit.trust_proxy_headers` is explicitly enabled. `SIGINT`/`SIGTERM` close the HTTP listener and MCP transport cleanly.
 
 For public HTTPS ingress, enable bearer auth and set the token only in the process environment. HTTP mode refuses to bind a non-loopback host without auth enabled:
 
@@ -101,7 +101,7 @@ npm run smoke:primitives
 
 ## Mickey / provider runtime
 
-- [Mickey no-App bridge](docs/MICKEY_NO_APP_BRIDGE.md) — ChatGPT Project as source shell + scoped Gateway JSON API runtime.
+- [Mickey no-App bridge](docs/MICKEY_NO_APP_BRIDGE.md) — historical 2026-05 experiment. Canonical provider topology is the combined WPO root MCP; do not use this file as current setup.
 
 ## Agent host path split
 
@@ -110,5 +110,5 @@ For single-host Custom GPT Action setup, keep a strict service boundary on the s
 - `/ota/...` is the OTA capability gateway for workspace, file, command, browser, computer, memory, artifact, approval, and estate tools.
 - `/threaddex/...` is the native Threaddex Job API for job read, progress, final delivery, schedules, agent messages, and thread anchors.
 
-Do not expose or document `threaddex_*` job proxy tools from OTA. The old proxy code was a temporary bridge and is intentionally removed from the Mickey testbed first.
+Do not expose or document Threaddex job lifecycle tools from OTA as the canonical surface. HTTP JSON rejects `get_job` / `deliver_job` / aliases and points at `/threaddex/...`. MCP may still register those names if they appear in `server.exposed_tools` as non-canonical extensions (`src/server/register/jobLifecycle.ts`); that is leftover compatibility, not the combined WPO provider app. Normal Threaddex agents must use WPO-native job tools.
 
