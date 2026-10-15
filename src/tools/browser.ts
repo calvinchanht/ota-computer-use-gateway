@@ -166,6 +166,13 @@ export async function browserTail(workspace: Workspace, targetId: string, cursor
   });
 }
 
+export function browserManageTabsAuditInvocation(workspace: Workspace, action: string, label?: string) {
+  const profiles = configuredProfiles(workspace).map((profile, index) => browserProfile(workspace, profile, index));
+  const workProfiles = profiles.filter((profile) => profile.purpose === 'work');
+  const profileLabel = label ?? workProfiles.find((profile) => profile.default)?.label ?? workProfiles[0]?.label;
+  return { action, ...(profileLabel ? { profile_label: profileLabel } : {}) };
+}
+
 export async function browserManageTabs(workspace: Workspace, options: BrowserManageTabsOptions, label?: string) {
   const profile = selectedBrowserProfile(workspace, label);
   const targets = await fetchCdpJson<ChromeTarget[]>(profile, '/json/list');

@@ -20,6 +20,7 @@ export type AuditEntry = {
   metadata?: AuditMetadata;
 };
 
+const BROWSER_MANAGE_TAB_ACTIONS = new Set(['list_page_tabs_only', 'focus_by_url', 'focus_by_title', 'close_by_filter']);
 const REQUEST_CONTEXT_KEYS = [
   'provider',
   'project_id',
@@ -35,14 +36,18 @@ const REQUEST_CONTEXT_KEYS = [
   'source_lane',
   'target_lane'
 ] as const;
+const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$/;
+const SECRET_PREFIX_PATTERN = /^(?:bearer|basic|secret|token|password|sk|ghp|github_pat|xox[baprs])(?:[:._-]|$)/i;
+const JWT_PATTERN = /^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$/;
 
-export function toolAuditMetadata(tool: string, data: unknown, requestContext?: unknown): AuditMetadata | undefined {
+export function toolAuditMetadata(tool: string, data: unknown, requestContext?: unknown, invocation?: unknown): AuditMetadata | undefined {
   const normalizedTool = tool.startsWith('api:') ? tool.slice(4) : tool;
   if (normalizedTool !== 'browser_manage_tabs') return undefined;
 
   const record = asRecord(data);
-  const action = boundedString(record?.action);
-  const profileLabel = boundedString(record?.profile_label);
+  const invoked = asRecord(invocation);
+  const action = browserManageTabsAction(record?.action) ?? browserManageTabsAction(invoked?.action);
+  const profileLabel = identifierString(record?.profile_label) ?? identifierString(invoked?.profile_label);
   const metadata: AuditMetadata = {
     ...(profileLabel ? { profile_label: profileLabel } : {}),
     ...(action ? { action } : {})
@@ -81,7 +86,7 @@ function affectedTargetIds(action: string | undefined, data: Record<string, unkn
 function boundedTargetIds(values: unknown[]): string[] {
   const ids: string[] = [];
   for (const value of values.slice(0, 50)) {
-    const id = boundedString(asRecord(value)?.id, 256);
+    const id = identifierString(asRecord(value)?.id);
     if (id && !ids.includes(id)) ids.push(id);
   }
   return ids;
@@ -95,9 +100,9 @@ function boundedRequestContext(value: unknown): Record<string, string> | undefin
   const context: Record<string, string> = {};
   for (const key of REQUEST_CONTEXT_KEYS) {
     for (const source of sources) {
-      const bounded = boundedString(source[key], 256);
-      if (bounded) {
-        context[key] = bounded;
+      const identifier = identifierString(source[key]);
+      if (identifier) {
+        context[key] = identifier;
         break;
       }
     }
@@ -105,14 +110,19 @@ function boundedRequestContext(value: unknown): Record<string, string> | undefin
   return Object.keys(context).length ? context : undefined;
 }
 
+function browserManageTabsAction(value: unknown): string | undefined {
+  return typeof value === 'string' && BROWSER_MANAGE_TAB_ACTIONS.has(value) ? value : undefined;
+}
+
+function identifierString(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value || value.length > 128) return undefined;
+  if (!IDENTIFIER_PATTERN.test(value) || SECRET_PREFIX_PATTERN.test(value) || JWT_PATTERN.test(value)) return undefined;
+  return value;
+}
+
 function boundedCount(value: unknown): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
   return Math.min(Math.max(Math.trunc(value), 0), 100000);
-}
-
-function boundedString(value: unknown, max = 200): string | undefined {
-  if (typeof value !== 'string' || !value) return undefined;
-  return value.slice(0, max);
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

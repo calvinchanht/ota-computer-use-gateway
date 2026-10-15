@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { runWorkspaceTool } from '../../core/toolRunner.js';
-import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../../tools/browser.js';
+import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserManageTabsAuditInvocation, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../../tools/browser.js';
 import { READ_ONLY, RUN_LOCAL, TOOL_RESULT_OUTPUT_SCHEMA } from './annotations.js';
+import type { Workspace } from '../../core/workspaces.js';
 import type { RegisterContext } from './types.js';
 
 export function registerBrowserTools(context: RegisterContext): void {
@@ -65,7 +66,7 @@ function registerBrowserManageTabs({ server, workspaces }: RegisterContext): voi
     inputSchema: { ...profileSchema(), action: z.enum(['list_page_tabs_only', 'focus_by_url', 'focus_by_title', 'close_by_filter']), url_contains: z.string().optional(), title_contains: z.string().optional(), target_id: z.string().optional(), include_urls: z.boolean().optional(), max_close: z.number().optional() },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
     annotations: RUN_LOCAL
-  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_manage_tabs', (workspace) => browserManageTabs(workspace, args as any, args.profile_label)));
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_manage_tabs', (workspace) => browserManageTabs(workspace, args as any, args.profile_label), (workspace: Workspace) => browserManageTabsAuditInvocation(workspace, args.action, args.profile_label)));
 }
 
 

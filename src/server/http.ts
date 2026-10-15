@@ -27,7 +27,7 @@ import {
 } from '../tools/genesis.js';
 import { agentBootstrap, checkpointThread, contextSnapshot, recordDecision, recordHandoff, recordProgress, updateCurrentTask } from '../tools/context.js';
 import { getProjectContext } from '../tools/memory.js';
-import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
+import { browserCdpBatch, browserCdpBrowserBatch, browserCdpBrowserCall, browserCdpCall, browserClickAndWait, browserManageTabs, browserManageTabsAuditInvocation, browserUploadFileAndVerify, browserStatus, browserTail, browserVisibleState, listBrowserProfiles, listBrowserTabs } from '../tools/browser.js';
 import { computerScreenClick, computerScreenDrag, computerScreenMouseMove, computerScreenScroll, computerWindowClick, computerWindowDrag, computerWindowMouseMove, computerWindowScroll, cuaDriverBatch, cuaDriverCall, cuaDriverStatus, type CuaDriverBatchStep } from '../tools/computer.js';
 import {
   windowsBatch,
@@ -671,19 +671,21 @@ async function runApiTool(config: AppConfig, tool: string, args: Record<string, 
   tool = normalizeEstateToolName(tool);
   const started = Date.now();
   let workspace: Workspace | null = null;
+  let invocation: unknown;
   try {
     const workspaces = await buildWorkspaces(config);
     const workspaceId = String(args.workspace_id ?? (workspaces.size === 1 ? [...workspaces.keys()][0] : ''));
     workspace = workspaceId ? getWorkspace(workspaces, workspaceId) : null;
+    invocation = workspace ? apiToolAuditInvocation(workspace, tool, args) : undefined;
     const exposed = config.server.exposed_tools ?? [];
     if (exposed.length > 0 && !serverExposesTool(exposed, tool)) throw new Error(`tool is not exposed by this server: ${tool}`);
     const result = await callApiTool(config, workspaces, workspace, tool, args);
-    await audit(workspace, { timestamp: new Date().toISOString(), tool: `api:${tool}`, ok: result.ok, summary: result.summary, duration_ms: Date.now() - started, metadata: toolAuditMetadata(tool, result.data, requestContext) });
+    await audit(workspace, { timestamp: new Date().toISOString(), tool: `api:${tool}`, ok: result.ok, summary: result.summary, duration_ms: Date.now() - started, metadata: toolAuditMetadata(tool, result.data, requestContext, invocation) });
     return result;
   } catch (error) {
     const summary = error instanceof Error ? error.message : String(error);
     await reportToolMisuse(config, tool, args, summary);
-    await audit(workspace, { timestamp: new Date().toISOString(), tool: `api:${tool}`, ok: false, summary, duration_ms: Date.now() - started, metadata: toolAuditMetadata(tool, undefined, requestContext) });
+    await audit(workspace, { timestamp: new Date().toISOString(), tool: `api:${tool}`, ok: false, summary, duration_ms: Date.now() - started, metadata: toolAuditMetadata(tool, undefined, requestContext, invocation) });
     return fail(summary);
   }
 }
@@ -766,6 +768,12 @@ function callGitContextApiTool(config: AppConfig, workspace: Workspace, tool: st
   if (tool === 'estate_host_deep_dive') return genesisHostDeepDive(requiredString(args.host, 'host'), sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config));
   if (tool === 'estate_safe_diagnostic') return genesisSafeDiagnostic(optionalString(args.scope) ?? 'estate', optionalString(args.target), sanitizeResultsEnabled(config) || redactSecretValuesEnabled(config));
   return undefined;
+}
+
+function apiToolAuditInvocation(workspace: Workspace, tool: string, args: Record<string, unknown>): unknown {
+  if (tool !== 'browser_manage_tabs') return undefined;
+  const action = typeof args.action === 'string' ? args.action : '';
+  return browserManageTabsAuditInvocation(workspace, action, optionalString(args.profile_label));
 }
 
 function callBrowserApiTool(workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
