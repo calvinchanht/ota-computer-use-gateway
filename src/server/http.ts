@@ -679,7 +679,7 @@ async function runApiTool(config: AppConfig, tool: string, args: Record<string, 
     invocation = workspace ? apiToolAuditInvocation(workspace, tool, args) : undefined;
     const exposed = config.server.exposed_tools ?? [];
     if (exposed.length > 0 && !serverExposesTool(exposed, tool)) throw new Error(`tool is not exposed by this server: ${tool}`);
-    const result = await callApiTool(config, workspaces, workspace, tool, args);
+    const result = await callApiTool(config, workspaces, workspace, tool, args, invocation);
     await audit(workspace, { timestamp: new Date().toISOString(), tool: `api:${tool}`, ok: result.ok, summary: result.summary, duration_ms: Date.now() - started, metadata: toolAuditMetadata(tool, result.data, requestContext, invocation) });
     return result;
   } catch (error) {
@@ -690,14 +690,14 @@ async function runApiTool(config: AppConfig, tool: string, args: Record<string, 
   }
 }
 
-async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typeof buildWorkspaces>>, workspace: Workspace | null, tool: string, args: Record<string, unknown>): Promise<ToolResult> {
+async function callApiTool(config: AppConfig, workspaces: Awaited<ReturnType<typeof buildWorkspaces>>, workspace: Workspace | null, tool: string, args: Record<string, unknown>, auditInvocation?: unknown): Promise<ToolResult> {
   if (tool === 'heartbeat') return heartbeat(workspaces);
   if (tool === 'workspace_status') return workspaceStatus(workspaces);
   if (tool === 'get_tool_profile') return toolProfile(config);
   if (!workspace) throw new Error('workspace_id is required');
   if (tool === 'get_workspace_policy') return workspacePolicy(workspace, config);
   if (!allowedTools(workspace).includes(tool)) throw new Error(toolExposureError(tool));
-  const result = callWorkspaceApiTool(config, workspace, tool, args);
+  const result = callWorkspaceApiTool(config, workspace, tool, args, auditInvocation);
   if (result) return result;
   throw new Error(`unsupported API tool: ${tool}`);
 }
@@ -708,10 +708,10 @@ function serverExposesTool(exposed: string[], tool: string): boolean {
   return exposed.map(normalizeEstateToolName).includes(normalized);
 }
 
-function callWorkspaceApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
+function callWorkspaceApiTool(config: AppConfig, workspace: Workspace, tool: string, args: Record<string, unknown>, auditInvocation?: unknown): ToolResult | Promise<ToolResult> | undefined {
   return callFileApiTool(config, workspace, tool, args)
     ?? callGitContextApiTool(config, workspace, tool, args)
-    ?? callBrowserApiTool(workspace, tool, args)
+    ?? callBrowserApiTool(workspace, tool, args, auditInvocation)
     ?? callComputerApiTool(workspace, tool, args)
     ?? callWindowsApiTool(workspace, tool, args)
     ?? callLargeFileApiTool(config, workspace, tool, args)
@@ -776,13 +776,13 @@ function apiToolAuditInvocation(workspace: Workspace, tool: string, args: Record
   return browserManageTabsAuditInvocation(workspace, action, optionalString(args.profile_label));
 }
 
-function callBrowserApiTool(workspace: Workspace, tool: string, args: Record<string, unknown>): ToolResult | Promise<ToolResult> | undefined {
+function callBrowserApiTool(workspace: Workspace, tool: string, args: Record<string, unknown>, auditInvocation?: unknown): ToolResult | Promise<ToolResult> | undefined {
   if (tool === 'list_browser_profiles') return listBrowserProfiles(workspace);
   if (tool === 'browser_status') return browserStatus(workspace, optionalString(args.profile_label));
   if (tool === 'list_browser_tabs') return listBrowserTabs(workspace, optionalString(args.profile_label), Boolean(args.include_urls), browserTargetFilter(args));
   if (tool === 'browser_visible_state') return browserVisibleState(workspace, requiredString(args.target_id, 'target_id'), optionalString(args.profile_label));
   if (tool === 'browser_tail') return browserTail(workspace, requiredString(args.target_id, 'target_id'), optionalNumber(args.cursor), optionalString(args.profile_label));
-  if (tool === 'browser_manage_tabs') return browserManageTabs(workspace, { action: requiredString(args.action, 'action') as any, url_contains: optionalString(args.url_contains), title_contains: optionalString(args.title_contains), target_id: optionalString(args.target_id), include_urls: optionalBoolean(args.include_urls), max_close: optionalNumber(args.max_close) }, optionalString(args.profile_label));
+  if (tool === 'browser_manage_tabs') return browserManageTabs(workspace, { action: requiredString(args.action, 'action') as any, url_contains: optionalString(args.url_contains), title_contains: optionalString(args.title_contains), target_id: optionalString(args.target_id), include_urls: optionalBoolean(args.include_urls), max_close: optionalNumber(args.max_close) }, optionalString(args.profile_label), auditInvocation as ReturnType<typeof browserManageTabsAuditInvocation>);
   if (tool === 'browser_click_and_wait') return browserClickAndWait(workspace, { target_id: requiredString(args.target_id, 'target_id'), selector: optionalString(args.selector), text: optionalString(args.text), wait_for_text: optionalString(args.wait_for_text), wait_for_selector: optionalString(args.wait_for_selector), wait_for_url_contains: optionalString(args.wait_for_url_contains), wait_until_stable: optionalBoolean(args.wait_until_stable), timeout_ms: optionalNumber(args.timeout_ms) }, optionalString(args.profile_label));
   if (tool === 'browser_upload_file_and_verify') return browserUploadFileAndVerify(workspace, { target_id: requiredString(args.target_id, 'target_id'), selector: requiredString(args.selector, 'selector'), path: requiredString(args.path, 'path'), verify_visible_text: optionalString(args.verify_visible_text), timeout_ms: optionalNumber(args.timeout_ms) }, optionalString(args.profile_label));
   if (tool === 'browser_cdp_browser_call') return browserCdpBrowserCall(workspace, requiredString(args.method, 'method'), recordArg(args.params, 'params') ?? {}, optionalString(args.profile_label));

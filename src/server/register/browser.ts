@@ -66,7 +66,7 @@ function registerBrowserManageTabs({ server, workspaces }: RegisterContext): voi
     inputSchema: { ...profileSchema(), action: z.enum(['list_page_tabs_only', 'focus_by_url', 'focus_by_title', 'close_by_filter']), url_contains: z.string().optional(), title_contains: z.string().optional(), target_id: z.string().optional(), include_urls: z.boolean().optional(), max_close: z.number().optional() },
     outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
     annotations: RUN_LOCAL
-  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_manage_tabs', (workspace) => browserManageTabs(workspace, args as any, args.profile_label), (workspace: Workspace) => browserManageTabsAuditInvocation(workspace, args.action, args.profile_label)));
+  }, async (args) => runWorkspaceTool(workspaces, args.workspace_id, 'browser_manage_tabs', (workspace, invocation) => browserManageTabs(workspace, args as any, args.profile_label, invocation as ReturnType<typeof browserManageTabsAuditInvocation>), (workspace: Workspace) => browserManageTabsAuditInvocation(workspace, args.action, args.profile_label)));
 }
 
 

@@ -36,8 +36,9 @@ const REQUEST_CONTEXT_KEYS = [
   'source_lane',
   'target_lane'
 ] as const;
-const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$/;
-const SECRET_PREFIX_PATTERN = /^(?:bearer|basic|secret|token|password|sk|ghp|github_pat|xox[baprs])(?:[:._-]|$)/i;
+const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const URL_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]{1,15}:/;
+const SECRET_PREFIX_PATTERN = /^(?:(?:bearer|basic|secret|token|password)(?:[._-]|$)|(?:sk|gh[pousr]|github_pat|xox[baprs]|ya29)(?:[._-]|$)|AKIA[A-Z0-9]{12,}|AIza[A-Za-z0-9_-]{20,})/i;
 const JWT_PATTERN = /^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$/;
 
 export function toolAuditMetadata(tool: string, data: unknown, requestContext?: unknown, invocation?: unknown): AuditMetadata | undefined {
@@ -53,7 +54,7 @@ export function toolAuditMetadata(tool: string, data: unknown, requestContext?: 
     ...(action ? { action } : {})
   };
 
-  const targetIds = affectedTargetIds(action, record);
+  const targetIds = affectedTargetIds(action, record, invoked);
   if (targetIds.length) metadata.target_ids = targetIds;
 
   const matched = boundedCount(record?.matched);
@@ -72,13 +73,13 @@ export async function audit(workspace: Workspace | null, entry: AuditEntry): Pro
   await appendFile(agentPath(workspace, 'audit', 'tool_calls.jsonl'), JSON.stringify(entry) + '\n');
 }
 
-function affectedTargetIds(action: string | undefined, data: Record<string, unknown> | undefined): string[] {
-  if (!data) return [];
+function affectedTargetIds(action: string | undefined, data: Record<string, unknown> | undefined, invocation: Record<string, unknown> | undefined): string[] {
   if (action === 'close_by_filter') {
-    return boundedTargetIds(Array.isArray(data.closed) ? data.closed : []);
+    const successful = boundedTargetIds(Array.isArray(data?.closed) ? data.closed : []);
+    return successful.length ? successful : boundedIdentifierList(invocation?.closed_target_ids);
   }
   if (action === 'focus_by_url' || action === 'focus_by_title') {
-    return boundedTargetIds(data.target ? [data.target] : []);
+    return boundedTargetIds(data?.target ? [data.target] : []);
   }
   return [];
 }
@@ -87,6 +88,16 @@ function boundedTargetIds(values: unknown[]): string[] {
   const ids: string[] = [];
   for (const value of values.slice(0, 50)) {
     const id = identifierString(asRecord(value)?.id);
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
+function boundedIdentifierList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const ids: string[] = [];
+  for (const candidate of value.slice(0, 50)) {
+    const id = identifierString(candidate);
     if (id && !ids.includes(id)) ids.push(id);
   }
   return ids;
@@ -116,7 +127,7 @@ function browserManageTabsAction(value: unknown): string | undefined {
 
 function identifierString(value: unknown): string | undefined {
   if (typeof value !== 'string' || !value || value.length > 128) return undefined;
-  if (!IDENTIFIER_PATTERN.test(value) || SECRET_PREFIX_PATTERN.test(value) || JWT_PATTERN.test(value)) return undefined;
+  if (URL_SCHEME_PATTERN.test(value) || !IDENTIFIER_PATTERN.test(value) || SECRET_PREFIX_PATTERN.test(value) || JWT_PATTERN.test(value)) return undefined;
   return value;
 }
 

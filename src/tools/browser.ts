@@ -51,6 +51,12 @@ type BrowserManageTabsOptions = {
   max_close?: number;
 };
 
+export type BrowserManageTabsAuditInvocation = {
+  action: BrowserManageTabsAction;
+  profile_label?: string;
+  closed_target_ids: string[];
+};
+
 type BrowserClickAndWaitOptions = {
   target_id: string;
   selector?: string;
@@ -166,15 +172,16 @@ export async function browserTail(workspace: Workspace, targetId: string, cursor
   });
 }
 
-export function browserManageTabsAuditInvocation(workspace: Workspace, action: string, label?: string) {
+export function browserManageTabsAuditInvocation(workspace: Workspace, action: string, label?: string): BrowserManageTabsAuditInvocation {
   const profiles = configuredProfiles(workspace).map((profile, index) => browserProfile(workspace, profile, index));
   const workProfiles = profiles.filter((profile) => profile.purpose === 'work');
   const profileLabel = label ?? workProfiles.find((profile) => profile.default)?.label ?? workProfiles[0]?.label;
-  return { action, ...(profileLabel ? { profile_label: profileLabel } : {}) };
+  return { action: action as BrowserManageTabsAction, ...(profileLabel ? { profile_label: profileLabel } : {}), closed_target_ids: [] };
 }
 
-export async function browserManageTabs(workspace: Workspace, options: BrowserManageTabsOptions, label?: string) {
+export async function browserManageTabs(workspace: Workspace, options: BrowserManageTabsOptions, label?: string, auditInvocation?: BrowserManageTabsAuditInvocation) {
   const profile = selectedBrowserProfile(workspace, label);
+  if (auditInvocation) auditInvocation.profile_label = profile.label;
   const targets = await fetchCdpJson<ChromeTarget[]>(profile, '/json/list');
   const pages = targets.filter((target) => targetMatchesFilter(target, normalizeTargetFilter({ type: 'page' })));
   if (options.action === 'list_page_tabs_only') {
@@ -198,6 +205,9 @@ export async function browserManageTabs(workspace: Workspace, options: BrowserMa
     for (const target of selected) {
       await cdpCommand(browserUrl, 'Target.closeTarget', { targetId: target.id });
       closed.push(targetSummary(target, true));
+      if (auditInvocation?.action === 'close_by_filter' && !auditInvocation.closed_target_ids.includes(target.id)) {
+        auditInvocation.closed_target_ids.push(target.id);
+      }
     }
     return ok(`closed ${closed.length} browser tabs`, { workspace_id: workspace.id, profile_label: profile.label, action: options.action, matched: matches.length, closed });
   }

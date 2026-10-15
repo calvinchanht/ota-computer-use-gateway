@@ -72,7 +72,7 @@ describe('runWorkspaceTool', () => {
       new Map([[workspace.id, workspace]]),
       workspace.id,
       'browser_manage_tabs',
-      (current) => browserManageTabs(current, { action: 'close_by_filter' }),
+      (current, invocation) => browserManageTabs(current, { action: 'close_by_filter' }, undefined, invocation as ReturnType<typeof browserManageTabsAuditInvocation>),
       (current) => browserManageTabsAuditInvocation(current, 'close_by_filter')
     );
     expect(result.content[0].text).toContain('browser CDP control is not enabled');
@@ -82,6 +82,37 @@ describe('runWorkspaceTool', () => {
       profile_label: 'work',
       action: 'close_by_filter'
     });
+  });
+
+  it('preserves only actually closed target IDs when a later close fails', async () => {
+    const workspace = await browserWorkspace({ allow_mouse_keyboard: true });
+    mockFetchSequence([
+      [
+        { id: 'T1', type: 'page', title: 'One', url: 'https://example.com/one?secret=a' },
+        { id: 'T2', type: 'page', title: 'Two', url: 'https://example.com/two?secret=b' }
+      ],
+      { webSocketDebuggerUrl: 'ws://browser' }
+    ]);
+    mockCloseResults([{ result: { success: true } }, { error: { message: 'forced second close failure' } }]);
+    const result = await runWorkspaceTool(
+      new Map([[workspace.id, workspace]]),
+      workspace.id,
+      'browser_manage_tabs',
+      (current, invocation) => browserManageTabs(current, { action: 'close_by_filter', url_contains: 'example.com' }, undefined, invocation as ReturnType<typeof browserManageTabsAuditInvocation>),
+      (current) => browserManageTabsAuditInvocation(current, 'close_by_filter')
+    );
+    expect(result.content[0].text).toContain('forced second close failure');
+    const raw = await readFile(path.join(workspace.realRoot, '.agent/audit/tool_calls.jsonl'), 'utf8');
+    const audit = JSON.parse(raw.trim());
+    expect(audit.ok).toBe(false);
+    expect(audit.metadata).toEqual({
+      profile_label: 'work',
+      action: 'close_by_filter',
+      target_ids: ['T1']
+    });
+    expect(raw).not.toContain('T2');
+    expect(raw).not.toContain('secret=a');
+    expect(raw).not.toContain('secret=b');
   });
 
   it('allowlists identifier-like API caller and correlation context without persisting URLs', () => {
@@ -129,12 +160,14 @@ describe('runWorkspaceTool', () => {
       thread: {
         provider: 'chatgpt',
         project_id: 'project-ok',
-        thread_id: 'https://chatgpt.com/c/x?token=secret',
-        conversation_lane: 'main lane with free text',
-        job_id: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzZWNyZXQifQ.signature12345',
-        correlation_id: 'Bearer:secret-token',
-        request_id: 'line-one\nline-two',
-        source_lane: 'sk-secretvalue',
+        thread_id: 'https:example.com',
+        conversation_lane: 'mailto:user@example.com',
+        lane: 'ya29.a0AfH6SMBfake',
+        job_id: 'gho_abcdefghijklmnopqrstuvwxyz',
+        threaddex_job_id: 'AKIAABCDEFGHIJKLMNOP',
+        correlation_id: 'ghu_abcdefghijklmnopqrstuvwxyz',
+        request_id: 'ghs_abcdefghijklmnopqrstuvwxyz',
+        source_lane: 'ghr_abcdefghijklmnopqrstuvwxyz',
         target_lane: 'main'
       }
     }, {
@@ -152,7 +185,7 @@ describe('runWorkspaceTool', () => {
       }
     });
     const serialized = JSON.stringify(metadata);
-    for (const forbidden of ['https://', 'token=secret', 'Bearer', 'signature12345', 'line-one', 'sk-secretvalue', 'free text']) {
+    for (const forbidden of ['https:example.com', 'mailto:user@example.com', 'ya29.', 'gho_', 'ghu_', 'ghs_', 'ghr_', 'AKIA']) {
       expect(serialized).not.toContain(forbidden);
     }
   });
@@ -187,11 +220,38 @@ function mockFetch(body: unknown) {
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => body, text: async () => String(body) })));
 }
 
-async function browserWorkspace(): Promise<Workspace> {
+function mockFetchSequence(bodies: unknown[]) {
+  let index = 0;
+  vi.stubGlobal('fetch', vi.fn(async () => {
+    const body = bodies[Math.min(index++, bodies.length - 1)];
+    return { ok: true, json: async () => body, text: async () => String(body) };
+  }));
+}
+
+function mockCloseResults(results: Array<{ result?: unknown; error?: { message: string } }>) {
+  let connection = 0;
+  class MockWebSocket extends EventTarget {
+    close = vi.fn();
+    private readonly outcome = results[Math.min(connection++, results.length - 1)];
+    constructor(public url: string) {
+      super();
+      setTimeout(() => this.dispatchEvent(new Event('open')), 0);
+    }
+    send = vi.fn((message: string) => {
+      const id = JSON.parse(message).id;
+      const payload = this.outcome.error ? { id, error: this.outcome.error } : { id, result: this.outcome.result };
+      setTimeout(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(payload) })), 0);
+    });
+  }
+  vi.stubGlobal('WebSocket', MockWebSocket);
+}
+
+async function browserWorkspace(overrides: Partial<Workspace> = {}): Promise<Workspace> {
   return fixtureWorkspace({
     browser: {
       profiles: [{ label: 'work', cdp_host: '127.0.0.1', cdp_port: 9444, headed: true, default: true, launch: false }]
-    }
+    },
+    ...overrides
   });
 }
 

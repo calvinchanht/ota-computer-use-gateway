@@ -4,7 +4,7 @@ import { assertNotStopped } from './panic.js';
 import { getWorkspace, type Workspace } from './workspaces.js';
 
 export type WorkspaceMap = Map<string, Workspace>;
-export type ToolFn = (workspace: Workspace) => Promise<ToolResult>;
+export type ToolFn = (workspace: Workspace, auditInvocation?: unknown) => Promise<ToolResult>;
 export type AuditInvocation = unknown | ((workspace: Workspace) => unknown);
 
 export async function runWorkspaceTool(workspaces: WorkspaceMap, workspaceId: string, tool: string, fn: ToolFn, auditInvocation?: AuditInvocation) {
@@ -15,7 +15,7 @@ export async function runWorkspaceTool(workspaces: WorkspaceMap, workspaceId: st
     workspace = getWorkspace(workspaces, workspaceId);
     await assertNotStopped(workspace, tool);
     invocation = typeof auditInvocation === 'function' ? auditInvocation(workspace) : auditInvocation;
-    const result = await fn(workspace);
+    const result = await fn(workspace, invocation);
     await record(workspace, tool, result, started, invocation);
     return asText(result);
   } catch (error) {
