@@ -40,6 +40,9 @@ const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const URL_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]{1,15}:/;
 const SECRET_PREFIX_PATTERN = /^(?:(?:bearer|basic|secret|token|password)(?:[._-]|$)|(?:sk|gh[pousr]|github_pat|xox[baprs]|ya29)(?:[._-]|$)|AKIA[A-Z0-9]{12,}|AIza[A-Za-z0-9_-]{20,})/i;
 const JWT_PATTERN = /^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$/;
+const PROFILE_URL_PATTERN = /^(?:https?|ftp|file|mailto|data|javascript|ws|wss):/i;
+const PROFILE_SECRET_PREFIX_PATTERN = /^(?:(?:bearer|basic|secret|token|password)(?:[\s:._-]|$)|(?:sk|gh[pousr]|github_pat|xox[baprs]|ya29)(?:[._-]|$)|AKIA[A-Z0-9]{12,}|AIza[A-Za-z0-9_-]{20,})/i;
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
 
 export function toolAuditMetadata(tool: string, data: unknown, requestContext?: unknown, invocation?: unknown): AuditMetadata | undefined {
   const normalizedTool = tool.startsWith('api:') ? tool.slice(4) : tool;
@@ -48,7 +51,7 @@ export function toolAuditMetadata(tool: string, data: unknown, requestContext?: 
   const record = asRecord(data);
   const invoked = asRecord(invocation);
   const action = browserManageTabsAction(record?.action) ?? browserManageTabsAction(invoked?.action);
-  const profileLabel = identifierString(record?.profile_label) ?? identifierString(invoked?.profile_label);
+  const profileLabel = profileLabelString(record?.profile_label) ?? profileLabelString(invoked?.profile_label);
   const metadata: AuditMetadata = {
     ...(profileLabel ? { profile_label: profileLabel } : {}),
     ...(action ? { action } : {})
@@ -128,6 +131,13 @@ function browserManageTabsAction(value: unknown): string | undefined {
 function identifierString(value: unknown): string | undefined {
   if (typeof value !== 'string' || !value || value.length > 128) return undefined;
   if (URL_SCHEME_PATTERN.test(value) || !IDENTIFIER_PATTERN.test(value) || SECRET_PREFIX_PATTERN.test(value) || JWT_PATTERN.test(value)) return undefined;
+  return value;
+}
+
+function profileLabelString(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value || value.length > 128 || !value.trim()) return undefined;
+  if (CONTROL_CHARACTER_PATTERN.test(value) || PROFILE_URL_PATTERN.test(value) || PROFILE_SECRET_PREFIX_PATTERN.test(value) || JWT_PATTERN.test(value)) return undefined;
+  if (/[?&#=]/.test(value) || value.trim().split(/\s+/).length > 8) return undefined;
   return value;
 }
 

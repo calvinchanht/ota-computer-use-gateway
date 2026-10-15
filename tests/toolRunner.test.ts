@@ -44,8 +44,12 @@ describe('runWorkspaceTool', () => {
     expect(raw).not.toContain('private title');
   });
 
-  it('audits the actual list-only browser tool with action/profile and no affected targets', async () => {
-    const workspace = await browserWorkspace();
+  it('audits the actual list-only browser tool with schema-valid spaced profile attribution and no affected targets', async () => {
+    const workspace = await browserWorkspace({
+      browser: {
+        profiles: [{ label: 'Work Profile', cdp_host: '127.0.0.1', cdp_port: 9444, headed: true, default: true, launch: false }]
+      }
+    });
     mockFetch([{ id: 'TARGET-1', type: 'page', title: 'Private', url: 'https://example.com/path?token=secret' }]);
     await runWorkspaceTool(
       new Map([[workspace.id, workspace]]),
@@ -58,11 +62,27 @@ describe('runWorkspaceTool', () => {
     const audit = JSON.parse(raw.trim());
     expect(audit.ok).toBe(true);
     expect(audit.metadata).toEqual({
-      profile_label: 'work',
+      profile_label: 'Work Profile',
       action: 'list_page_tabs_only'
     });
     expect(raw).not.toContain('TARGET-1');
     expect(raw).not.toContain('token=secret');
+  });
+
+  it('rejects sensitive or transcript-like profile labels from audit projection', () => {
+    for (const profileLabel of [
+      'https:example.com',
+      'mailto:user@example.com',
+      'Bearer secret-token',
+      'gho_abcdefghijklmnopqrstuvwxyz',
+      'profile?token=secret',
+      'this is an arbitrary transcript sentence with too many words to retain'
+    ]) {
+      expect(toolAuditMetadata('browser_manage_tabs', undefined, undefined, {
+        profile_label: profileLabel,
+        action: 'list_page_tabs_only'
+      })).toEqual({ action: 'list_page_tabs_only' });
+    }
   });
 
   it('audits the actual failed browser tool with invocation action/profile', async () => {
