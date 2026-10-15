@@ -1,4 +1,4 @@
-import { audit } from './audit.js';
+import { audit, toolAuditMetadata } from './audit.js';
 import { asText, fail, type ToolResult } from './result.js';
 import { assertNotStopped } from './panic.js';
 import { getWorkspace, type Workspace } from './workspaces.js';
@@ -13,15 +13,22 @@ export async function runWorkspaceTool(workspaces: WorkspaceMap, workspaceId: st
     workspace = getWorkspace(workspaces, workspaceId);
     await assertNotStopped(workspace, tool);
     const result = await fn(workspace);
-    await record(workspace, tool, result.ok, result.summary, started);
+    await record(workspace, tool, result, started);
     return asText(result);
   } catch (error) {
     const summary = error instanceof Error ? error.message : String(error);
-    await record(workspace, tool, false, summary, started);
+    await record(workspace, tool, fail(summary), started);
     return asText(fail(summary));
   }
 }
 
-async function record(workspace: Workspace | null, tool: string, ok: boolean, summary: string, started: number) {
-  await audit(workspace, { timestamp: new Date().toISOString(), tool, ok, summary, duration_ms: Date.now() - started });
+async function record(workspace: Workspace | null, tool: string, result: ToolResult, started: number) {
+  await audit(workspace, {
+    timestamp: new Date().toISOString(),
+    tool,
+    ok: result.ok,
+    summary: result.summary,
+    duration_ms: Date.now() - started,
+    metadata: toolAuditMetadata(tool, result.data)
+  });
 }

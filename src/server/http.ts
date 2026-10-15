@@ -7,7 +7,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AppConfig } from '../config/schema.js';
 import { contentHeuristicsEnabled, redactSecretValuesEnabled, sanitizeResultsEnabled } from '../core/securityPolicy.js';
 import { buildWorkspaces, getWorkspace, type Workspace } from '../core/workspaces.js';
-import { audit } from '../core/audit.js';
+import { audit, toolAuditMetadata } from '../core/audit.js';
 import { fail, type ToolResult } from '../core/result.js';
 import { heartbeat } from '../tools/heartbeat.js';
 import { workspaceStatus } from '../tools/workspace.js';
@@ -380,9 +380,10 @@ async function handleApiTool(config: AppConfig, req: IncomingMessage, res: Serve
   const validation = validateApiToolArguments(tool, args);
   if (!validation.ok) return sendJson(res, validation.status, validation.body);
   if (shouldUseQuotaSaver(tool, args)) return handleQuotaSaverApiTool(config, res, tool, args, idempotencyKey, safeBodyThread(parsedBody));
-  const result = await runApiTool(config, tool, args);
-  const response = { ...result, contract: validation.contract, api: { transport: 'http-json', tool, thread: safeBodyThread(parsedBody) } };
-  const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool, thread: safeBodyThread(parsedBody) } });
+  const thread = safeBodyThread(parsedBody);
+  const result = await runApiTool(config, tool, args, thread);
+  const response = { ...result, contract: validation.contract, api: { transport: 'http-json', tool, thread } };
+  const record = storeApiRun({ kind: 'tool', ok: result.ok, summary: result.summary, response, idempotency_key: idempotencyKey, request: { tool, thread } });
   return sendJson(res, 200, attachRun(response, record));
 }
 
@@ -416,7 +417,7 @@ async function handleApiBatch(config: AppConfig, req: IncomingMessage, res: Serv
   if (!validation.ok) return sendJson(res, validation.status, validation.body);
   const thread = safeBodyThread(parsedBody);
   if (shouldUseQuotaSaverBatch(steps)) return handleQuotaSaverApiBatch(config, res, steps, idempotencyKey, thread, parsedBody);
-  const result = await runApiBatchSteps(config, steps);
+  const result = await runApiBatchSteps(config, steps, thread);
   const response = { ...result, contracts: steps.map((step) => apiToolContract(step.tool)), api: { transport: 'http-json', thread } };
   const record = storeApiRun({ kind: 'batch', ok: result.ok, summary: response.summary, response, idempotency_key: idempotencyKey, request: { steps: steps.map((step) => ({ tool: step.tool })), thread } });
   return sendJson(res, 200, attachRun(response, record));
@@ -427,7 +428,7 @@ async function handleApiBatch(config: AppConfig, req: IncomingMessage, res: Serv
 async function handleQuotaSaverApiBatch(config: AppConfig, res: ServerResponse, steps: Array<{ tool: string; arguments?: Record<string, unknown> }>, idempotencyKey: string | undefined, thread: unknown, body: unknown): Promise<void> {
   const initialWaitMs = boundedAsyncWaitMs(batchOptionalNumber(steps, 'initial_wait_ms') ?? batchOptionalNumber(steps, 'sync_wait_ms') ?? 5000);
   const pollAfterMs = boundedPollAfterMs(batchOptionalNumber(steps, 'poll_after_ms') ?? 5000);
-  const promise = runApiBatchSteps(config, steps);
+  const promise = runApiBatchSteps(config, steps, thread);
   const result = await promiseWithTimeout(promise, initialWaitMs);
   if (result) {
     const response = { ...result, contracts: steps.map((step) => apiToolContract(step.tool)), api: { transport: 'http-json', thread, async_mode: 'quota_saver', completed_within_initial_wait_ms: initialWaitMs } };
@@ -453,11 +454,11 @@ async function handleQuotaSaverApiBatch(config: AppConfig, res: ServerResponse, 
   return sendJson(res, 202, attachRun(record.response, record));
 }
 
-async function runApiBatchSteps(config: AppConfig, steps: Array<{ tool: string; arguments?: Record<string, unknown> }>): Promise<ToolResult> {
+async function runApiBatchSteps(config: AppConfig, steps: Array<{ tool: string; arguments?: Record<string, unknown> }>, requestContext?: unknown): Promise<ToolResult> {
   const results = [];
   for (let index = 0; index < steps.length; index++) {
     const step = steps[index];
-    results.push({ index, tool: step.tool, contract: apiToolContract(step.tool), result: await runApiTool(config, step.tool, step.arguments ?? {}) });
+    results.push({ index, tool: step.tool, contract: apiToolContract(step.tool), result: await runApiTool(config, step.tool, step.arguments ?? {}, requestContext) });
   }
   return { ok: results.every((step) => step.result.ok), summary: `completed ${results.length} API batch steps`, data: { results }, truncated: false, warnings: [] };
 }
@@ -554,7 +555,7 @@ function existingRun(idempotencyKey: string | undefined): ApiRunRecord | undefin
 async function handleQuotaSaverApiTool(config: AppConfig, res: ServerResponse, tool: string, args: Record<string, unknown>, idempotencyKey: string | undefined, thread: unknown): Promise<void> {
   const initialWaitMs = boundedAsyncWaitMs(optionalNumber(args.initial_wait_ms) ?? optionalNumber(args.sync_wait_ms) ?? 5000);
   const pollAfterMs = boundedPollAfterMs(optionalNumber(args.poll_after_ms) ?? 5000);
-  const promise = runApiTool(config, tool, args);
+  const promise = runApiTool(config, tool, args, thread);
   const result = await promiseWithTimeout(promise, initialWaitMs);
   if (result) {
     const response = { ...result, contract: apiToolContract(tool), api: { transport: 'http-json', tool, thread, async_mode: 'quota_saver', completed_within_initial_wait_ms: initialWaitMs } };
@@ -666,7 +667,7 @@ function attachRun<T>(response: T, record: Pick<ApiRunRecord, 'run_id' | 'status
   return { ...source, api: { ...api, run_id: record.run_id, operation_id: record.run_id, status: record.status, operation_status: api.operation_status ?? record.status } } as T & { api: Record<string, unknown> };
 }
 
-async function runApiTool(config: AppConfig, tool: string, args: Record<string, unknown>): Promise<ToolResult> {
+async function runApiTool(config: AppConfig, tool: string, args: Record<string, unknown>, requestContext?: unknown): Promise<ToolResult> {
   tool = normalizeEstateToolName(tool);
   const started = Date.now();
   let workspace: Workspace | null = null;
@@ -677,12 +678,12 @@ async function runApiTool(config: AppConfig, tool: string, args: Record<string, 
     const exposed = config.server.exposed_tools ?? [];
     if (exposed.length > 0 && !serverExposesTool(exposed, tool)) throw new Error(`tool is not exposed by this server: ${tool}`);
     const result = await callApiTool(config, workspaces, workspace, tool, args);
-    await audit(workspace, { timestamp: new Date().toISOString(), tool: `api:${tool}`, ok: result.ok, summary: result.summary, duration_ms: Date.now() - started });
+    await audit(workspace, { timestamp: new Date().toISOString(), tool: `api:${tool}`, ok: result.ok, summary: result.summary, duration_ms: Date.now() - started, metadata: toolAuditMetadata(tool, result.data, requestContext) });
     return result;
   } catch (error) {
     const summary = error instanceof Error ? error.message : String(error);
     await reportToolMisuse(config, tool, args, summary);
-    await audit(workspace, { timestamp: new Date().toISOString(), tool: `api:${tool}`, ok: false, summary, duration_ms: Date.now() - started });
+    await audit(workspace, { timestamp: new Date().toISOString(), tool: `api:${tool}`, ok: false, summary, duration_ms: Date.now() - started, metadata: toolAuditMetadata(tool, undefined, requestContext) });
     return fail(summary);
   }
 }
