@@ -44,10 +44,10 @@ describe('runWorkspaceTool', () => {
     expect(raw).not.toContain('private title');
   });
 
-  it('audits the actual list-only browser tool with schema-valid spaced profile attribution and no affected targets', async () => {
+  it('audits the actual list-only browser tool with schema-valid profile punctuation and no affected targets', async () => {
     const workspace = await browserWorkspace({
       browser: {
-        profiles: [{ label: 'Work Profile', cdp_host: '127.0.0.1', cdp_port: 9444, headed: true, default: true, launch: false }]
+        profiles: [{ label: 'Work Profile #1', cdp_host: '127.0.0.1', cdp_port: 9444, headed: true, default: true, launch: false }]
       }
     });
     mockFetch([{ id: 'TARGET-1', type: 'page', title: 'Private', url: 'https://example.com/path?token=secret' }]);
@@ -62,19 +62,34 @@ describe('runWorkspaceTool', () => {
     const audit = JSON.parse(raw.trim());
     expect(audit.ok).toBe(true);
     expect(audit.metadata).toEqual({
-      profile_label: 'Work Profile',
+      profile_label: 'Work Profile #1',
       action: 'list_page_tabs_only'
     });
     expect(raw).not.toContain('TARGET-1');
     expect(raw).not.toContain('token=secret');
   });
 
+  it('keeps ordinary profile labels with #, & and = without weakening audit redaction', () => {
+    for (const profileLabel of ['Work Profile #1', 'Research & QA', 'QA = Ready', 'R&D=QA #1']) {
+      expect(toolAuditMetadata('browser_manage_tabs', undefined, undefined, {
+        profile_label: profileLabel,
+        action: 'list_page_tabs_only'
+      })).toEqual({ profile_label: profileLabel, action: 'list_page_tabs_only' });
+    }
+  });
+
   it('rejects sensitive or transcript-like profile labels from audit projection', () => {
     for (const profileLabel of [
       'https:example.com',
       'mailto:user@example.com',
+      'Work Profile https:example.com',
       'Bearer secret-token',
       'gho_abcdefghijklmnopqrstuvwxyz',
+      'Work Profile gho_abcdefghijklmnopqrstuvwxyz',
+      'token=secret',
+      'Work Profile #token=secret',
+      'work&session=abc',
+      'work&option=value',
       'profile?token=secret',
       'this is an arbitrary transcript sentence with too many words to retain'
     ]) {
@@ -130,7 +145,7 @@ describe('runWorkspaceTool', () => {
       action: 'close_by_filter',
       target_ids: ['T1']
     });
-    expect(raw).not.toContain('T2');
+    expect(audit.metadata.target_ids).not.toContain('T2');
     expect(raw).not.toContain('secret=a');
     expect(raw).not.toContain('secret=b');
   });
