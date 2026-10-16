@@ -100,6 +100,41 @@ describe('runWorkspaceTool', () => {
     }
   });
 
+  it('omits embedded URL and credential markers in actual list-only browser audit JSONL', async () => {
+    const sensitiveLabels = [
+      'Work Profile (https://internal.example/private)',
+      'Work Profile <https://internal.example/private>',
+      'Archive [ftp://internal.example/private]',
+      'QA (sk-abcdef1234567890)',
+      'QA <gho_abcdefghijklmnopqrstuvwxyz>',
+      'Ops {token:secret}',
+      'SRE / Bearer secret-token',
+      'QA [AKIAABCDEFGHIJKLMNOP]'
+    ];
+    for (const label of sensitiveLabels) {
+      const workspace = await browserWorkspace({
+        browser: {
+          profiles: [{ label, cdp_host: '127.0.0.1', cdp_port: 9444, headed: true, default: true, launch: false }]
+        }
+      });
+      mockFetch([{ id: 'PRIVATE-TARGET', type: 'page', title: 'Private', url: 'https://internal.example/?token=private' }]);
+      await runWorkspaceTool(
+        new Map([[workspace.id, workspace]]),
+        workspace.id,
+        'browser_manage_tabs',
+        (current) => browserManageTabs(current, { action: 'list_page_tabs_only' }),
+        (current) => browserManageTabsAuditInvocation(current, 'list_page_tabs_only')
+      );
+      const raw = await readFile(path.join(workspace.realRoot, '.agent/audit/tool_calls.jsonl'), 'utf8');
+      const entry = JSON.parse(raw.trim());
+      expect(entry.ok).toBe(true);
+      expect(entry.metadata).toEqual({ action: 'list_page_tabs_only' });
+      expect(raw).not.toContain(label);
+      expect(raw).not.toContain('PRIVATE-TARGET');
+      expect(raw).not.toContain('internal.example');
+    }
+  });
+
   it('audits the actual failed browser tool with invocation action/profile', async () => {
     const workspace = await browserWorkspace();
     mockFetch([]);
