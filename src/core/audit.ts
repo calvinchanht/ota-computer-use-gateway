@@ -42,7 +42,7 @@ const SECRET_PREFIX_PATTERN = /^(?:(?:bearer|basic|secret|token|password)(?:[._-
 const JWT_PATTERN = /^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$/;
 const PROFILE_JWT_PATTERN = /(?:^|[^A-Za-z0-9_-])[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?=$|[^A-Za-z0-9_-])/;
 // Labels are configuration-origin but untrusted for durable audit: any punctuation can precede an embedded URL/secret.
-const PROFILE_URL_PATTERN = /(?:^|[^A-Za-z0-9])(?:https?|ftp|file|mailto|data|javascript|ws|wss):/i;
+const PROFILE_URL_PATTERN = /(?:^|[^A-Za-z0-9])(?:(?:https?|ftp|file|mailto|data|javascript|ws|wss):|[A-Za-z][A-Za-z0-9+.-]*:\/\/)/i;
 const PROFILE_SECRET_PREFIX_PATTERN = /(?:^|[^A-Za-z0-9])(?:(?:bearer|basic|secret|token|password|api[_-]?key|session|cookie)(?:[^A-Za-z0-9]|$)|(?:sk|gh[pousr]|github_pat|xox[baprs]|ya29)(?:[._-]|$)|AKIA[A-Z0-9]{12,}|AIza[A-Za-z0-9_-]{20,})/i;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
 

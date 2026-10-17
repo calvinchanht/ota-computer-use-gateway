@@ -203,7 +203,8 @@ export async function browserManageTabs(workspace: Workspace, options: BrowserMa
     const selected = matches.slice(0, limit);
     const closed = [];
     for (const target of selected) {
-      await cdpCommand(browserUrl, 'Target.closeTarget', { targetId: target.id });
+      const closeResult = await cdpCommand<{ success: boolean }>(browserUrl, 'Target.closeTarget', { targetId: target.id });
+      if (closeResult?.success !== true) throw new Error('browser tab close was not confirmed');
       closed.push(targetSummary(target, true));
       if (auditInvocation?.action === 'close_by_filter' && !auditInvocation.closed_target_ids.includes(target.id)) {
         auditInvocation.closed_target_ids.push(target.id);

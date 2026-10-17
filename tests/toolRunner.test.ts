@@ -113,7 +113,10 @@ describe('runWorkspaceTool', () => {
       'Ops [eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c]',
       'QA <password(secret)>',
       'Support {api_key(secret)}',
-      'QA / token(secret)'
+      'QA / token(secret)',
+      'Ops (ssh://alice:synthetic@internal.invalid/private)',
+      'Ops (chrome://settings/private)',
+      'QA <a://private.invalid/path>'
     ];
     for (const label of sensitiveLabels) {
       const workspace = await browserWorkspace({
@@ -205,6 +208,42 @@ describe('runWorkspaceTool', () => {
       profile_label: 'work',
       action: 'close_by_filter'
     });
+  });
+
+  it('does not count or audit targets with an explicit CDP close success:false', async () => {
+    for (const outcomes of [
+      [{ result: { success: false } }],
+      [{ result: { success: true } }, { result: { success: false } }]
+    ]) {
+      const workspace = await browserWorkspace({ allow_mouse_keyboard: true });
+      mockFetchSequence([
+        [
+          { id: 'T1', type: 'page', title: 'Private One', url: 'https://example.com/one?secret=a' },
+          { id: 'T2', type: 'page', title: 'Private Two', url: 'https://example.com/two?secret=b' }
+        ],
+        { webSocketDebuggerUrl: 'ws://browser' }
+      ]);
+      mockCloseResults(outcomes);
+      const result = await runWorkspaceTool(
+        new Map([[workspace.id, workspace]]),
+        workspace.id,
+        'browser_manage_tabs',
+        (current, invocation) => browserManageTabs(current, { action: 'close_by_filter', url_contains: 'example.com' }, undefined, invocation as ReturnType<typeof browserManageTabsAuditInvocation>),
+        (current) => browserManageTabsAuditInvocation(current, 'close_by_filter')
+      );
+      expect(result.structuredContent.ok).toBe(false);
+      expect(result.content[0].text).toContain('browser tab close was not confirmed');
+      const raw = await readFile(path.join(workspace.realRoot, '.agent/audit/tool_calls.jsonl'), 'utf8');
+      const audit = JSON.parse(raw.trim());
+      expect(audit.ok).toBe(false);
+      expect(audit.metadata).toEqual(outcomes.length === 1
+        ? { profile_label: 'work', action: 'close_by_filter' }
+        : { profile_label: 'work', action: 'close_by_filter', target_ids: ['T1'] });
+      if (outcomes.length === 1) expect(raw).not.toContain('T1');
+      expect(raw).not.toContain('T2');
+      expect(raw).not.toContain('secret=a');
+      expect(raw).not.toContain('secret=b');
+    }
   });
 
   it('preserves only actually closed target IDs when a later close fails', async () => {
