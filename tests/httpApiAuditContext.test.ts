@@ -125,6 +125,14 @@ describe('HTTP browser tool durable audit context', () => {
         'WorkProfileprefixbearer="' + 'b'.repeat(30) + '"',
         'WorkProfileprefixtoken=[' + 't'.repeat(30) + ']'
       ];
+      const sessionCookieLabels = [
+        "WorkProfileprefixsession='" + 's'.repeat(30) + "'",
+        'WorkProfileprefixsession=' + 's'.repeat(30),
+        'WorkProfileprefixsession_' + 's'.repeat(30),
+        'WorkProfileprefixcookie="' + 'c'.repeat(30) + '"',
+        'WorkProfileprefixcookie=' + 'c'.repeat(30),
+        'WorkProfileprefixcookie_' + 'c'.repeat(30)
+      ];
       const secretProfileLabels = [
         'WorkProfileprefix' + 'sk_test_' + 't'.repeat(30),
         'WorkProfileprefix' + 'apiKey-' + 'q'.repeat(30),
@@ -134,13 +142,19 @@ describe('HTTP browser tool durable audit context', () => {
         'WorkProfileprefixtoken=' + 't'.repeat(30),
         'WorkProfileprefixpassword(' + 'p'.repeat(30) + ')',
         'WorkProfileprefixsecret/' + 's'.repeat(30),
-        ...wrappedCredentialLabels
+        ...wrappedCredentialLabels,
+        ...sessionCookieLabels
       ];
       for (const label of secretProfileLabels) {
         expect(browserProfileSchema.safeParse({ label }).success).toBe(true);
         configuredProfile.label = label;
         const result = await browserList(gateway, { thread: { provider: 'chatgpt', job_id: 'task-1' } });
         expect(result).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+      }
+      for (const label of sessionCookieLabels) {
+        configuredProfile.label = label;
+        const explicit = await browserList(gateway, { thread: { provider: 'chatgpt', job_id: 'task-1' } }, label);
+        expect(explicit).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
       }
       configuredProfile.label = 'R&D=QA #1';
       const benignProfile = await browserList(gateway, { thread: { provider: 'chatgpt', job_id: 'task-1' } });
@@ -166,7 +180,7 @@ describe('HTTP browser tool durable audit context', () => {
 
       const raw = await readFile(path.join(root, '.agent/audit/tool_calls.jsonl'), 'utf8');
       const entries = raw.trim().split('\n').map((line) => JSON.parse(line));
-      const sensitiveEnd = 5 + secretProfileLabels.length;
+      const sensitiveEnd = 5 + secretProfileLabels.length + sessionCookieLabels.length;
       expect(entries).toHaveLength(sensitiveEnd + 4);
       expect(entries[0]).toMatchObject({
         tool: 'api:browser_manage_tabs',

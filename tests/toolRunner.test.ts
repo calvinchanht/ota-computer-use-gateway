@@ -117,7 +117,9 @@ describe('runWorkspaceTool', () => {
       'Ops (ssh://alice:synthetic@internal.invalid/private)',
       'Ops (chrome://settings/private)',
       'QA <a://private.invalid/path>',
-      'QA [urn:example:private]'
+      'QA [urn:example:private]',
+      "WorkProfileprefixsession='" + 's'.repeat(30) + "'",
+      'WorkProfileprefixcookie="' + 'c'.repeat(30) + '"'
     ];
     for (const label of sensitiveLabels) {
       const workspace = await browserWorkspace({
@@ -130,8 +132,8 @@ describe('runWorkspaceTool', () => {
         new Map([[workspace.id, workspace]]),
         workspace.id,
         'browser_manage_tabs',
-        (current) => browserManageTabs(current, { action: 'list_page_tabs_only' }),
-        (current) => browserManageTabsAuditInvocation(current, 'list_page_tabs_only')
+        (current) => browserManageTabs(current, { action: 'list_page_tabs_only' }, label),
+        (current) => browserManageTabsAuditInvocation(current, 'list_page_tabs_only', label)
       );
       const raw = await readFile(path.join(workspace.realRoot, '.agent/audit/tool_calls.jsonl'), 'utf8');
       const entry = JSON.parse(raw.trim());
