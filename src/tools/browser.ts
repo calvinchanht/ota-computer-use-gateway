@@ -175,7 +175,8 @@ export async function browserTail(workspace: Workspace, targetId: string, cursor
 export function browserManageTabsAuditInvocation(workspace: Workspace, action: string, label?: string): BrowserManageTabsAuditInvocation {
   const profiles = configuredProfiles(workspace).map((profile, index) => browserProfile(workspace, profile, index));
   const workProfiles = profiles.filter((profile) => profile.purpose === 'work');
-  const profileLabel = label ?? workProfiles.find((profile) => profile.default)?.label ?? workProfiles[0]?.label;
+  // Only known work profiles qualify for durable audit attribution; never prefill an unknown caller label.
+  const profileLabel = label ? workProfiles.find((profile) => profile.label === label)?.label : (workProfiles.find((profile) => profile.default)?.label ?? workProfiles[0]?.label);
   return { action: action as BrowserManageTabsAction, ...(profileLabel ? { profile_label: profileLabel } : {}), closed_target_ids: [] };
 }
 

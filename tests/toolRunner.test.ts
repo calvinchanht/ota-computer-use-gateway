@@ -170,26 +170,30 @@ describe('runWorkspaceTool', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('never persists an unknown caller-provided browser profile label in a failed audit', async () => {
-    const label = 'Unconfigured <mailto:user@example.com>';
-    const workspace = await browserWorkspace();
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    const result = await runWorkspaceTool(
-      new Map([[workspace.id, workspace]]),
-      workspace.id,
-      'browser_manage_tabs',
-      (current) => browserManageTabs(current, { action: 'list_page_tabs_only' }, label),
-      (current) => browserManageTabsAuditInvocation(current, 'list_page_tabs_only', label)
-    );
-    expect(result.content[0].text).toContain('unknown browser profile');
-    const raw = await readFile(path.join(workspace.realRoot, '.agent/audit/tool_calls.jsonl'), 'utf8');
-    const entry = JSON.parse(raw.trim());
-    expect(entry.ok).toBe(false);
-    expect(entry.metadata).toEqual({ action: 'list_page_tabs_only' });
-    expect(raw).not.toContain(label);
-    expect(raw).not.toContain('user@example.com');
-    expect(fetchMock).not.toHaveBeenCalled();
+  it('never persists any unconfigured caller profile label on denied browser lookup', async () => {
+    for (const label of [
+      'Unconfigured <mailto:user@example.com>',
+      'Unknown Work Profile #2',
+      'UnknownWorkProfileprefixpassword="' + 'p'.repeat(30) + '"'
+    ]) {
+      const workspace = await browserWorkspace();
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+      const result = await runWorkspaceTool(
+        new Map([[workspace.id, workspace]]),
+        workspace.id,
+        'browser_manage_tabs',
+        (current) => browserManageTabs(current, { action: 'list_page_tabs_only' }, label),
+        (current) => browserManageTabsAuditInvocation(current, 'list_page_tabs_only', label)
+      );
+      expect(result.content[0].text).toContain('unknown browser profile');
+      const raw = await readFile(path.join(workspace.realRoot, '.agent/audit/tool_calls.jsonl'), 'utf8');
+      const entry = JSON.parse(raw.trim());
+      expect(entry.ok).toBe(false);
+      expect(entry.metadata).toEqual({ action: 'list_page_tabs_only' });
+      expect(raw).not.toContain(label);
+      expect(fetchMock).not.toHaveBeenCalled();
+    }
   });
 
   it('audits the actual failed browser tool with invocation action/profile', async () => {
