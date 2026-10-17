@@ -38,7 +38,7 @@ const REQUEST_CONTEXT_KEYS = [
 ] as const;
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const URL_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]{1,15}:/;
-const SECRET_PREFIX_PATTERN = /(?:(?:^|[^A-Za-z0-9])(?:bearer|basic|secret|token|password|sk)(?:[._-]|$)|(?:gh[pousr]|github_pat|xox[baprs]|ya29)[._-]|AKIA[A-Z0-9]{12,}|AIza[A-Za-z0-9_-]{20,})/i;
+const SECRET_PREFIX_PATTERN = /(?:(?:^|[^A-Za-z0-9])(?:bearer|basic|secret|token|password|api[_-]?key|sk)(?:[._-]|$)|(?:gh[pousr]|github_pat|xox[baprs]|ya29)[._-]|sk-[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{12,}|AIza[A-Za-z0-9_-]{20,})/i;
 const JWT_PATTERN = /(?:^|[^A-Za-z0-9_-])[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?=$|[^A-Za-z0-9_-])/;
 // Labels are configuration-origin but untrusted for durable audit: any punctuation can precede an embedded URL/secret.
 const PROFILE_URL_PATTERN = /(?:^|[^A-Za-z0-9])[A-Za-z][A-Za-z0-9+.-]*:(?=\S)/i;

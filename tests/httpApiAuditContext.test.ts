@@ -54,9 +54,28 @@ describe('HTTP browser tool durable audit context', () => {
       });
       expect(safe).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
 
+      const syntheticApiKey = 'api_key_' + 'k'.repeat(28);
+      const syntheticHyphenApiKey = 'api-key-' + 'm'.repeat(28);
+      const syntheticSk = 'sk-' + 's'.repeat(28);
+      const apiKeyTainted = await browserList(gateway, {
+        client_session_id: 'client.' + syntheticApiKey,
+        thread: {
+          provider: 'chatgpt',
+          agent_id: 'genesis',
+          project_id: 'project.' + syntheticHyphenApiKey,
+          thread_id: 'thread_' + syntheticApiKey,
+          request_id: 'context' + syntheticSk,
+          correlation_id: 'prefix' + syntheticSk,
+          job_id: 'task-1',
+          source_lane: 'source-1',
+          target_lane: 'target-2'
+        }
+      });
+      expect(apiKeyTainted).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+
       const raw = await readFile(path.join(root, '.agent/audit/tool_calls.jsonl'), 'utf8');
       const entries = raw.trim().split('\n').map((line) => JSON.parse(line));
-      expect(entries).toHaveLength(2);
+      expect(entries).toHaveLength(3);
       expect(entries[0]).toMatchObject({
         tool: 'api:browser_manage_tabs',
         ok: true,
@@ -77,8 +96,19 @@ describe('HTTP browser tool durable audit context', () => {
           client_session_id: 'session-outer', agent_id: 'genesis', job_id: 'job-7', correlation_id: 'corr-4'
         }
       });
-      expect(cdpFetches).toBe(2);
-      for (const forbidden of [syntheticPat, syntheticJwt, syntheticOauth, 'PRIVATE-TARGET', 'Private title', 'internal.invalid', 'token=hidden']) {
+      expect(entries[2].metadata).toEqual({
+        profile_label: 'Work Profile #1',
+        action: 'list_page_tabs_only',
+        request_context: {
+          provider: 'chatgpt', agent_id: 'genesis', job_id: 'task-1',
+          source_lane: 'source-1', target_lane: 'target-2'
+        }
+      });
+      expect(cdpFetches).toBe(3);
+      for (const forbidden of [
+        syntheticPat, syntheticJwt, syntheticOauth, syntheticApiKey, syntheticHyphenApiKey, syntheticSk,
+        'PRIVATE-TARGET', 'Private title', 'internal.invalid', 'token=hidden'
+      ]) {
         expect(raw).not.toContain(forbidden);
       }
     } finally {
