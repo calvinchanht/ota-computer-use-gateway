@@ -73,9 +73,29 @@ describe('HTTP browser tool durable audit context', () => {
       });
       expect(apiKeyTainted).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
 
+      const syntheticSkTest = 'sk_test_' + 't'.repeat(30);
+      const syntheticSkLive = 'sk_live_' + 'l'.repeat(30);
+      const syntheticAdjacentApiKey = 'api_key_' + 'q'.repeat(30);
+      const syntheticCamelApiKey = 'apiKey-' + 'z'.repeat(30);
+      const adjacentTainted = await browserList(gateway, {
+        client_session_id: 'client' + syntheticSkLive,
+        thread: {
+          provider: 'chatgpt',
+          agent_id: 'genesis',
+          project_id: 'prefix' + syntheticSkTest,
+          thread_id: 'ctx' + syntheticAdjacentApiKey,
+          request_id: 'work' + syntheticCamelApiKey,
+          correlation_id: 'corr-4',
+          job_id: 'task-1',
+          source_lane: 'source-1',
+          target_lane: 'target-2'
+        }
+      });
+      expect(adjacentTainted).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+
       const raw = await readFile(path.join(root, '.agent/audit/tool_calls.jsonl'), 'utf8');
       const entries = raw.trim().split('\n').map((line) => JSON.parse(line));
-      expect(entries).toHaveLength(3);
+      expect(entries).toHaveLength(4);
       expect(entries[0]).toMatchObject({
         tool: 'api:browser_manage_tabs',
         ok: true,
@@ -104,9 +124,18 @@ describe('HTTP browser tool durable audit context', () => {
           source_lane: 'source-1', target_lane: 'target-2'
         }
       });
-      expect(cdpFetches).toBe(3);
+      expect(entries[3].metadata).toEqual({
+        profile_label: 'Work Profile #1',
+        action: 'list_page_tabs_only',
+        request_context: {
+          provider: 'chatgpt', agent_id: 'genesis', correlation_id: 'corr-4',
+          job_id: 'task-1', source_lane: 'source-1', target_lane: 'target-2'
+        }
+      });
+      expect(cdpFetches).toBe(4);
       for (const forbidden of [
         syntheticPat, syntheticJwt, syntheticOauth, syntheticApiKey, syntheticHyphenApiKey, syntheticSk,
+        syntheticSkTest, syntheticSkLive, syntheticAdjacentApiKey, syntheticCamelApiKey,
         'PRIVATE-TARGET', 'Private title', 'internal.invalid', 'token=hidden'
       ]) {
         expect(raw).not.toContain(forbidden);
