@@ -40,9 +40,10 @@ const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const URL_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]{1,15}:/;
 const SECRET_PREFIX_PATTERN = /^(?:(?:bearer|basic|secret|token|password)(?:[._-]|$)|(?:sk|gh[pousr]|github_pat|xox[baprs]|ya29)(?:[._-]|$)|AKIA[A-Z0-9]{12,}|AIza[A-Za-z0-9_-]{20,})/i;
 const JWT_PATTERN = /^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$/;
+const PROFILE_JWT_PATTERN = /(?:^|[^A-Za-z0-9_-])[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?=$|[^A-Za-z0-9_-])/;
 // Labels are configuration-origin but untrusted for durable audit: any punctuation can precede an embedded URL/secret.
 const PROFILE_URL_PATTERN = /(?:^|[^A-Za-z0-9])(?:https?|ftp|file|mailto|data|javascript|ws|wss):/i;
-const PROFILE_SECRET_PREFIX_PATTERN = /(?:^|[^A-Za-z0-9])(?:(?:bearer|basic|secret|token|password|api[_-]?key|session|cookie)(?:[\s:=._-]|$)|(?:sk|gh[pousr]|github_pat|xox[baprs]|ya29)(?:[._-]|$)|AKIA[A-Z0-9]{12,}|AIza[A-Za-z0-9_-]{20,})/i;
+const PROFILE_SECRET_PREFIX_PATTERN = /(?:^|[^A-Za-z0-9])(?:(?:bearer|basic|secret|token|password|api[_-]?key|session|cookie)(?:[^A-Za-z0-9]|$)|(?:sk|gh[pousr]|github_pat|xox[baprs]|ya29)(?:[._-]|$)|AKIA[A-Z0-9]{12,}|AIza[A-Za-z0-9_-]{20,})/i;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
 
 export function toolAuditMetadata(tool: string, data: unknown, requestContext?: unknown, invocation?: unknown): AuditMetadata | undefined {
@@ -137,7 +138,7 @@ function identifierString(value: unknown): string | undefined {
 
 function profileLabelString(value: unknown): string | undefined {
   if (typeof value !== 'string' || !value || value.length > 128 || !value.trim()) return undefined;
-  if (CONTROL_CHARACTER_PATTERN.test(value) || PROFILE_URL_PATTERN.test(value) || PROFILE_SECRET_PREFIX_PATTERN.test(value) || JWT_PATTERN.test(value)) return undefined;
+  if (CONTROL_CHARACTER_PATTERN.test(value) || PROFILE_URL_PATTERN.test(value) || PROFILE_SECRET_PREFIX_PATTERN.test(value) || PROFILE_JWT_PATTERN.test(value)) return undefined;
   // Punctuation in ordinary profile names is safe; URL/query and credential shapes are not.
   if (value.includes('?') || /[&#][A-Za-z0-9_-]{2,}=/.test(value) || value.trim().split(/\s+/).length > 8) return undefined;
   return value;

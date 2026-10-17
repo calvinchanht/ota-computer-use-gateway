@@ -626,8 +626,8 @@ function selectedBrowserProfile(workspace: Workspace, label?: string) {
   const target = label ?? workProfiles.find((profile) => profile.default)?.label ?? workProfiles[0]?.label;
   if (!target) throw new Error('no dedicated work browser profile is configured');
   const profile = profiles.find((item) => item.label === target);
-  if (!profile) throw new Error(`unknown browser profile: ${target}`);
-  if (profile.purpose !== 'work') throw new Error(`browser profile is reserved for Threaddex and unavailable to work browser actions: ${target}`);
+  if (!profile) throw new Error('unknown browser profile');
+  if (profile.purpose !== 'work') throw new Error('browser profile is reserved for Threaddex and unavailable to work browser actions');
   return profile;
 }
 
