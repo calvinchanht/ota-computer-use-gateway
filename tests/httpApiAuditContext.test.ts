@@ -373,6 +373,108 @@ describe('HTTP browser tool durable audit context', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('redacts six long sessionValue/cookieKey caller aliases across every HTTP audit route', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ota-audit-symmetric-'));
+    let cdpFetches = 0;
+    const cdp = createHttpServer((_req, res) => {
+      cdpFetches += 1;
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify([
+        { id: 'PRIVATE-TARGET', type: 'page', title: 'Private title', url: 'https://internal.invalid/private?token=hidden' }
+      ]));
+    });
+    await listen(cdp);
+    const gateway = createHttpServer(createHttpRequestHandler(fixtureConfig(root, port(cdp))));
+    try {
+      await listen(gateway);
+      const leakedAliases = [
+        'prefixSessionValue_' + 's'.repeat(30),
+        'prefixCookieKey_' + 'c'.repeat(30),
+        'prefixSESSIONVALUE_' + 't'.repeat(30),
+        'prefixCOOKIEKEY_' + 'd'.repeat(30),
+        'prefixSessionValue_' + 's'.repeat(12) + '.' + 't'.repeat(12),
+        'prefixCookieKey_' + 'c'.repeat(12) + '.' + 'd'.repeat(12)
+      ];
+      const safeUuid = '550e8400-e29b-41d4-a716-446655440000';
+      const safeContext = {
+        provider: 'chatgpt',
+        agent_id: 'genesis',
+        correlation_id: safeUuid,
+        source_lane: 'source-1',
+        target_lane: 'target-2'
+      };
+      const context = {
+        client_session_id: leakedAliases[5],
+        thread: {
+          ...safeContext,
+          project_id: leakedAliases[0],
+          thread_id: leakedAliases[1],
+          request_id: leakedAliases[2],
+          job_id: leakedAliases[3],
+          lane: leakedAliases[4]
+        }
+      };
+
+      for (const [route, quotaSaver] of [
+        ['tool', false], ['tool', true], ['batch', false], ['batch', true]
+      ] as const) {
+        const operation = {
+          operation: 'browser_manage_tabs',
+          arguments: {
+            workspace_id: 'test',
+            action: 'list_page_tabs_only',
+            ...(quotaSaver ? { async_mode: 'quota_saver' } : {})
+          }
+        };
+        const body = route === 'batch' ? { ...context, steps: [operation] } : { ...context, ...operation };
+        const baseUrl = 'http://127.0.0.1:' + port(gateway);
+        const response = await fetch(baseUrl + '/api/v1/' + route, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        expect([200, 202]).toContain(response.status);
+        let result = await response.json() as { ok?: boolean; api?: { status?: string; run_id?: string } };
+        if (response.status === 202) {
+          const runId = String(result.api?.run_id);
+          for (let attempt = 0; attempt < 25 && result.api?.status === 'running'; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            const poll = await fetch(baseUrl + '/api/v1/runs/' + encodeURIComponent(runId));
+            expect(poll.status).toBe(200);
+            result = await poll.json() as typeof result;
+          }
+        }
+        expect(result.ok).toBe(true);
+        expect(result.api?.status).not.toBe('running');
+      }
+
+      const raw = await readFile(path.join(root, '.agent/audit/tool_calls.jsonl'), 'utf8');
+      const entries = raw.trim().split('\n').map((line) => JSON.parse(line));
+      expect(entries).toHaveLength(4);
+      for (const entry of entries) {
+        expect(entry).toMatchObject({
+          tool: 'api:browser_manage_tabs',
+          ok: true,
+          metadata: {
+            profile_label: 'Work Profile #1',
+            action: 'list_page_tabs_only',
+            request_context: safeContext
+          }
+        });
+        expect(entry.metadata.request_context).toEqual(safeContext);
+        expect(entry.metadata.target_ids).toBeUndefined();
+      }
+      expect(cdpFetches).toBe(4);
+      for (const leaked of leakedAliases) expect(raw).not.toContain(leaked);
+      for (const privateText of ['PRIVATE-TARGET', 'Private title', 'internal.invalid']) {
+        expect(raw).not.toContain(privateText);
+      }
+    } finally {
+      await close(gateway);
+      await close(cdp);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 async function browserList(server: Server, context: Record<string, unknown>, profileLabel?: string): Promise<Record<string, unknown>> {
