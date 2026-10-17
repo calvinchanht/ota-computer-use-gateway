@@ -116,7 +116,8 @@ describe('runWorkspaceTool', () => {
       'QA / token(secret)',
       'Ops (ssh://alice:synthetic@internal.invalid/private)',
       'Ops (chrome://settings/private)',
-      'QA <a://private.invalid/path>'
+      'QA <a://private.invalid/path>',
+      'QA [urn:example:private]'
     ];
     for (const label of sensitiveLabels) {
       const workspace = await browserWorkspace({
