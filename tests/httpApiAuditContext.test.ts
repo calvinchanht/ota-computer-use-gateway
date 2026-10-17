@@ -162,6 +162,38 @@ describe('HTTP browser tool durable audit context', () => {
       });
       expect(dottedTainted).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
 
+      const credentialAliasContext = [
+        'prefixSessionId_' + 's'.repeat(30),
+        'prefixCookieValue_' + 'c'.repeat(30),
+        'prefixcookieid_' + 'c'.repeat(30),
+        'prefixSessionKey_' + 's'.repeat(30)
+      ];
+      const dottedCredentialAliasContext = [
+        'prefixSessionId_' + 's'.repeat(12) + '.' + 't'.repeat(12),
+        'prefixCookieValue_' + 'c'.repeat(12) + '.' + 'd'.repeat(12),
+        'prefixcookieid_' + 'e'.repeat(12) + '.' + 'f'.repeat(12),
+        'prefixSessionKey_' + 'x'.repeat(12) + '.' + 'z'.repeat(12)
+      ];
+      const alreadyRedactedAliasControl = 'prefixauthSession_' + 's'.repeat(30);
+      for (const credentialAliases of [credentialAliasContext, dottedCredentialAliasContext]) {
+        const aliasTainted = await browserList(gateway, {
+          client_session_id: credentialAliases[3],
+          thread: {
+            provider: 'chatgpt',
+            agent_id: 'genesis',
+            project_id: credentialAliases[0],
+            thread_id: credentialAliases[1],
+            lane: credentialAliases[2],
+            request_id: alreadyRedactedAliasControl,
+            job_id: 'task-1',
+            correlation_id: 'corr-4',
+            source_lane: 'source-1',
+            target_lane: 'target-2'
+          }
+        });
+        expect(aliasTainted).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+      }
+
       const configuredProfile = config.workspaces[0]!.browser.profiles[0]!;
       const wrappedCredentialLabels = [
         "WorkProfileprefixpassword='" + 'p'.repeat(30) + "'",
@@ -230,7 +262,7 @@ describe('HTTP browser tool durable audit context', () => {
 
       const raw = await readFile(path.join(root, '.agent/audit/tool_calls.jsonl'), 'utf8');
       const entries = raw.trim().split('\n').map((line) => JSON.parse(line));
-      const sensitiveEnd = 7 + secretProfileLabels.length + sessionCookieLabels.length;
+      const sensitiveEnd = 9 + secretProfileLabels.length + sessionCookieLabels.length;
       expect(entries).toHaveLength(sensitiveEnd + 4);
       expect(entries[0]).toMatchObject({
         tool: 'api:browser_manage_tabs',
@@ -292,7 +324,17 @@ describe('HTTP browser tool durable audit context', () => {
           source_lane: 'source-1', target_lane: 'target-2'
         }
       });
-      for (const entry of entries.slice(7, sensitiveEnd)) {
+      for (const entry of entries.slice(7, 9)) {
+        expect(entry.metadata).toEqual({
+          profile_label: 'Work Profile #1',
+          action: 'list_page_tabs_only',
+          request_context: {
+            provider: 'chatgpt', agent_id: 'genesis', job_id: 'task-1',
+            correlation_id: 'corr-4', source_lane: 'source-1', target_lane: 'target-2'
+          }
+        });
+      }
+      for (const entry of entries.slice(9, sensitiveEnd)) {
         expect(entry.metadata).toEqual({
           action: 'list_page_tabs_only',
           request_context: { provider: 'chatgpt', job_id: 'task-1' }
@@ -319,6 +361,7 @@ describe('HTTP browser tool durable audit context', () => {
         syntheticPat, syntheticJwt, syntheticOauth, syntheticApiKey, syntheticHyphenApiKey, syntheticSk,
         syntheticSkTest, syntheticSkLive, syntheticAdjacentApiKey, syntheticCamelApiKey,
         ...longFamilyMarkers, ...sessionCookieContext, ...dottedSessionCookieContext,
+        ...credentialAliasContext, ...dottedCredentialAliasContext, alreadyRedactedAliasControl,
         ...secretProfileLabels, unknownSensitive, unknownWrapped, unknownBenign,
         'PRIVATE-TARGET', 'Private title', 'internal.invalid', 'token=hidden'
       ]) {
