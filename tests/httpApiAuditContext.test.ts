@@ -1,0 +1,525 @@
+import { createServer as createHttpServer, type Server } from 'node:http';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { browserProfileSchema, type AppConfig } from '../src/config/schema.js';
+import { createHttpRequestHandler } from '../src/server/http.js';
+
+describe('HTTP browser tool durable audit context', () => {
+  it('omits embedded credentials in nested thread and outer session IDs while retaining safe IDs', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ota-audit-context-'));
+    let cdpFetches = 0;
+    const cdp = createHttpServer((_req, res) => {
+      cdpFetches += 1;
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify([
+        { id: 'PRIVATE-TARGET', type: 'page', title: 'Private title', url: 'https://internal.invalid/private?token=hidden' }
+      ]));
+    });
+    await listen(cdp);
+    const config = fixtureConfig(root, port(cdp));
+    const gateway = createHttpServer(createHttpRequestHandler(config));
+    try {
+      await listen(gateway);
+      const syntheticPat = 'gho_' + 'a'.repeat(24);
+      const syntheticJwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+      const syntheticOauth = 'xoxb-' + '1'.repeat(20);
+      const tainted = await browserList(gateway, {
+        client_session_id: 'client.' + syntheticOauth,
+        requestor_url: 'https://internal.invalid/private?token=hidden',
+        thread: {
+          provider: 'chatgpt',
+          agent_id: 'genesis',
+          project_id: 'project.' + syntheticPat,
+          thread_id: 'ctx.' + syntheticJwt,
+          correlation_id: 'corr-4',
+          job_id: 'task-1',
+          source_lane: 'lane' + syntheticPat,
+          target_lane: 'target' + syntheticOauth,
+          request_id: syntheticPat
+        }
+      });
+      expect(tainted).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+
+      const safe = await browserList(gateway, {
+        client_session_id: 'session-outer',
+        thread: {
+          provider: 'chatgpt',
+          agent_id: 'genesis',
+          project_id: 'project-42',
+          thread_id: 'thread-21',
+          job_id: 'job-7',
+          correlation_id: 'corr-4'
+        }
+      });
+      expect(safe).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+
+      const syntheticApiKey = 'api_key_' + 'k'.repeat(28);
+      const syntheticHyphenApiKey = 'api-key-' + 'm'.repeat(28);
+      const syntheticSk = 'sk-' + 's'.repeat(28);
+      const apiKeyTainted = await browserList(gateway, {
+        client_session_id: 'client.' + syntheticApiKey,
+        thread: {
+          provider: 'chatgpt',
+          agent_id: 'genesis',
+          project_id: 'project.' + syntheticHyphenApiKey,
+          thread_id: 'thread_' + syntheticApiKey,
+          request_id: 'context' + syntheticSk,
+          correlation_id: 'prefix' + syntheticSk,
+          job_id: 'task-1',
+          source_lane: 'source-1',
+          target_lane: 'target-2'
+        }
+      });
+      expect(apiKeyTainted).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+
+      const syntheticSkTest = 'sk_test_' + 't'.repeat(30);
+      const syntheticSkLive = 'sk_live_' + 'l'.repeat(30);
+      const syntheticAdjacentApiKey = 'api_key_' + 'q'.repeat(30);
+      const syntheticCamelApiKey = 'apiKey-' + 'z'.repeat(30);
+      const adjacentTainted = await browserList(gateway, {
+        client_session_id: 'client' + syntheticSkLive,
+        thread: {
+          provider: 'chatgpt',
+          agent_id: 'genesis',
+          project_id: 'prefix' + syntheticSkTest,
+          thread_id: 'ctx' + syntheticAdjacentApiKey,
+          request_id: 'work' + syntheticCamelApiKey,
+          correlation_id: 'corr-4',
+          job_id: 'task-1',
+          source_lane: 'source-1',
+          target_lane: 'target-2'
+        }
+      });
+      expect(adjacentTainted).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+
+      const longFamilyMarkers = ['password_', 'bearer_', 'token_', 'secret_', 'basic_']
+        .map((family, index) => family + 'pbtse'[index]!.repeat(30));
+      const familyTainted = await browserList(gateway, {
+        client_session_id: 'session-outer',
+        thread: {
+          provider: 'chatgpt',
+          agent_id: 'genesis',
+          project_id: 'prefix' + longFamilyMarkers[0],
+          thread_id: 'ctx' + longFamilyMarkers[1],
+          request_id: 'work' + longFamilyMarkers[2],
+          job_id: 'job' + longFamilyMarkers[3],
+          lane: 'lane' + longFamilyMarkers[4],
+          correlation_id: 'corr-4',
+          source_lane: 'source-1',
+          target_lane: 'target-2'
+        }
+      });
+      expect(familyTainted).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+
+      const sessionCookieContext = [
+        'prefixsession_' + 's'.repeat(30),
+        'prefixcookie_' + 'c'.repeat(30),
+        'prefixsession-' + 's'.repeat(30),
+        'cookie_' + 'c'.repeat(30),
+        'prefxcookie.' + 'c'.repeat(30)
+      ];
+      const sessionCookieTainted = await browserList(gateway, {
+        client_session_id: 'session-outer',
+        thread: {
+          provider: 'chatgpt',
+          agent_id: 'genesis',
+          project_id: sessionCookieContext[0],
+          thread_id: sessionCookieContext[1],
+          request_id: sessionCookieContext[2],
+          job_id: sessionCookieContext[3],
+          lane: sessionCookieContext[4],
+          correlation_id: 'corr-4',
+          source_lane: 'source-1',
+          target_lane: 'target-2'
+        }
+      });
+      expect(sessionCookieTainted).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+
+      const dottedSessionCookieContext = [
+        'prefixsession_' + 's'.repeat(12) + '.' + 't'.repeat(12),
+        'prefixcookie_' + 'c'.repeat(12) + '.' + 'd'.repeat(12),
+        'prefixsession-' + 'u'.repeat(12) + '.' + 'v'.repeat(12),
+        'prefixcookie-' + 'k'.repeat(12) + '.' + 'm'.repeat(12),
+        'cookie_' + 'a'.repeat(12) + '.' + 'b'.repeat(12),
+        'session_' + 'x'.repeat(12) + '.' + 'z'.repeat(12)
+      ];
+      const safeUuid = '550e8400-e29b-41d4-a716-446655440000';
+      const dottedTainted = await browserList(gateway, {
+        client_session_id: dottedSessionCookieContext[5],
+        thread: {
+          provider: 'chatgpt',
+          agent_id: 'genesis',
+          project_id: dottedSessionCookieContext[0],
+          thread_id: dottedSessionCookieContext[1],
+          request_id: dottedSessionCookieContext[2],
+          job_id: dottedSessionCookieContext[3],
+          lane: dottedSessionCookieContext[4],
+          correlation_id: safeUuid,
+          source_lane: 'source-1',
+          target_lane: 'target-2'
+        }
+      });
+      expect(dottedTainted).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+
+      const credentialAliasContext = [
+        'prefixSessionId_' + 's'.repeat(30),
+        'prefixCookieValue_' + 'c'.repeat(30),
+        'prefixcookieid_' + 'c'.repeat(30),
+        'prefixSessionKey_' + 's'.repeat(30)
+      ];
+      const dottedCredentialAliasContext = [
+        'prefixSessionId_' + 's'.repeat(12) + '.' + 't'.repeat(12),
+        'prefixCookieValue_' + 'c'.repeat(12) + '.' + 'd'.repeat(12),
+        'prefixcookieid_' + 'e'.repeat(12) + '.' + 'f'.repeat(12),
+        'prefixSessionKey_' + 'x'.repeat(12) + '.' + 'z'.repeat(12)
+      ];
+      const alreadyRedactedAliasControl = 'prefixauthSession_' + 's'.repeat(30);
+      for (const credentialAliases of [credentialAliasContext, dottedCredentialAliasContext]) {
+        const aliasTainted = await browserList(gateway, {
+          client_session_id: credentialAliases[3],
+          thread: {
+            provider: 'chatgpt',
+            agent_id: 'genesis',
+            project_id: credentialAliases[0],
+            thread_id: credentialAliases[1],
+            lane: credentialAliases[2],
+            request_id: alreadyRedactedAliasControl,
+            job_id: 'task-1',
+            correlation_id: 'corr-4',
+            source_lane: 'source-1',
+            target_lane: 'target-2'
+          }
+        });
+        expect(aliasTainted).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+      }
+
+      const configuredProfile = config.workspaces[0]!.browser.profiles[0]!;
+      const wrappedCredentialLabels = [
+        "WorkProfileprefixpassword='" + 'p'.repeat(30) + "'",
+        'WorkProfileprefixpassword="' + 'p'.repeat(30) + '"',
+        'WorkProfileprefixpassword=(' + 'p'.repeat(30) + ')',
+        'WorkProfileprefixpassword=[' + 'p'.repeat(30) + ']',
+        'WorkProfileprefixpassword={' + 'p'.repeat(30) + '}',
+        'WorkProfileprefixpassword=+' + 'p'.repeat(30),
+        'WorkProfileprefixpassword= ' + 'p'.repeat(30),
+        'WorkProfileprefixpassword =' + 'p'.repeat(30),
+        'WorkProfileprefixbearer="' + 'b'.repeat(30) + '"',
+        'WorkProfileprefixtoken=[' + 't'.repeat(30) + ']'
+      ];
+      const sessionCookieLabels = [
+        "WorkProfileprefixsession='" + 's'.repeat(30) + "'",
+        'WorkProfileprefixsession=' + 's'.repeat(30),
+        'WorkProfileprefixsession_' + 's'.repeat(30),
+        'WorkProfileprefixcookie="' + 'c'.repeat(30) + '"',
+        'WorkProfileprefixcookie=' + 'c'.repeat(30),
+        'WorkProfileprefixcookie_' + 'c'.repeat(30)
+      ];
+      const secretProfileLabels = [
+        'WorkProfileprefix' + 'sk_test_' + 't'.repeat(30),
+        'WorkProfileprefix' + 'apiKey-' + 'q'.repeat(30),
+        ...longFamilyMarkers.map((marker) => 'WorkProfileprefix' + marker),
+        'WorkProfileprefixpassword=' + 'p'.repeat(30),
+        'WorkProfileprefixbearer=' + 'b'.repeat(30),
+        'WorkProfileprefixtoken=' + 't'.repeat(30),
+        'WorkProfileprefixpassword(' + 'p'.repeat(30) + ')',
+        'WorkProfileprefixsecret/' + 's'.repeat(30),
+        ...wrappedCredentialLabels,
+        ...sessionCookieLabels
+      ];
+      for (const label of secretProfileLabels) {
+        expect(browserProfileSchema.safeParse({ label }).success).toBe(true);
+        configuredProfile.label = label;
+        const result = await browserList(gateway, { thread: { provider: 'chatgpt', job_id: 'task-1' } });
+        expect(result).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+      }
+      for (const label of sessionCookieLabels) {
+        configuredProfile.label = label;
+        const explicit = await browserList(gateway, { thread: { provider: 'chatgpt', job_id: 'task-1' } }, label);
+        expect(explicit).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+      }
+      configuredProfile.label = 'R&D=QA #1';
+      const benignProfile = await browserList(gateway, { thread: { provider: 'chatgpt', job_id: 'task-1' } });
+      expect(benignProfile).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+
+      const unknownSensitive = 'UnknownWorkProfileprefixpassword=' + 'p'.repeat(30);
+      const fetchesBeforeDenials = cdpFetches;
+      const deniedSensitive = await browserList(gateway, {
+        thread: { provider: 'chatgpt', job_id: 'task-1' }
+      }, unknownSensitive);
+      expect(deniedSensitive).toMatchObject({ ok: false, summary: 'unknown browser profile' });
+      const unknownWrapped = 'UnknownWorkProfileprefixpassword="' + 'p'.repeat(30) + '"';
+      const deniedWrapped = await browserList(gateway, {
+        thread: { provider: 'chatgpt', job_id: 'task-1' }
+      }, unknownWrapped);
+      expect(deniedWrapped).toMatchObject({ ok: false, summary: 'unknown browser profile' });
+      const unknownBenign = 'Unknown Work Profile #2';
+      const deniedBenign = await browserList(gateway, {
+        thread: { provider: 'chatgpt', job_id: 'task-1' }
+      }, unknownBenign);
+      expect(deniedBenign).toMatchObject({ ok: false, summary: 'unknown browser profile' });
+      expect(cdpFetches).toBe(fetchesBeforeDenials);
+
+      const raw = await readFile(path.join(root, '.agent/audit/tool_calls.jsonl'), 'utf8');
+      const entries = raw.trim().split('\n').map((line) => JSON.parse(line));
+      const sensitiveEnd = 9 + secretProfileLabels.length + sessionCookieLabels.length;
+      expect(entries).toHaveLength(sensitiveEnd + 4);
+      expect(entries[0]).toMatchObject({
+        tool: 'api:browser_manage_tabs',
+        ok: true,
+        metadata: {
+          profile_label: 'Work Profile #1',
+          action: 'list_page_tabs_only',
+          request_context: { provider: 'chatgpt', agent_id: 'genesis', job_id: 'task-1', correlation_id: 'corr-4' }
+        }
+      });
+      expect(entries[0].metadata.request_context).toEqual({
+        provider: 'chatgpt', agent_id: 'genesis', job_id: 'task-1', correlation_id: 'corr-4'
+      });
+      expect(entries[1].metadata).toEqual({
+        profile_label: 'Work Profile #1',
+        action: 'list_page_tabs_only',
+        request_context: {
+          provider: 'chatgpt', project_id: 'project-42', thread_id: 'thread-21',
+          client_session_id: 'session-outer', agent_id: 'genesis', job_id: 'job-7', correlation_id: 'corr-4'
+        }
+      });
+      expect(entries[2].metadata).toEqual({
+        profile_label: 'Work Profile #1',
+        action: 'list_page_tabs_only',
+        request_context: {
+          provider: 'chatgpt', agent_id: 'genesis', job_id: 'task-1',
+          source_lane: 'source-1', target_lane: 'target-2'
+        }
+      });
+      expect(entries[3].metadata).toEqual({
+        profile_label: 'Work Profile #1',
+        action: 'list_page_tabs_only',
+        request_context: {
+          provider: 'chatgpt', agent_id: 'genesis', correlation_id: 'corr-4',
+          job_id: 'task-1', source_lane: 'source-1', target_lane: 'target-2'
+        }
+      });
+      expect(entries[4].metadata).toEqual({
+        profile_label: 'Work Profile #1',
+        action: 'list_page_tabs_only',
+        request_context: {
+          provider: 'chatgpt', client_session_id: 'session-outer', agent_id: 'genesis',
+          correlation_id: 'corr-4', source_lane: 'source-1', target_lane: 'target-2'
+        }
+      });
+      expect(entries[5].metadata).toEqual({
+        profile_label: 'Work Profile #1',
+        action: 'list_page_tabs_only',
+        request_context: {
+          provider: 'chatgpt', client_session_id: 'session-outer', agent_id: 'genesis',
+          correlation_id: 'corr-4', source_lane: 'source-1', target_lane: 'target-2'
+        }
+      });
+      expect(entries[6].metadata).toEqual({
+        profile_label: 'Work Profile #1',
+        action: 'list_page_tabs_only',
+        request_context: {
+          provider: 'chatgpt', agent_id: 'genesis', correlation_id: safeUuid,
+          source_lane: 'source-1', target_lane: 'target-2'
+        }
+      });
+      for (const entry of entries.slice(7, 9)) {
+        expect(entry.metadata).toEqual({
+          profile_label: 'Work Profile #1',
+          action: 'list_page_tabs_only',
+          request_context: {
+            provider: 'chatgpt', agent_id: 'genesis', job_id: 'task-1',
+            correlation_id: 'corr-4', source_lane: 'source-1', target_lane: 'target-2'
+          }
+        });
+      }
+      for (const entry of entries.slice(9, sensitiveEnd)) {
+        expect(entry.metadata).toEqual({
+          action: 'list_page_tabs_only',
+          request_context: { provider: 'chatgpt', job_id: 'task-1' }
+        });
+      }
+      expect(entries[sensitiveEnd].metadata).toEqual({
+        profile_label: 'R&D=QA #1',
+        action: 'list_page_tabs_only',
+        request_context: { provider: 'chatgpt', job_id: 'task-1' }
+      });
+      for (const entry of entries.slice(sensitiveEnd + 1)) {
+        expect(entry).toMatchObject({
+          ok: false,
+          summary: 'unknown browser profile',
+          metadata: {
+            action: 'list_page_tabs_only',
+            request_context: { provider: 'chatgpt', job_id: 'task-1' }
+          }
+        });
+        expect(entry.metadata.profile_label).toBeUndefined();
+      }
+      expect(cdpFetches).toBe(sensitiveEnd + 1);
+      for (const forbidden of [
+        syntheticPat, syntheticJwt, syntheticOauth, syntheticApiKey, syntheticHyphenApiKey, syntheticSk,
+        syntheticSkTest, syntheticSkLive, syntheticAdjacentApiKey, syntheticCamelApiKey,
+        ...longFamilyMarkers, ...sessionCookieContext, ...dottedSessionCookieContext,
+        ...credentialAliasContext, ...dottedCredentialAliasContext, alreadyRedactedAliasControl,
+        ...secretProfileLabels, unknownSensitive, unknownWrapped, unknownBenign,
+        'PRIVATE-TARGET', 'Private title', 'internal.invalid', 'token=hidden'
+      ]) {
+        expect(raw).not.toContain(forbidden);
+      }
+    } finally {
+      await close(gateway);
+      await close(cdp);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('redacts six long sessionValue/cookieKey caller aliases across every HTTP audit route', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ota-audit-symmetric-'));
+    let cdpFetches = 0;
+    const cdp = createHttpServer((_req, res) => {
+      cdpFetches += 1;
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify([
+        { id: 'PRIVATE-TARGET', type: 'page', title: 'Private title', url: 'https://internal.invalid/private?token=hidden' }
+      ]));
+    });
+    await listen(cdp);
+    const gateway = createHttpServer(createHttpRequestHandler(fixtureConfig(root, port(cdp))));
+    try {
+      await listen(gateway);
+      const leakedAliases = [
+        'prefixSessionValue_' + 's'.repeat(30),
+        'prefixCookieKey_' + 'c'.repeat(30),
+        'prefixSESSIONVALUE_' + 't'.repeat(30),
+        'prefixCOOKIEKEY_' + 'd'.repeat(30),
+        'prefixSessionValue_' + 's'.repeat(12) + '.' + 't'.repeat(12),
+        'prefixCookieKey_' + 'c'.repeat(12) + '.' + 'd'.repeat(12)
+      ];
+      const safeUuid = '550e8400-e29b-41d4-a716-446655440000';
+      const safeContext = {
+        provider: 'chatgpt',
+        agent_id: 'genesis',
+        correlation_id: safeUuid,
+        source_lane: 'source-1',
+        target_lane: 'target-2'
+      };
+      const context = {
+        client_session_id: leakedAliases[5],
+        thread: {
+          ...safeContext,
+          project_id: leakedAliases[0],
+          thread_id: leakedAliases[1],
+          request_id: leakedAliases[2],
+          job_id: leakedAliases[3],
+          lane: leakedAliases[4]
+        }
+      };
+
+      for (const [route, quotaSaver] of [
+        ['tool', false], ['tool', true], ['batch', false], ['batch', true]
+      ] as const) {
+        const operation = {
+          operation: 'browser_manage_tabs',
+          arguments: {
+            workspace_id: 'test',
+            action: 'list_page_tabs_only',
+            ...(quotaSaver ? { async_mode: 'quota_saver' } : {})
+          }
+        };
+        const body = route === 'batch' ? { ...context, steps: [operation] } : { ...context, ...operation };
+        const baseUrl = 'http://127.0.0.1:' + port(gateway);
+        const response = await fetch(baseUrl + '/api/v1/' + route, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        expect([200, 202]).toContain(response.status);
+        let result = await response.json() as { ok?: boolean; api?: { status?: string; run_id?: string } };
+        if (response.status === 202) {
+          const runId = String(result.api?.run_id);
+          for (let attempt = 0; attempt < 25 && result.api?.status === 'running'; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            const poll = await fetch(baseUrl + '/api/v1/runs/' + encodeURIComponent(runId));
+            expect(poll.status).toBe(200);
+            result = await poll.json() as typeof result;
+          }
+        }
+        expect(result.ok).toBe(true);
+        expect(result.api?.status).not.toBe('running');
+      }
+
+      const raw = await readFile(path.join(root, '.agent/audit/tool_calls.jsonl'), 'utf8');
+      const entries = raw.trim().split('\n').map((line) => JSON.parse(line));
+      expect(entries).toHaveLength(4);
+      for (const entry of entries) {
+        expect(entry).toMatchObject({
+          tool: 'api:browser_manage_tabs',
+          ok: true,
+          metadata: {
+            profile_label: 'Work Profile #1',
+            action: 'list_page_tabs_only',
+            request_context: safeContext
+          }
+        });
+        expect(entry.metadata.request_context).toEqual(safeContext);
+        expect(entry.metadata.target_ids).toBeUndefined();
+      }
+      expect(cdpFetches).toBe(4);
+      for (const leaked of leakedAliases) expect(raw).not.toContain(leaked);
+      for (const privateText of ['PRIVATE-TARGET', 'Private title', 'internal.invalid']) {
+        expect(raw).not.toContain(privateText);
+      }
+    } finally {
+      await close(gateway);
+      await close(cdp);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+async function browserList(server: Server, context: Record<string, unknown>, profileLabel?: string): Promise<Record<string, unknown>> {
+  const response = await fetch(`http://127.0.0.1:${port(server)}/api/v1/tool`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      operation: 'browser_manage_tabs',
+      arguments: { workspace_id: 'test', action: 'list_page_tabs_only', ...(profileLabel ? { profile_label: profileLabel } : {}) },
+      ...context
+    })
+  });
+  expect(response.status).toBe(200);
+  return await response.json() as Record<string, unknown>;
+}
+
+function fixtureConfig(root: string, cdpPort: number): AppConfig {
+  return {
+    server: {
+      host: '127.0.0.1', port: 8765,
+      auth: { enabled: false, bearer_token_env: 'TEST_BEARER', allow_loopback_without_auth: true },
+      rate_limit: { enabled: false, window_ms: 60000, max_requests: 120, trust_proxy_headers: false },
+      tool_annotations: { mode: 'honest' }, exposed_tools: []
+    },
+    workspaces: [{
+      id: 'test', name: 'Safe audit fixture', root,
+      allow_read: true, allow_write: false, allow_patch: false, allow_tests: false,
+      allow_screen: false, allow_mouse_keyboard: false, api_sets: { browser: true },
+      browser: { profiles: [{ label: 'Work Profile #1', cdp_host: '127.0.0.1', cdp_port: cdpPort, headed: true, default: true, launch: false }] },
+      commands: {}
+    }],
+    security: { max_file_bytes: 200000, max_response_bytes: 50000, max_request_bytes: 1000000, max_search_results: 50, max_exec_ms: 120000 }
+  } as AppConfig;
+}
+
+function port(server: Server): number {
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('expected TCP address');
+  return address.port;
+}
+
+async function listen(server: Server): Promise<void> {
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+}
+
+async function close(server: Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+}
