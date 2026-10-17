@@ -116,7 +116,12 @@ describe('HTTP browser tool durable audit context', () => {
       const secretProfileLabels = [
         'WorkProfileprefix' + 'sk_test_' + 't'.repeat(30),
         'WorkProfileprefix' + 'apiKey-' + 'q'.repeat(30),
-        ...longFamilyMarkers.map((marker) => 'WorkProfileprefix' + marker)
+        ...longFamilyMarkers.map((marker) => 'WorkProfileprefix' + marker),
+        'WorkProfileprefixpassword=' + 'p'.repeat(30),
+        'WorkProfileprefixbearer=' + 'b'.repeat(30),
+        'WorkProfileprefixtoken=' + 't'.repeat(30),
+        'WorkProfileprefixpassword(' + 'p'.repeat(30) + ')',
+        'WorkProfileprefixsecret/' + 's'.repeat(30)
       ];
       for (const label of secretProfileLabels) {
         expect(browserProfileSchema.safeParse({ label }).success).toBe(true);
@@ -128,9 +133,21 @@ describe('HTTP browser tool durable audit context', () => {
       const benignProfile = await browserList(gateway, { thread: { provider: 'chatgpt', job_id: 'task-1' } });
       expect(benignProfile).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
 
+      const unknownSensitive = 'UnknownWorkProfileprefixpassword=' + 'p'.repeat(30);
+      const fetchesBeforeDenials = cdpFetches;
+      const deniedSensitive = await browserList(gateway, {
+        thread: { provider: 'chatgpt', job_id: 'task-1' }
+      }, unknownSensitive);
+      expect(deniedSensitive).toMatchObject({ ok: false, summary: 'unknown browser profile' });
+      const deniedBenign = await browserList(gateway, {
+        thread: { provider: 'chatgpt', job_id: 'task-1' }
+      }, 'Unknown Work Profile #2');
+      expect(deniedBenign).toMatchObject({ ok: false, summary: 'unknown browser profile' });
+      expect(cdpFetches).toBe(fetchesBeforeDenials);
+
       const raw = await readFile(path.join(root, '.agent/audit/tool_calls.jsonl'), 'utf8');
       const entries = raw.trim().split('\n').map((line) => JSON.parse(line));
-      expect(entries).toHaveLength(13);
+      expect(entries).toHaveLength(20);
       expect(entries[0]).toMatchObject({
         tool: 'api:browser_manage_tabs',
         ok: true,
@@ -175,22 +192,40 @@ describe('HTTP browser tool durable audit context', () => {
           correlation_id: 'corr-4', source_lane: 'source-1', target_lane: 'target-2'
         }
       });
-      for (const entry of entries.slice(5, 12)) {
+      for (const entry of entries.slice(5, 17)) {
         expect(entry.metadata).toEqual({
           action: 'list_page_tabs_only',
           request_context: { provider: 'chatgpt', job_id: 'task-1' }
         });
       }
-      expect(entries[12].metadata).toEqual({
+      expect(entries[17].metadata).toEqual({
         profile_label: 'R&D=QA #1',
         action: 'list_page_tabs_only',
         request_context: { provider: 'chatgpt', job_id: 'task-1' }
       });
-      expect(cdpFetches).toBe(13);
+      expect(entries[18]).toMatchObject({
+        ok: false,
+        summary: 'unknown browser profile',
+        metadata: {
+          action: 'list_page_tabs_only',
+          request_context: { provider: 'chatgpt', job_id: 'task-1' }
+        }
+      });
+      expect(entries[18].metadata.profile_label).toBeUndefined();
+      expect(entries[19]).toMatchObject({
+        ok: false,
+        summary: 'unknown browser profile',
+        metadata: {
+          profile_label: 'Unknown Work Profile #2',
+          action: 'list_page_tabs_only',
+          request_context: { provider: 'chatgpt', job_id: 'task-1' }
+        }
+      });
+      expect(cdpFetches).toBe(18);
       for (const forbidden of [
         syntheticPat, syntheticJwt, syntheticOauth, syntheticApiKey, syntheticHyphenApiKey, syntheticSk,
         syntheticSkTest, syntheticSkLive, syntheticAdjacentApiKey, syntheticCamelApiKey,
-        ...longFamilyMarkers, ...secretProfileLabels, 'PRIVATE-TARGET', 'Private title', 'internal.invalid', 'token=hidden'
+        ...longFamilyMarkers, ...secretProfileLabels, unknownSensitive, 'PRIVATE-TARGET', 'Private title', 'internal.invalid', 'token=hidden'
       ]) {
         expect(raw).not.toContain(forbidden);
       }
@@ -202,13 +237,13 @@ describe('HTTP browser tool durable audit context', () => {
   });
 });
 
-async function browserList(server: Server, context: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function browserList(server: Server, context: Record<string, unknown>, profileLabel?: string): Promise<Record<string, unknown>> {
   const response = await fetch(`http://127.0.0.1:${port(server)}/api/v1/tool`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       operation: 'browser_manage_tabs',
-      arguments: { workspace_id: 'test', action: 'list_page_tabs_only' },
+      arguments: { workspace_id: 'test', action: 'list_page_tabs_only', ...(profileLabel ? { profile_label: profileLabel } : {}) },
       ...context
     })
   });
