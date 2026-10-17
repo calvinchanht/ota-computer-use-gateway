@@ -138,7 +138,7 @@ function identifierString(value: unknown): string | undefined {
 
 function profileLabelString(value: unknown): string | undefined {
   if (typeof value !== 'string' || !value || value.length > 128 || !value.trim()) return undefined;
-  if (CONTROL_CHARACTER_PATTERN.test(value) || PROFILE_URL_PATTERN.test(value) || PROFILE_SECRET_PREFIX_PATTERN.test(value) || JWT_PATTERN.test(value)) return undefined;
+  if (CONTROL_CHARACTER_PATTERN.test(value) || PROFILE_URL_PATTERN.test(value) || PROFILE_SECRET_PREFIX_PATTERN.test(value) || SECRET_PREFIX_PATTERN.test(value) || JWT_PATTERN.test(value)) return undefined;
   // Punctuation in ordinary profile names is safe; URL/query and credential shapes are not.
   if (value.includes('?') || /[&#][A-Za-z0-9_-]{2,}=/.test(value) || value.trim().split(/\s+/).length > 8) return undefined;
   return value;

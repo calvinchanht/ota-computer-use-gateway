@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { AppConfig } from '../src/config/schema.js';
+import { browserProfileSchema, type AppConfig } from '../src/config/schema.js';
 import { createHttpRequestHandler } from '../src/server/http.js';
 
 describe('HTTP browser tool durable audit context', () => {
@@ -93,9 +93,24 @@ describe('HTTP browser tool durable audit context', () => {
       });
       expect(adjacentTainted).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
 
+      const configuredProfile = config.workspaces[0]!.browser.profiles[0]!;
+      const secretProfileLabels = [
+        'WorkProfileprefix' + 'sk_test_' + 't'.repeat(30),
+        'WorkProfileprefix' + 'apiKey-' + 'q'.repeat(30)
+      ];
+      for (const label of secretProfileLabels) {
+        expect(browserProfileSchema.safeParse({ label }).success).toBe(true);
+        configuredProfile.label = label;
+        const result = await browserList(gateway, { thread: { provider: 'chatgpt', job_id: 'task-1' } });
+        expect(result).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+      }
+      configuredProfile.label = 'R&D=QA #1';
+      const benignProfile = await browserList(gateway, { thread: { provider: 'chatgpt', job_id: 'task-1' } });
+      expect(benignProfile).toMatchObject({ ok: true, summary: 'listed 1 page tabs' });
+
       const raw = await readFile(path.join(root, '.agent/audit/tool_calls.jsonl'), 'utf8');
       const entries = raw.trim().split('\n').map((line) => JSON.parse(line));
-      expect(entries).toHaveLength(4);
+      expect(entries).toHaveLength(7);
       expect(entries[0]).toMatchObject({
         tool: 'api:browser_manage_tabs',
         ok: true,
@@ -132,11 +147,22 @@ describe('HTTP browser tool durable audit context', () => {
           job_id: 'task-1', source_lane: 'source-1', target_lane: 'target-2'
         }
       });
-      expect(cdpFetches).toBe(4);
+      for (const entry of entries.slice(4, 6)) {
+        expect(entry.metadata).toEqual({
+          action: 'list_page_tabs_only',
+          request_context: { provider: 'chatgpt', job_id: 'task-1' }
+        });
+      }
+      expect(entries[6].metadata).toEqual({
+        profile_label: 'R&D=QA #1',
+        action: 'list_page_tabs_only',
+        request_context: { provider: 'chatgpt', job_id: 'task-1' }
+      });
+      expect(cdpFetches).toBe(7);
       for (const forbidden of [
         syntheticPat, syntheticJwt, syntheticOauth, syntheticApiKey, syntheticHyphenApiKey, syntheticSk,
         syntheticSkTest, syntheticSkLive, syntheticAdjacentApiKey, syntheticCamelApiKey,
-        'PRIVATE-TARGET', 'Private title', 'internal.invalid', 'token=hidden'
+        ...secretProfileLabels, 'PRIVATE-TARGET', 'Private title', 'internal.invalid', 'token=hidden'
       ]) {
         expect(raw).not.toContain(forbidden);
       }
